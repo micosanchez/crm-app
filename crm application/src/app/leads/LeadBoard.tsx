@@ -15,7 +15,19 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', address: '', source: 'google' as LeadSource, service: 'junk_removal' as ServiceType, est_value: '', notes: '' });
+
+  function startEdit(l: Lead) {
+    setEditingId(l.id);
+    setForm({
+      name: l.name, phone: l.phone ?? '', address: l.address ?? '',
+      source: l.source, service: l.service,
+      est_value: l.est_value != null ? String(l.est_value) : '', notes: l.notes ?? '',
+    });
+    setOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   async function moveLead(id: string, status: LeadStatus) {
     setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, status } : l)));
@@ -45,14 +57,20 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
     e.preventDefault();
     setBusy(true);
     const supabase = createClient();
-    await supabase.from('leads').insert({
+    const payload = {
       name: form.name, phone: form.phone || null, address: form.address || null,
       source: form.source, service: form.service,
       est_value: form.est_value ? Number(form.est_value) : null,
       notes: form.notes || null,
-    });
+    };
+    if (editingId) {
+      await supabase.from('leads').update(payload).eq('id', editingId);
+    } else {
+      await supabase.from('leads').insert(payload);
+    }
     setBusy(false);
     setOpen(false);
+    setEditingId(null);
     setForm({ name: '', phone: '', address: '', source: 'google', service: 'junk_removal', est_value: '', notes: '' });
     router.refresh();
   }
@@ -77,8 +95,8 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
           <input className="input" type="number" step="0.01" placeholder="Est. value $" value={form.est_value} onChange={(e) => setForm({ ...form, est_value: e.target.value })} />
           <input className="input md:col-span-2" placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div className="flex gap-2">
-            <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Add lead'}</button>
-            <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+            <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : editingId ? 'Save changes' : 'Add lead'}</button>
+            <button type="button" className="btn-ghost" onClick={() => { setOpen(false); setEditingId(null); }}>Cancel</button>
           </div>
         </form>
       )}
@@ -98,7 +116,10 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
                     onDragStart={() => setDragId(l.id)}
                     onDragEnd={() => setDragId(null)}
                     className="cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                    <p className="font-medium">{l.name}</p>
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="font-medium">{l.name}</p>
+                      <button className="shrink-0 text-xs text-gray-400 hover:text-brand-600" onClick={() => startEdit(l)}>✏️</button>
+                    </div>
                     <p className="text-xs text-gray-500">{l.source.replace('_', ' ')} · {l.service.replace('_', ' ')}</p>
                     {l.est_value != null && <p className="text-xs font-semibold text-brand-700">~${Number(l.est_value).toFixed(0)}</p>}
                     {l.phone && <a className="text-xs text-brand-600 hover:underline" href={`tel:${l.phone}`}>📞 {l.phone}</a>}
