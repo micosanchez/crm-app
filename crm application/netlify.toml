@@ -4,6 +4,9 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  # Always build — Netlify's monorepo change detection misfires on the
+  # "crm application" base directory (space in path), canceling valid deploys.
+  ignore = "exit 1"
 
 [build.environment]
   NODE_VERSION = "20"
