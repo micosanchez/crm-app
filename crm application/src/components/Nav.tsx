@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import BrandMark from './BrandMark';
@@ -12,14 +13,18 @@ const LINKS = [
   { href: '/schedule', label: 'Schedule', icon: '📅', mobile: true },
   { href: '/invoices', label: 'Invoices', icon: '🧾', mobile: false },
   { href: '/expenses', label: 'Expenses', icon: '💸', mobile: false },
-  { href: '/money', label: 'Money', icon: '💰', mobile: true },
+  { href: '/money', label: 'Money', icon: '💰', mobile: false },
   { href: '/field', label: 'Field', icon: '🧰', mobile: true },
   { href: '/team', label: 'Team', icon: '🛡️', mobile: false },
 ];
 
 export default function Nav() {
   const pathname = usePathname();
+  const [moreOpen, setMoreOpen] = useState(false);
   if (pathname === '/login' || pathname?.startsWith('/sign') || pathname?.includes('/print')) return null;
+
+  const moreLinks = LINKS.filter((l) => !l.mobile);
+  const moreActive = moreLinks.some((l) => pathname === l.href);
 
   return (
     <>
@@ -35,15 +40,39 @@ export default function Nav() {
           ))}
         </div>
       </nav>
+
+      {/* Mobile "More" sheet */}
+      {moreOpen && (
+        <div className="no-print fixed inset-0 z-50 bg-black/50 md:hidden" onClick={() => setMoreOpen(false)}>
+          <div className="absolute bottom-14 left-0 right-0 rounded-t-2xl border-t border-[#4a1430] bg-[#2a0a1c] p-4 pb-6"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="grid grid-cols-3 gap-3">
+              {moreLinks.map((l) => (
+                <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
+                  className={`flex flex-col items-center gap-1 rounded-xl py-3 text-xs font-medium ${pathname === l.href ? 'bg-[#7b2153] text-white' : 'bg-[#3a0f28] text-gray-300'}`}>
+                  <span className="text-2xl leading-none">{l.icon}</span>
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mobile bottom tab bar — one-handed reach */}
       <nav className="no-print fixed bottom-0 left-0 right-0 z-40 flex border-t border-[#4a1430] bg-[#2a0a1c] md:hidden">
         {LINKS.filter((l) => l.mobile).map((l) => (
-          <Link key={l.href} href={l.href}
+          <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
             className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${pathname === l.href ? 'text-white' : 'text-gray-400'}`}>
             <span className="text-xl leading-none">{l.icon}</span>
             {l.label}
           </Link>
         ))}
+        <button onClick={() => setMoreOpen(!moreOpen)}
+          className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] ${moreOpen || moreActive ? 'text-white' : 'text-gray-400'}`}>
+          <span className="text-xl leading-none">⋯</span>
+          More
+        </button>
       </nav>
     </>
   );
