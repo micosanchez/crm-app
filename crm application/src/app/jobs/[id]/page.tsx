@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
 import NoteForm from '@/components/NoteForm';
+import PhotoSection from '@/components/PhotoSection';
 import JobActions from './JobActions';
+import JobEditForm from './JobEditForm';
 import type { Job, Note } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +38,10 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
         {j.estimated_value != null && <p className="mt-1 font-semibold text-brand-700">Est. ${Number(j.estimated_value).toFixed(2)}</p>}
       </div>
 
-      <JobActions job={j} hasInvoice={!!invoice} />
+      <div className="flex flex-wrap gap-2">
+        <JobActions job={j} hasInvoice={!!invoice} />
+        <JobEditForm job={j} />
+      </div>
 
       {invoice && (
         <Link href={`/invoices/${invoice.id}`} className="card flex items-center justify-between hover:border-brand-500">
@@ -46,6 +51,11 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
           </span>
         </Link>
       )}
+
+      <section>
+        <h2 className="mb-2 font-semibold">Photos ({j.photos?.length ?? 0})</h2>
+        <PhotoSection job={j} />
+      </section>
 
       <section>
         <h2 className="mb-2 font-semibold">Notes</h2>
