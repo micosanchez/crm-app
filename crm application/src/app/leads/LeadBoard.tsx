@@ -18,6 +18,30 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', phone: '', address: '', source: 'google' as LeadSource, service: 'junk_removal' as ServiceType, est_value: '', notes: '' });
 
+  async function createEstimate(l: Lead) {
+    setBusy(true);
+    const supabase = createClient();
+    let customerId = l.customer_id;
+    if (!customerId) {
+      const { data: customer } = await supabase
+        .from('customers')
+        .insert({ name: l.name, phone: l.phone, address: l.address, lead_source: l.source })
+        .select()
+        .single();
+      customerId = customer?.id ?? null;
+      if (customerId) await supabase.from('leads').update({ customer_id: customerId }).eq('id', l.id);
+    }
+    if (!customerId) { setBusy(false); alert('Could not create customer for this lead.'); return; }
+    const { data: estimate } = await supabase
+      .from('estimates')
+      .insert({ customer_id: customerId, lead_id: l.id, notes: l.notes })
+      .select()
+      .single();
+    await supabase.from('leads').update({ status: 'estimate_sent' }).eq('id', l.id);
+    setBusy(false);
+    if (estimate) router.push(`/estimates/${estimate.id}`);
+  }
+
   function startEdit(l: Lead) {
     setEditingId(l.id);
     setForm({
@@ -123,6 +147,12 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
                     <p className="text-xs text-gray-500">{l.source.replace('_', ' ')} · {l.service.replace('_', ' ')}</p>
                     {l.est_value != null && <p className="text-xs font-semibold text-brand-700">~${Number(l.est_value).toFixed(0)}</p>}
                     {l.phone && <a className="text-xs text-brand-600 hover:underline" href={`tel:${l.phone}`}>📞 {l.phone}</a>}
+                    {(status === 'new' || status === 'contacted') && (
+                      <button className="mt-2 w-full rounded-md bg-brand-50 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
+                        disabled={busy} onClick={() => createEstimate(l)}>
+                        📝 Create estimate
+                      </button>
+                    )}
                     {status !== 'won' && status !== 'lost' && (
                       <div className="mt-2 flex gap-1">
                         <button className="flex-1 rounded-md bg-gray-100 py-1 text-xs font-medium text-gray-600 hover:bg-brand-50"
