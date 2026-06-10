@@ -1,10 +1,25 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { initSync } from '@/lib/offline/sync';
+import { createClient } from '@/lib/supabase/client';
+
+const PUBLIC_PATHS = ['/login', '/offline'];
 
 export default function SwRegister() {
+  const router = useRouter();
+  const pathname = usePathname();
   const [pendingCount, setPendingCount] = useState(0);
   const [online, setOnline] = useState(true);
+
+  // Auth guard: bounce logged-out visitors to /login (data is RLS-protected regardless)
+  useEffect(() => {
+    if (PUBLIC_PATHS.some((p) => pathname?.startsWith(p))) return;
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) router.replace('/login');
+    });
+  }, [pathname, router]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
