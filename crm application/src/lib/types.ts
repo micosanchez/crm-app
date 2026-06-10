@@ -61,6 +61,8 @@ export interface Invoice {
   public_token?: string;
   signed_name?: string | null;
   signed_at?: string | null;
+  viewed_at?: string | null;
+  view_count?: number;
   customers?: Pick<Customer, 'id' | 'name' | 'email' | 'address'>;
   invoice_items?: InvoiceItem[];
 }
@@ -147,6 +149,8 @@ export interface Estimate {
   public_token?: string;
   signed_name?: string | null;
   signed_at?: string | null;
+  viewed_at?: string | null;
+  view_count?: number;
   customers?: Pick<Customer, 'id' | 'name'>;
   estimate_items?: EstimateItem[];
 }
