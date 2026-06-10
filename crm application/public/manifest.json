@@ -1,10 +1,10 @@
 {
-  "name": "Fieldtrack CRM",
-  "short_name": "Fieldtrack",
-  "description": "Field service CRM for junk removal & landscaping crews",
+  "name": "SJHC Command Center",
+  "short_name": "SJHC",
+  "description": "Sanchez Junk & Haul Co. — Remove. Refresh. Reclaim.",
   "start_url": "/field",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#2a0a1c",
   "theme_color": "#7b2153",
   "orientation": "portrait",
   "icons": [
