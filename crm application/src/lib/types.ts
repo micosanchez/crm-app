@@ -101,6 +101,72 @@ export interface Note {
   created_at: string;
 }
 
+export type LeadStatus = 'new' | 'contacted' | 'estimate_sent' | 'accepted' | 'scheduled' | 'won' | 'lost';
+export type LeadSource = 'google' | 'facebook' | 'referral' | 'yard_sign' | 'website' | 'repeat_customer' | 'other';
+export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired';
+export type ExpenseCategory = 'dump_fees' | 'fuel' | 'payroll' | 'equipment_purchase' | 'equipment_repair' | 'vehicle_repair' | 'insurance' | 'marketing' | 'office' | 'software' | 'utilities' | 'permits' | 'misc';
+
+export const LEAD_PIPELINE: LeadStatus[] = ['new', 'contacted', 'estimate_sent', 'accepted', 'scheduled', 'won', 'lost'];
+export const LEAD_SOURCES: LeadSource[] = ['google', 'facebook', 'referral', 'yard_sign', 'website', 'repeat_customer', 'other'];
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['dump_fees', 'fuel', 'payroll', 'equipment_purchase', 'equipment_repair', 'vehicle_repair', 'insurance', 'marketing', 'office', 'software', 'utilities', 'permits', 'misc'];
+
+export interface Lead {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  source: LeadSource;
+  status: LeadStatus;
+  service: ServiceType;
+  est_value: number | null;
+  notes: string | null;
+  customer_id: string | null;
+  job_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Estimate {
+  id: string;
+  estimate_number: number;
+  customer_id: string | null;
+  lead_id: string | null;
+  job_id: string | null;
+  status: EstimateStatus;
+  notes: string | null;
+  subtotal: number;
+  tax_rate: number;
+  total: number;
+  valid_until: string | null;
+  accepted_at: string | null;
+  created_at: string;
+  customers?: Pick<Customer, 'id' | 'name'>;
+  estimate_items?: EstimateItem[];
+}
+
+export interface EstimateItem {
+  id: string;
+  estimate_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  amount: number;
+}
+
+export interface Expense {
+  id: string;
+  category: ExpenseCategory;
+  amount: number;
+  incurred_on: string;
+  vendor: string | null;
+  description: string | null;
+  job_id: string | null;
+  receipt_url: string | null;
+  created_at: string;
+  jobs?: Pick<Job, 'id' | 'title'>;
+}
+
 /** One queued offline mutation. */
 export interface QueuedAction {
   idempotency_key: string; // uuid generated client-side
