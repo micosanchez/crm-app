@@ -42,6 +42,13 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
     <div className="no-print space-y-4">
       <div className="flex flex-wrap gap-2">
         <button className="btn-ghost" onClick={() => window.print()}>⬇ Export PDF</button>
+        {invoice.public_token && (
+          <button className="btn-ghost" onClick={() => {
+            navigator.clipboard.writeText(`${window.location.origin}/sign/invoice/${invoice.public_token}`);
+            alert('Customer link copied! Text or email it — they can view and sign without logging in.');
+          }}>🔗 Copy customer link</button>
+        )}
+        {invoice.signed_at && <span className="badge self-center bg-brand-50 text-brand-700">✓ Signed by {invoice.signed_name}</span>}
         {invoice.status === 'draft' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('sent')}>Mark sent</button>}
         {invoice.status === 'sent' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>Mark paid</button>}
       </div>
