@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
 import StatusBadge from '@/components/StatusBadge';
+import PhotoSection from '@/components/PhotoSection';
 import type { Job } from '@/lib/types';
 
 /**
@@ -63,6 +64,8 @@ export default function FieldJobList({ jobs: initial }: { jobs: Job[] }) {
           {j.status === 'in_progress' && (
             <button className="btn-primary btn-big" onClick={() => setStatus(j, 'completed')}>✓ Complete job</button>
           )}
+
+          <PhotoSection job={j} big />
 
           {noteFor === j.id ? (
             <div className="flex gap-2">
