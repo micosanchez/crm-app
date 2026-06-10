@@ -48,6 +48,13 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
             alert('Customer link copied! Text or email it — they can view and sign without logging in.');
           }}>🔗 Copy customer link</button>
         )}
+        {invoice.viewed_at ? (
+          <span className="badge self-center bg-blue-50 text-blue-700">
+            👁 Viewed {invoice.view_count && invoice.view_count > 1 ? `${invoice.view_count}× — first ` : ''}{new Date(invoice.viewed_at).toLocaleString()}
+          </span>
+        ) : (
+          <span className="badge self-center bg-gray-100 text-gray-500">Not viewed yet</span>
+        )}
         {invoice.signed_at && <span className="badge self-center bg-brand-50 text-brand-700">✓ Signed by {invoice.signed_name}</span>}
         {invoice.status === 'draft' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('sent')}>Mark sent</button>}
         {invoice.status === 'sent' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>Mark paid</button>}
