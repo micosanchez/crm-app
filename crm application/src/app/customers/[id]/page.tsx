@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
 import NoteForm from '@/components/NoteForm';
+import CustomerEditForm from './CustomerEditForm';
 import type { Customer, Job, ActivityEntry, Note } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,9 @@ export default async function CustomerDetail({ params }: { params: { id: string 
         <p className="text-sm text-gray-500">{c.phone ?? '—'} · {c.email ?? '—'} · {c.address ?? ''} {c.city ?? ''}</p>
         <div className="mt-1 flex gap-1">
           {c.tags.map((t) => <span key={t} className="badge bg-brand-50 text-brand-700">{t.replace('_', ' ')}</span>)}
+        </div>
+        <div className="mt-3">
+          <CustomerEditForm customer={c} />
         </div>
       </div>
 
