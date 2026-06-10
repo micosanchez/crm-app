@@ -1,0 +1,19 @@
+# Netlify deployment configuration for Fieldtrack CRM (Next.js)
+# The official Next.js runtime is auto-detected by Netlify; this file pins build settings.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Next.js runtime plugin (Netlify installs automatically for Next.js sites,
+# declared explicitly for CI/CD reproducibility)
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Required environment variables (set in Netlify UI → Site settings → Environment variables):
+#   NEXT_PUBLIC_SUPABASE_URL
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   SUPABASE_SERVICE_ROLE_KEY  (server-only, never exposed to client)
