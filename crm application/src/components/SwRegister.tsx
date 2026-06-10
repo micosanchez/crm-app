@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { initSync } from '@/lib/offline/sync';
 import { createClient } from '@/lib/supabase/client';
 
-const PUBLIC_PATHS = ['/login', '/offline'];
+const PUBLIC_PATHS = ['/login', '/offline', '/sign'];
 
 export default function SwRegister() {
   const router = useRouter();

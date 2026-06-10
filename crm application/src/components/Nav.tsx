@@ -19,7 +19,7 @@ const LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
-  if (pathname === '/login' || pathname?.includes('/print')) return null;
+  if (pathname === '/login' || pathname?.startsWith('/sign') || pathname?.includes('/print')) return null;
 
   return (
     <>
