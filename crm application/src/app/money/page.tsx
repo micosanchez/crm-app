@@ -53,7 +53,7 @@ export default async function MoneyPage() {
       <section>
         <h2 className="mb-2 font-semibold">Expenses by category</h2>
         <div className="card divide-y divide-gray-100 p-0">
-          {[...byCategory.entries()].sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
+          {Array.from(byCategory.entries()).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => (
             <div key={cat} className="flex justify-between px-4 py-2 text-sm">
               <span className="capitalize">{cat.replace(/_/g, ' ')}</span>
               <span className="font-medium">${amt.toFixed(2)}</span>
@@ -66,7 +66,7 @@ export default async function MoneyPage() {
       <section>
         <h2 className="mb-2 font-semibold">Profit by service line <span className="text-xs font-normal text-gray-400">(all time, paid jobs)</span></h2>
         <div className="card divide-y divide-gray-100 p-0">
-          {[...byService.entries()].map(([svc, v]) => (
+          {Array.from(byService.entries()).map(([svc, v]) => (
             <div key={svc} className="flex justify-between px-4 py-2 text-sm">
               <span className="capitalize">{svc.replace(/_/g, ' ')}</span>
               <span>rev ${v.revenue.toFixed(0)} · <b className={v.profit >= 0 ? 'text-brand-700' : 'text-red-700'}>profit ${v.profit.toFixed(0)}</b></span>
@@ -78,7 +78,7 @@ export default async function MoneyPage() {
       <section>
         <h2 className="mb-2 font-semibold">Leads by source</h2>
         <div className="card divide-y divide-gray-100 p-0">
-          {[...bySource.entries()].sort((a, b) => b[1].total - a[1].total).map(([src, v]) => (
+          {Array.from(bySource.entries()).sort((a, b) => b[1].total - a[1].total).map(([src, v]) => (
             <div key={src} className="flex justify-between px-4 py-2 text-sm">
               <span className="capitalize">{src.replace(/_/g, ' ')}</span>
               <span>{v.total} leads · {v.won} won{v.total > 0 && ` (${Math.round((v.won / v.total) * 100)}%)`}</span>
