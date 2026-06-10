@@ -4,13 +4,13 @@ import Nav from '@/components/Nav';
 import SwRegister from '@/components/SwRegister';
 
 export const metadata: Metadata = {
-  title: 'Fieldtrack CRM',
-  description: 'Field service CRM for junk removal & landscaping',
+  title: 'SJHC Command Center',
+  description: 'Sanchez Junk & Haul Co. — Remove. Refresh. Reclaim.',
   manifest: '/manifest.json',
 };
 
 export const viewport: Viewport = {
-  themeColor: '#7b2153',
+  themeColor: '#2a0a1c',
   width: 'device-width',
   initialScale: 1,
 };
