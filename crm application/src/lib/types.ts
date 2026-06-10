@@ -58,6 +58,9 @@ export interface Invoice {
   tax_rate: number;
   total: number;
   created_at: string;
+  public_token?: string;
+  signed_name?: string | null;
+  signed_at?: string | null;
   customers?: Pick<Customer, 'id' | 'name' | 'email' | 'address'>;
   invoice_items?: InvoiceItem[];
 }
@@ -141,6 +144,9 @@ export interface Estimate {
   valid_until: string | null;
   accepted_at: string | null;
   created_at: string;
+  public_token?: string;
+  signed_name?: string | null;
+  signed_at?: string | null;
   customers?: Pick<Customer, 'id' | 'name'>;
   estimate_items?: EstimateItem[];
 }
