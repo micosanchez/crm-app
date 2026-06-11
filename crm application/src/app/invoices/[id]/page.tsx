@@ -66,7 +66,7 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
           <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>${Number(inv.subtotal).toFixed(2)}</span></div>
           <div className="flex justify-between"><span className="text-gray-500">Tax ({(Number(inv.tax_rate) * 100).toFixed(1)}%)</span><span>${(Number(inv.subtotal) * Number(inv.tax_rate)).toFixed(2)}</span></div>
           {Number(inv.tip ?? 0) > 0 && (
-            <div className="flex justify-between"><span className="text-gray-500">Tip 💵</span><span>${Number(inv.tip).toFixed(2)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-500">Tip</span><span>${Number(inv.tip).toFixed(2)}</span></div>
           )}
           <div className="flex justify-between border-t pt-1 font-bold"><span>Total</span><span>${Number(inv.total).toFixed(2)}</span></div>
         </div>

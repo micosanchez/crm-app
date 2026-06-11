@@ -68,16 +68,16 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
   return (
     <div className="no-print space-y-4">
       <div className="flex flex-wrap gap-2">
-        <button className="btn-ghost" onClick={() => window.print()}>⬇ Export PDF</button>
+        <button className="btn-ghost" onClick={() => window.print()}>Export PDF</button>
         {invoice.public_token && (
           <button className="btn-ghost" onClick={() => {
             navigator.clipboard.writeText(`${window.location.origin}/sign/invoice/${invoice.public_token}`);
             alert('Customer link copied! Text or email it — they can view and sign without logging in.');
-          }}>🔗 Copy customer link</button>
+          }}>Copy customer link</button>
         )}
         {invoice.viewed_at ? (
           <span className="badge self-center bg-blue-50 text-blue-700">
-            👁 Viewed {invoice.view_count && invoice.view_count > 1 ? `${invoice.view_count}× — first ` : ''}{new Date(invoice.viewed_at).toLocaleString()}
+            Viewed {invoice.view_count && invoice.view_count > 1 ? `${invoice.view_count}× — first ` : ''}{new Date(invoice.viewed_at).toLocaleString()}
           </span>
         ) : (
           <span className="badge self-center bg-gray-100 text-gray-500">Not viewed yet</span>
@@ -93,14 +93,14 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
           <select className="input w-auto" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
             {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>✓ Mark paid</button>
+          <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>Mark paid</button>
           <span className="text-xs text-gray-400">Cash too — just pick cash so the books know.</span>
         </div>
       )}
 
       {invoice.status !== 'paid' && (
         <div className="card flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold">💵 Tip</span>
+          <span className="text-sm font-semibold">Tip</span>
           <input className="input w-28" type="number" step="0.01" min="0" value={tip} onChange={(e) => setTip(e.target.value)} />
           <button className="btn-ghost" disabled={busy} onClick={saveTip}>Save tip</button>
           <span className="text-xs text-gray-400">Customer paid extra? Log it here — it adds to the total and counts as revenue.</span>
