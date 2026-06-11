@@ -5,17 +5,20 @@ import NoteForm from '@/components/NoteForm';
 import PhotoSection from '@/components/PhotoSection';
 import JobActions from './JobActions';
 import JobEditForm from './JobEditForm';
-import type { Job, Note } from '@/lib/types';
+import CrewAssign from './CrewAssign';
+import type { Job, Note, UserProfile } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function JobDetail({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const [{ data: job }, { data: history }, { data: notes }, { data: invoice }] = await Promise.all([
+  const [{ data: job }, { data: history }, { data: notes }, { data: invoice }, { data: team }, { data: assignments }] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)').eq('id', params.id).single(),
     supabase.from('job_status_history').select('*').eq('job_id', params.id).order('changed_at', { ascending: false }),
     supabase.from('notes').select('*').eq('entity_type', 'job').eq('entity_id', params.id).order('created_at', { ascending: false }),
     supabase.from('invoices').select('id,invoice_number,status,total').eq('job_id', params.id).maybeSingle(),
+    supabase.from('users').select('id,full_name').eq('is_active', true).order('full_name'),
+    supabase.from('job_assignments').select('user_id').eq('job_id', params.id),
   ]);
 
   if (!job) return <p>Job not found.</p>;
@@ -42,6 +45,10 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
         <JobActions job={j} hasInvoice={!!invoice} />
         <JobEditForm job={j} />
       </div>
+
+      <CrewAssign jobId={j.id}
+        team={(team ?? []) as Pick<UserProfile, 'id' | 'full_name'>[]}
+        assigned={(assignments ?? []).map((a) => a.user_id)} />
 
       {invoice && (
         <Link href={`/invoices/${invoice.id}`} className="card flex items-center justify-between hover:border-brand-500">

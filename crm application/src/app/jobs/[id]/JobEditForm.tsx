@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
 import type { Job, ServiceType } from '@/lib/types';
 
@@ -11,7 +12,7 @@ function toLocalInput(iso: string | null): string {
   return d.toISOString().slice(0, 16);
 }
 
-/** Edit job details incl. reschedule. Works offline via the sync queue. */
+/** Edit job details incl. reschedule + end time, with double-booking warning. */
 export default function JobEditForm({ job }: { job: Job }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -23,11 +24,37 @@ export default function JobEditForm({ job }: { job: Job }) {
     service: job.service,
     estimated_value: job.estimated_value != null ? String(job.estimated_value) : '',
     scheduled_start: toLocalInput(job.scheduled_start),
+    scheduled_end: toLocalInput(job.scheduled_end ?? null),
   });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+
+    const start = form.scheduled_start ? new Date(form.scheduled_start) : null;
+    const end = form.scheduled_end ? new Date(form.scheduled_end) : start ? new Date(start.getTime() + 2 * 3600_000) : null;
+
+    // Conflict detection: other jobs overlapping this window
+    if (start && end && navigator.onLine) {
+      const supabase = createClient();
+      const { data: others } = await supabase
+        .from('jobs')
+        .select('id,title,scheduled_start,scheduled_end')
+        .neq('id', job.id)
+        .not('scheduled_start', 'is', null)
+        .gte('scheduled_start', new Date(start.getTime() - 12 * 3600_000).toISOString())
+        .lte('scheduled_start', new Date(end.getTime() + 12 * 3600_000).toISOString());
+      const conflicts = (others ?? []).filter((o) => {
+        const oStart = new Date(o.scheduled_start!);
+        const oEnd = o.scheduled_end ? new Date(o.scheduled_end) : new Date(oStart.getTime() + 2 * 3600_000);
+        return start < oEnd && end > oStart;
+      });
+      if (conflicts.length > 0) {
+        const ok = confirm(`Schedule conflict: overlaps "${conflicts[0].title}" (${new Date(conflicts[0].scheduled_start!).toLocaleString()}). Book anyway?`);
+        if (!ok) { setBusy(false); return; }
+      }
+    }
+
     await mutate({
       table: 'jobs', op: 'update', id: job.id,
       payload: {
@@ -36,7 +63,8 @@ export default function JobEditForm({ job }: { job: Job }) {
         address: form.address || null,
         service: form.service,
         estimated_value: form.estimated_value ? Number(form.estimated_value) : null,
-        scheduled_start: form.scheduled_start ? new Date(form.scheduled_start).toISOString() : null,
+        scheduled_start: start ? start.toISOString() : null,
+        scheduled_end: form.scheduled_end ? new Date(form.scheduled_end).toISOString() : null,
       },
     });
     setBusy(false);
@@ -56,9 +84,13 @@ export default function JobEditForm({ job }: { job: Job }) {
       </select>
       <input className="input" placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
       <input className="input" type="number" step="0.01" placeholder="Estimated value $" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
-      <div className="md:col-span-2">
-        <label className="mb-1 block text-xs font-semibold uppercase text-gray-400">Scheduled date & time</label>
+      <div>
+        <label className="panel-label mb-1 block">Starts</label>
         <input className="input" type="datetime-local" value={form.scheduled_start} onChange={(e) => setForm({ ...form, scheduled_start: e.target.value })} />
+      </div>
+      <div>
+        <label className="panel-label mb-1 block">Ends (for conflict checks)</label>
+        <input className="input" type="datetime-local" value={form.scheduled_end} onChange={(e) => setForm({ ...form, scheduled_end: e.target.value })} />
       </div>
       <textarea className="input md:col-span-2" rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       <div className="flex gap-2">
