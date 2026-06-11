@@ -38,7 +38,7 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
     router.refresh();
   }
 
-  if (!open) return <button className="btn-ghost" onClick={() => setOpen(true)}>✏️ Edit customer</button>;
+  if (!open) return <button className="btn-ghost" onClick={() => setOpen(true)}>Edit customer</button>;
 
   return (
     <form onSubmit={submit} className="card grid gap-3 ring-2 ring-brand-500 md:grid-cols-2">
