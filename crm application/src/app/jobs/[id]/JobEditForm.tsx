@@ -44,7 +44,7 @@ export default function JobEditForm({ job }: { job: Job }) {
     router.refresh();
   }
 
-  if (!open) return <button className="btn-ghost" onClick={() => setOpen(true)}>✏️ Edit / reschedule</button>;
+  if (!open) return <button className="btn-ghost" onClick={() => setOpen(true)}>Edit / Reschedule</button>;
 
   return (
     <form onSubmit={submit} className="card grid gap-3 ring-2 ring-brand-500 md:grid-cols-2">
