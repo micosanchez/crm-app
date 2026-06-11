@@ -110,7 +110,12 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
             {doc.comments && <p className="text-sm text-gray-500">{doc.comments}</p>}
             {doc.notes && <p className="text-sm text-gray-500">{doc.notes}</p>}
 
-            {doc.signed_at ? (
+            {!doc.signed_at && doc.valid_until && doc.valid_until < new Date().toISOString().slice(0, 10) ? (
+              <div className="rounded-lg bg-gray-50 p-4 text-center">
+                <p className="font-semibold text-gray-700">This estimate expired on {new Date(doc.valid_until + 'T12:00:00').toLocaleDateString()}.</p>
+                <p className="text-sm text-gray-500">Reply to the message that sent you this link and we&apos;ll send a fresh quote.</p>
+              </div>
+            ) : doc.signed_at ? (
               <div className="rounded-lg bg-brand-50 p-4 text-center">
                 <p className="font-semibold text-brand-700">{justSigned ? '✓ Thank you!' : '✓ Signed'}</p>
                 <p className="text-sm text-gray-600">Signed by {doc.signed_name} on {new Date(doc.signed_at).toLocaleDateString()}</p>
