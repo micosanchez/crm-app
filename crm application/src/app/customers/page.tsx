@@ -8,7 +8,10 @@ export const dynamic = 'force-dynamic';
 export default async function CustomersPage({ searchParams }: { searchParams: { q?: string } }) {
   const supabase = createClient();
   let query = supabase.from('customers').select('*').order('updated_at', { ascending: false }).limit(200);
-  if (searchParams.q) query = query.ilike('name', `%${searchParams.q}%`);
+  if (searchParams.q) {
+    const q = searchParams.q.trim();
+    query = query.or(`name.ilike.%${q}%,phone.ilike.%${q.replace(/[^\d+]/g, '') || q}%,email.ilike.%${q}%`);
+  }
   const { data: customers } = await query;
 
   return (
@@ -17,7 +20,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: { 
         <h1 className="text-2xl font-bold">Customers</h1>
       </div>
       <form className="flex gap-2">
-        <input className="input max-w-xs" name="q" placeholder="Search name…" defaultValue={searchParams.q ?? ''} />
+        <input className="input max-w-xs" name="q" placeholder="Search name, phone, or email…" defaultValue={searchParams.q ?? ''} />
         <button className="btn-ghost">Search</button>
       </form>
       <NewCustomerForm />
