@@ -34,10 +34,13 @@ export default async function EstimateDetail({ params }: { params: { id: string 
           <tbody>
             {est.estimate_items?.map((it) => (
               <tr key={it.id} className="border-b border-gray-100">
-                <td className="py-2">{it.description}</td>
-                <td className="text-right">{Number(it.quantity)}</td>
-                <td className="text-right">${Number(it.unit_price).toFixed(2)}</td>
-                <td className="text-right">${Number(it.amount).toFixed(2)}</td>
+                <td className="py-2">
+                  <p className="font-semibold uppercase">{it.description}</p>
+                  {it.details && <p className="mt-0.5 text-xs text-gray-500">{it.details}</p>}
+                </td>
+                <td className="text-right align-top">{Number(it.quantity)}</td>
+                <td className="text-right align-top">${Number(it.unit_price).toFixed(2)}</td>
+                <td className="text-right align-top">${Number(it.amount).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -45,6 +48,13 @@ export default async function EstimateDetail({ params }: { params: { id: string 
         <div className="mt-4 ml-auto w-48 text-sm">
           <div className="flex justify-between border-t pt-1 font-bold"><span>Total</span><span>${Number(est.total).toFixed(2)}</span></div>
         </div>
+        {est.payment_instructions && (
+          <div className="mt-4 rounded-lg bg-gray-50 p-3">
+            <p className="text-xs font-bold uppercase text-gray-400">Payment instructions</p>
+            <p className="text-sm">{est.payment_instructions}</p>
+          </div>
+        )}
+        {est.comments && <p className="mt-3 text-sm text-gray-500">{est.comments}</p>}
         {est.notes && <p className="mt-4 text-sm text-gray-500">{est.notes}</p>}
       </div>
       <EstimateEditor estimate={est} />

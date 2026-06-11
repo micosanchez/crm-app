@@ -7,7 +7,11 @@ import type { Estimate } from '@/lib/types';
 export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [item, setItem] = useState({ description: '', quantity: '1', unit_price: '' });
+  const [item, setItem] = useState({ description: '', details: '', quantity: '1', unit_price: '' });
+  const [extras, setExtras] = useState({
+    payment_instructions: estimate.payment_instructions ?? '',
+    comments: estimate.comments ?? '',
+  });
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -16,10 +20,28 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
     await supabase.from('estimate_items').insert({
       estimate_id: estimate.id,
       description: item.description,
+      details: item.details || null,
       quantity: Number(item.quantity),
       unit_price: Number(item.unit_price),
     });
-    setItem({ description: '', quantity: '1', unit_price: '' });
+    setItem({ description: '', details: '', quantity: '1', unit_price: '' });
+    setBusy(false);
+    router.refresh();
+  }
+
+  async function removeItem(id: string) {
+    const supabase = createClient();
+    await supabase.from('estimate_items').delete().eq('id', id);
+    router.refresh();
+  }
+
+  async function saveExtras() {
+    setBusy(true);
+    const supabase = createClient();
+    await supabase.from('estimates').update({
+      payment_instructions: extras.payment_instructions || null,
+      comments: extras.comments || null,
+    }).eq('id', estimate.id);
     setBusy(false);
     router.refresh();
   }
@@ -33,7 +55,6 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
     await supabase.from('estimates').update(patch).eq('id', estimate.id);
 
     if (status === 'accepted' && !estimate.job_id && estimate.customer_id) {
-      // Convert to a scheduled-ready job carrying the estimate value
       const { data: job } = await supabase.from('jobs').insert({
         customer_id: estimate.customer_id,
         title: `Estimate #${estimate.estimate_number} job`,
@@ -45,6 +66,8 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
     setBusy(false);
     router.refresh();
   }
+
+  const editable = estimate.status === 'draft' || estimate.status === 'sent';
 
   return (
     <div className="no-print space-y-4">
@@ -76,15 +99,38 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
         )}
       </div>
 
-      {(estimate.status === 'draft' || estimate.status === 'sent') && (
-        <form onSubmit={addItem} className="card grid gap-2 md:grid-cols-4">
-          <input className="input md:col-span-2" placeholder="Line item description *" required value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} />
-          <input className="input" type="number" step="0.01" min="0" placeholder="Qty" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
-          <div className="flex gap-2">
-            <input className="input" type="number" step="0.01" min="0" placeholder="Price *" required value={item.unit_price} onChange={(e) => setItem({ ...item, unit_price: e.target.value })} />
-            <button className="btn-primary" disabled={busy}>+</button>
+      {editable && (
+        <>
+          <form onSubmit={addItem} className="card space-y-2">
+            <p className="text-xs font-bold uppercase text-gray-400">Add line item</p>
+            <div className="grid gap-2 md:grid-cols-4">
+              <input className="input md:col-span-2" placeholder="Item name * (e.g. MEDICAL CHAIR REMOVAL)" required value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} />
+              <input className="input" type="number" step="0.01" min="0" placeholder="Qty" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
+              <div className="flex gap-2">
+                <input className="input" type="number" step="0.01" min="0" placeholder="Price *" required value={item.unit_price} onChange={(e) => setItem({ ...item, unit_price: e.target.value })} />
+                <button className="btn-primary" disabled={busy}>+</button>
+              </div>
+            </div>
+            <input className="input" placeholder="Details shown under the item (e.g. 1 item, first floor — loaded, hauled, disposed at licensed facility)" value={item.details} onChange={(e) => setItem({ ...item, details: e.target.value })} />
+            {estimate.estimate_items && estimate.estimate_items.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {estimate.estimate_items.map((it) => (
+                  <div key={it.id} className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{it.description}</span>
+                    <button type="button" className="text-red-400 hover:text-red-600" onClick={() => removeItem(it.id)}>remove</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </form>
+
+          <div className="card space-y-2">
+            <p className="text-xs font-bold uppercase text-gray-400">Payment instructions &amp; comments</p>
+            <input className="input" placeholder="Payment instructions (e.g. Venmo — sanchezjunknhaul)" value={extras.payment_instructions} onChange={(e) => setExtras({ ...extras, payment_instructions: e.target.value })} />
+            <textarea className="input" rows={2} placeholder="Comments / terms (e.g. Additional items may be negotiated at pickup. Payment due on completion.)" value={extras.comments} onChange={(e) => setExtras({ ...extras, comments: e.target.value })} />
+            <button className="btn-ghost" disabled={busy} onClick={saveExtras}>Save</button>
           </div>
-        </form>
+        </>
       )}
     </div>
   );
