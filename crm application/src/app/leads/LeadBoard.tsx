@@ -142,15 +142,15 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
                     className="cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
                     <div className="flex items-start justify-between gap-1">
                       <p className="font-medium">{l.name}</p>
-                      <button className="shrink-0 text-xs text-gray-400 hover:text-brand-600" onClick={() => startEdit(l)}>✏️</button>
+                      <button className="shrink-0 text-xs text-gray-400 hover:text-brand-700" onClick={() => startEdit(l)}>Edit</button>
                     </div>
                     <p className="text-xs text-gray-500">{l.source.replace('_', ' ')} · {l.service.replace('_', ' ')}</p>
                     {l.est_value != null && <p className="text-xs font-semibold text-brand-700">~${Number(l.est_value).toFixed(0)}</p>}
-                    {l.phone && <a className="text-xs text-brand-600 hover:underline" href={`tel:${l.phone}`}>📞 {l.phone}</a>}
+                    {l.phone && <a className="text-xs text-brand-700 hover:underline" href={`tel:${l.phone}`}>{l.phone}</a>}
                     {(status === 'new' || status === 'contacted') && (
                       <button className="mt-2 w-full rounded-md bg-brand-50 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
                         disabled={busy} onClick={() => createEstimate(l)}>
-                        📝 Create estimate
+                        Create estimate
                       </button>
                     )}
                     {status !== 'won' && status !== 'lost' && (
