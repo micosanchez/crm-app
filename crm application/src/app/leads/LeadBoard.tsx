@@ -16,7 +16,7 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', phone: '', address: '', source: 'google' as LeadSource, service: 'junk_removal' as ServiceType, est_value: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', address: '', source: 'google' as LeadSource, service: 'junk_removal' as ServiceType, est_value: '', notes: '', follow_up_on: '' });
 
   async function createEstimate(l: Lead) {
     setBusy(true);
@@ -48,14 +48,24 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
       name: l.name, phone: l.phone ?? '', address: l.address ?? '',
       source: l.source, service: l.service,
       est_value: l.est_value != null ? String(l.est_value) : '', notes: l.notes ?? '',
+      follow_up_on: l.follow_up_on ?? '',
     });
     setOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   async function moveLead(id: string, status: LeadStatus) {
+    let reasonLost: string | null = null;
+    if (status === 'lost') {
+      reasonLost = prompt('Why was this lead lost? (price / timing / competitor / no response / other)') || null;
+    }
     setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, status } : l)));
     const supabase = createClient();
+    if (status === 'lost') {
+      await supabase.from('leads').update({ status, reason_lost: reasonLost }).eq('id', id);
+      router.refresh();
+      return;
+    }
 
     if (status === 'won') {
       // Convert: create customer (if none) so the lead becomes real business
@@ -86,6 +96,7 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
       source: form.source, service: form.service,
       est_value: form.est_value ? Number(form.est_value) : null,
       notes: form.notes || null,
+      follow_up_on: form.follow_up_on || null,
     };
     if (editingId) {
       await supabase.from('leads').update(payload).eq('id', editingId);
@@ -95,7 +106,7 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
     setBusy(false);
     setOpen(false);
     setEditingId(null);
-    setForm({ name: '', phone: '', address: '', source: 'google', service: 'junk_removal', est_value: '', notes: '' });
+    setForm({ name: '', phone: '', address: '', source: 'google', service: 'junk_removal', est_value: '', notes: '', follow_up_on: '' });
     router.refresh();
   }
 
@@ -117,6 +128,10 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
             <option value="other">Other</option>
           </select>
           <input className="input" type="number" step="0.01" placeholder="Est. value $" value={form.est_value} onChange={(e) => setForm({ ...form, est_value: e.target.value })} />
+          <div>
+            <label className="panel-label mb-1 block">Follow up on</label>
+            <input className="input" type="date" value={form.follow_up_on} onChange={(e) => setForm({ ...form, follow_up_on: e.target.value })} />
+          </div>
           <input className="input md:col-span-2" placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <div className="flex gap-2">
             <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : editingId ? 'Save changes' : 'Add lead'}</button>
@@ -146,6 +161,12 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
                     </div>
                     <p className="text-xs text-gray-500">{l.source.replace('_', ' ')} · {l.service.replace('_', ' ')}</p>
                     {l.est_value != null && <p className="text-xs font-semibold text-brand-700">~${Number(l.est_value).toFixed(0)}</p>}
+                    {l.follow_up_on && status !== 'won' && status !== 'lost' && (
+                      <p className={`text-xs font-semibold ${l.follow_up_on <= new Date().toISOString().slice(0, 10) ? 'text-red-700' : 'text-gray-400'}`}>
+                        Follow up {new Date(l.follow_up_on + 'T12:00:00').toLocaleDateString()}
+                      </p>
+                    )}
+                    {status === 'lost' && l.reason_lost && <p className="text-xs text-gray-400">Lost: {l.reason_lost}</p>}
                     {l.phone && <a className="text-xs text-brand-700 hover:underline" href={`tel:${l.phone}`}>{l.phone}</a>}
                     {(status === 'new' || status === 'contacted') && (
                       <button className="mt-2 w-full rounded-md bg-brand-50 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100"
