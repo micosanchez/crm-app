@@ -20,7 +20,7 @@ export default async function DocumentsPage() {
       <h1 className="text-2xl font-bold">Documents</h1>
       {expiring.length > 0 && (
         <div className="card border-red-300 bg-red-50">
-          <p className="mb-1 text-sm font-semibold text-red-800">⚠ Expiring within 30 days</p>
+          <p className="panel-label mb-2 !text-red-800">Expiring within 30 days</p>
           <ul className="space-y-0.5 text-sm text-red-800">
             {expiring.map((d) => (
               <li key={d.id}>{d.name} — {new Date(d.expires_on! + 'T12:00:00').toLocaleDateString()}</li>

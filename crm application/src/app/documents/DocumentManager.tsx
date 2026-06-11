@@ -14,10 +14,6 @@ export interface Doc {
 }
 
 const CATEGORIES = ['insurance', 'vehicle_registration', 'permit', 'contract', 'employee_record', 'vendor', 'tax', 'other'];
-const ICONS: Record<string, string> = {
-  insurance: '🛡️', vehicle_registration: '🚚', permit: '📋', contract: '📜',
-  employee_record: '👤', vendor: '🤝', tax: '🧾', other: '📁',
-};
 
 export default function DocumentManager({ documents }: { documents: Doc[] }) {
   const router = useRouter();
@@ -81,7 +77,7 @@ export default function DocumentManager({ documents }: { documents: Doc[] }) {
             <input className="input" type="date" value={form.expires_on} onChange={(e) => setForm({ ...form, expires_on: e.target.value })} />
           </div>
           <input className="input md:col-span-2" placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          <button className="btn-primary self-end" disabled={busy}>{busy ? 'Uploading…' : '⬆ Upload'}</button>
+          <button className="btn-primary self-end" disabled={busy}>{busy ? 'Uploading…' : 'Upload'}</button>
         </div>
       </form>
 
@@ -89,7 +85,7 @@ export default function DocumentManager({ documents }: { documents: Doc[] }) {
         <button className={`badge border px-3 py-1 ${filter === 'all' ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-gray-300 text-gray-500'}`} onClick={() => setFilter('all')}>all</button>
         {CATEGORIES.map((c) => (
           <button key={c} className={`badge border px-3 py-1 ${filter === c ? 'border-brand-600 bg-brand-50 text-brand-700' : 'border-gray-300 text-gray-500'}`} onClick={() => setFilter(c)}>
-            {ICONS[c]} {c.replace(/_/g, ' ')}
+            {c.replace(/_/g, ' ')}
           </button>
         ))}
       </div>
@@ -98,7 +94,7 @@ export default function DocumentManager({ documents }: { documents: Doc[] }) {
         {shown.map((d) => (
           <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <div className="min-w-0">
-              <p className="font-medium">{ICONS[d.category]} {d.name}</p>
+              <p className="font-medium">{d.name}</p>
               <p className="text-xs text-gray-500">
                 {d.category.replace(/_/g, ' ')} · added {new Date(d.created_at).toLocaleDateString()}
                 {d.expires_on && (
@@ -110,7 +106,7 @@ export default function DocumentManager({ documents }: { documents: Doc[] }) {
               </p>
             </div>
             <div className="flex shrink-0 gap-2">
-              <button className="btn-ghost py-1 text-xs" onClick={() => open(d)}>👁 View</button>
+              <button className="btn-ghost py-1 text-xs" onClick={() => open(d)}>View</button>
               <button className="rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => archive(d)}>Archive</button>
             </div>
           </div>
