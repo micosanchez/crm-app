@@ -70,13 +70,13 @@ export default function Nav() {
           <Link href="/" className="mr-6"><BrandMark /></Link>
           {LINKS.map((l) => (
             <Link key={l.href} href={l.href}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-200 ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--text-tertiary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--text-primary)]'}`}>
+              className={`font-display rounded-md px-3 py-1.5 text-[15px] font-medium tracking-wide transition-colors duration-200 ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--text-tertiary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--text-primary)]'}`}>
               {l.label}
             </Link>
           ))}
           <div className="ml-auto">
             <button onClick={handleSignOut}
-              className="rounded-md px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-secondary)] hover:text-[var(--text-primary)]">
+              className="font-display rounded-md px-3 py-1.5 text-[15px] font-medium tracking-wide text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-secondary)] hover:text-[var(--text-primary)]">
               Sign out
             </button>
           </div>
@@ -90,13 +90,13 @@ export default function Nav() {
             <div className="grid grid-cols-3 gap-3">
               {moreLinks.map((l) => (
                 <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
-                  className={`flex flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'bg-[var(--surface-primary)] text-[var(--text-secondary)]'}`}>
+                  className={`font-display flex flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium tracking-wide ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'bg-[var(--surface-primary)] text-[var(--text-secondary)]'}`}>
                   <Icon name={l.icon} />
                   {l.label}
                 </Link>
               ))}
               <button onClick={handleSignOut}
-                className="flex flex-col items-center gap-1.5 rounded-lg bg-[var(--surface-primary)] py-3 text-xs font-medium text-[var(--text-secondary)]">
+                className="font-display flex flex-col items-center gap-1.5 rounded-lg bg-[var(--surface-primary)] py-3 text-xs font-medium tracking-wide text-[var(--text-secondary)]">
                 <Icon name="signout" />
                 Sign out
               </button>
@@ -109,13 +109,13 @@ export default function Nav() {
       <nav className="no-print fixed bottom-0 left-0 right-0 z-40 flex border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] md:hidden">
         {LINKS.filter((l) => l.mobile).map((l) => (
           <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
-            className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${pathname === l.href ? 'text-white' : 'text-[var(--text-muted)]'}`}>
+            className={`font-display flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium tracking-wide ${pathname === l.href ? 'text-white' : 'text-[var(--text-muted)]'}`}>
             <Icon name={l.icon} />
             {l.label}
           </Link>
         ))}
         <button onClick={() => setMoreOpen(!moreOpen)}
-          className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium ${moreOpen || moreActive ? 'text-white' : 'text-[var(--text-muted)]'}`}>
+          className={`font-display flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium tracking-wide ${moreOpen || moreActive ? 'text-white' : 'text-[var(--text-muted)]'}`}>
           <Icon name="more" />
           More
         </button>
