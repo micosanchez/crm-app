@@ -72,16 +72,16 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   return (
     <div className="no-print space-y-4">
       <div className="flex flex-wrap gap-2">
-        <button className="btn-ghost" onClick={() => window.print()}>⬇ Export PDF</button>
+        <button className="btn-ghost" onClick={() => window.print()}>Export PDF</button>
         {estimate.public_token && (
           <button className="btn-ghost" onClick={() => {
             navigator.clipboard.writeText(`${window.location.origin}/sign/estimate/${estimate.public_token}`);
             alert('Customer link copied! Text or email it — they can view and sign without logging in.');
-          }}>🔗 Copy customer link</button>
+          }}>Copy customer link</button>
         )}
         {estimate.viewed_at ? (
           <span className="badge self-center bg-blue-50 text-blue-700">
-            👁 Viewed {estimate.view_count && estimate.view_count > 1 ? `${estimate.view_count}× — first ` : ''}{new Date(estimate.viewed_at).toLocaleString()}
+            Viewed {estimate.view_count && estimate.view_count > 1 ? `${estimate.view_count}× — first ` : ''}{new Date(estimate.viewed_at).toLocaleString()}
           </span>
         ) : (
           <span className="badge self-center bg-gray-100 text-gray-500">Not viewed yet</span>
