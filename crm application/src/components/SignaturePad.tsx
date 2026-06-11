@@ -54,7 +54,8 @@ export default function SignaturePad({ onSign, busy }: { onSign: (name: string, 
   return (
     <div className="space-y-3">
       <input className="input" placeholder="Type your full name *" value={name} onChange={(e) => setName(e.target.value)} />
-      <div className="rounded-lg border-2 border-dashed border-gray-300 bg-white">
+      {/* Signing surface stays literal paper-white regardless of theme */}
+      <div className="rounded-lg border border-dashed border-[var(--border-strong)] bg-[#ffffff]">
         <canvas
           ref={canvasRef}
           className="h-40 w-full touch-none"
