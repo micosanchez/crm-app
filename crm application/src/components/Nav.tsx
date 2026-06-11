@@ -16,6 +16,7 @@ const LINKS = [
   { href: '/expenses', label: 'Expenses', icon: '💸', mobile: false },
   { href: '/money', label: 'Money', icon: '💰', mobile: false },
   { href: '/field', label: 'Field', icon: '🧰', mobile: true },
+  { href: '/documents', label: 'Documents', icon: '📁', mobile: false },
   { href: '/team', label: 'Team', icon: '🛡️', mobile: false },
 ];
 
