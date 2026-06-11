@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import BrandMark from './BrandMark';
 
 const LINKS = [
@@ -20,7 +21,16 @@ const LINKS = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  }
+
   if (pathname === '/login' || pathname?.startsWith('/sign') || pathname?.includes('/print')) return null;
 
   const moreLinks = LINKS.filter((l) => !l.mobile);
@@ -38,6 +48,12 @@ export default function Nav() {
               {l.label}
             </Link>
           ))}
+          <div className="ml-auto">
+            <button onClick={handleSignOut}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-400 transition-colors hover:bg-[#42102b] hover:text-white">
+              🚪 Sign out
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -54,6 +70,11 @@ export default function Nav() {
                   {l.label}
                 </Link>
               ))}
+              <button onClick={handleSignOut}
+                className="flex flex-col items-center gap-1 rounded-xl bg-[#3a0f28] py-3 text-xs font-medium text-gray-300">
+                <span className="text-2xl leading-none">🚪</span>
+                Sign out
+              </button>
             </div>
           </div>
         </div>
