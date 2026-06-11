@@ -28,29 +28,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-[#2a0a1c] p-4">
+    <div className="fixed inset-0 flex items-center justify-center bg-[var(--bg-primary)] p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
+        <div className="mb-10 flex flex-col items-center text-center">
           <BrandMark size="lg" />
-          <p className="mt-3 text-sm font-semibold uppercase tracking-[0.25em]">
-            <span className="text-[#c43a64]">Remove</span>
-            <span className="text-gray-500"> · </span>
-            <span className="text-[#a8527f]">Refresh</span>
-            <span className="text-gray-500"> · </span>
-            <span className="text-[#8a63b8]">Reclaim</span>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.3em] text-[var(--metal-titanium)]">
+            Remove · Refresh · Reclaim
           </p>
-          <p className="mt-2 text-xs uppercase tracking-widest text-gray-400">Command Center</p>
+          <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-[var(--text-muted)]">Command Center</p>
         </div>
-        <form onSubmit={submit} className="space-y-3 rounded-2xl border border-[#4a1430] bg-[#1f0715] p-6 shadow-2xl">
-          <input className="w-full rounded-lg border border-[#4a1430] bg-[#2a0a1c] px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-[#a32650] focus:outline-none"
-            type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <input className="w-full rounded-lg border border-[#4a1430] bg-[#2a0a1c] px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:border-[#a32650] focus:outline-none"
-            type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <button className="w-full rounded-lg bg-gradient-to-r from-[#a32650] to-[#6d3fa4] py-2.5 text-sm font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50" disabled={busy}>
+        <form onSubmit={submit} className="space-y-3 rounded-lg border border-[var(--border-standard)] bg-[var(--surface-primary)] p-6 shadow-lg">
+          <input className="input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input className="input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+          {error && <p className="text-sm text-[var(--status-danger)]">{error}</p>}
+          <button className="btn-primary w-full py-2.5" disabled={busy}>
             {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
-          <button type="button" className="w-full text-center text-sm text-gray-400 hover:text-white"
+          <button type="button" className="w-full text-center text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
             onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
             {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
           </button>
