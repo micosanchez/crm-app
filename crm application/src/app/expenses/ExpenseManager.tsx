@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { EXPENSE_CATEGORIES, type Expense, type ExpenseCategory, type Job } from '@/lib/types';
@@ -11,9 +11,17 @@ const EMPTY = {
 
 export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]; jobs: Pick<Job, 'id' | 'title'>[] }) {
   const router = useRouter();
+  const receiptRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY);
+
+  async function viewReceipt(path: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 300);
+    if (error || !data?.signedUrl) { alert('Could not open receipt.'); return; }
+    window.open(data.signedUrl, '_blank');
+  }
 
   function startEdit(x: Expense) {
     setEditingId(x.id);
@@ -28,7 +36,19 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
     e.preventDefault();
     setBusy(true);
     const supabase = createClient();
-    const payload = {
+
+    // Receipt photo → private documents bucket (admin/dispatcher only)
+    let receiptPath: string | undefined;
+    const file = receiptRef.current?.files?.[0];
+    if (file) {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `receipts/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('documents').upload(path, file);
+      if (upErr) { setBusy(false); alert(`Receipt upload failed: ${upErr.message}`); return; }
+      receiptPath = path;
+    }
+
+    const payload: Record<string, unknown> = {
       category: form.category,
       amount: Number(form.amount),
       incurred_on: form.incurred_on,
@@ -36,6 +56,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
       description: form.description || null,
       job_id: form.job_id || null,
     };
+    if (receiptPath) payload.receipt_url = receiptPath;
     if (editingId) {
       await supabase.from('expenses').update(payload).eq('id', editingId);
     } else {
@@ -44,6 +65,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
     setBusy(false);
     setEditingId(null);
     setForm(EMPTY);
+    if (receiptRef.current) receiptRef.current.value = '';
     router.refresh();
   }
 
@@ -76,7 +98,11 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
           {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
         </select>
         <button className="btn-primary" disabled={busy}>{busy ? '…' : editingId ? 'Save changes' : '+ Add'}</button>
-        <input className="input md:col-span-6" placeholder="Description / notes" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <input className="input md:col-span-4" placeholder="Description / notes" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+        <div className="md:col-span-2">
+          <label className="panel-label mb-1 block">Receipt photo</label>
+          <input ref={receiptRef} type="file" accept="image/*,.pdf" capture="environment" className="input" />
+        </div>
       </form>
 
       <div className="card divide-y divide-gray-100 p-0">
@@ -88,6 +114,9 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span className="font-semibold text-red-700">-${Number(x.amount).toFixed(2)}</span>
+              {x.receipt_url && (
+                <button className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" onClick={() => viewReceipt(x.receipt_url!)}>Receipt</button>
+              )}
               <button className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" onClick={() => startEdit(x)}>Edit</button>
               <button className="rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => remove(x.id)}>Delete</button>
             </div>
