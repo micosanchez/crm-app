@@ -2,13 +2,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { Invoice } from '@/lib/types';
+import type { Invoice, PaymentMethod } from '@/lib/types';
 
-/** Invoice management: add line items, advance status, export PDF (print). */
+const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
+
 export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [item, setItem] = useState({ kind: 'labor', description: '', quantity: '1', unit_price: '' });
+  const [item, setItem] = useState({ kind: 'labor', description: '', details: '', quantity: '1', unit_price: '' });
+  const [tip, setTip] = useState(invoice.tip != null ? String(invoice.tip) : '0');
+  const [method, setMethod] = useState<PaymentMethod>(invoice.payment_method ?? 'venmo');
+  const [extras, setExtras] = useState({
+    payment_instructions: invoice.payment_instructions ?? '',
+    comments: invoice.comments ?? '',
+  });
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -18,10 +25,30 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
       invoice_id: invoice.id,
       kind: item.kind,
       description: item.description,
+      details: item.details || null,
       quantity: Number(item.quantity),
       unit_price: Number(item.unit_price),
     });
-    setItem({ kind: 'labor', description: '', quantity: '1', unit_price: '' });
+    setItem({ kind: 'labor', description: '', details: '', quantity: '1', unit_price: '' });
+    setBusy(false);
+    router.refresh();
+  }
+
+  async function saveTip() {
+    setBusy(true);
+    const supabase = createClient();
+    await supabase.from('invoices').update({ tip: Number(tip) || 0 }).eq('id', invoice.id);
+    setBusy(false);
+    router.refresh();
+  }
+
+  async function saveExtras() {
+    setBusy(true);
+    const supabase = createClient();
+    await supabase.from('invoices').update({
+      payment_instructions: extras.payment_instructions || null,
+      comments: extras.comments || null,
+    }).eq('id', invoice.id);
     setBusy(false);
     router.refresh();
   }
@@ -31,7 +58,7 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
     const supabase = createClient();
     const patch: Record<string, unknown> = { status };
     if (status === 'sent') patch.issued_at = new Date().toISOString();
-    if (status === 'paid') patch.paid_at = new Date().toISOString();
+    if (status === 'paid') { patch.paid_at = new Date().toISOString(); patch.payment_method = method; }
     await supabase.from('invoices').update(patch).eq('id', invoice.id);
     if (status === 'paid') await supabase.from('jobs').update({ status: 'paid' }).eq('id', invoice.job_id);
     setBusy(false);
@@ -57,24 +84,57 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
         )}
         {invoice.signed_at && <span className="badge self-center bg-brand-50 text-brand-700">✓ Signed by {invoice.signed_name}</span>}
         {invoice.status === 'draft' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('sent')}>Mark sent</button>}
-        {invoice.status === 'sent' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>Mark paid</button>}
+        {invoice.payment_method && <span className="badge self-center bg-emerald-50 capitalize text-emerald-700">paid via {invoice.payment_method}</span>}
       </div>
 
-      {invoice.status === 'draft' && (
-        <form onSubmit={addItem} className="card grid gap-2 md:grid-cols-5">
-          <select className="input" value={item.kind} onChange={(e) => setItem({ ...item, kind: e.target.value })}>
-            <option value="labor">Labor</option>
-            <option value="disposal">Disposal</option>
-            <option value="materials">Materials</option>
-            <option value="other">Other</option>
+      {invoice.status === 'sent' && (
+        <div className="card flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">Mark paid via</span>
+          <select className="input w-auto" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
+            {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input className="input md:col-span-2" placeholder="Description *" required value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} />
-          <input className="input" type="number" step="0.01" min="0" placeholder="Qty" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
-          <div className="flex gap-2">
-            <input className="input" type="number" step="0.01" min="0" placeholder="Price *" required value={item.unit_price} onChange={(e) => setItem({ ...item, unit_price: e.target.value })} />
-            <button className="btn-primary" disabled={busy}>+</button>
+          <button className="btn-primary" disabled={busy} onClick={() => setStatus('paid')}>✓ Mark paid</button>
+          <span className="text-xs text-gray-400">Cash too — just pick cash so the books know.</span>
+        </div>
+      )}
+
+      {invoice.status !== 'paid' && (
+        <div className="card flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold">💵 Tip</span>
+          <input className="input w-28" type="number" step="0.01" min="0" value={tip} onChange={(e) => setTip(e.target.value)} />
+          <button className="btn-ghost" disabled={busy} onClick={saveTip}>Save tip</button>
+          <span className="text-xs text-gray-400">Customer paid extra? Log it here — it adds to the total and counts as revenue.</span>
+        </div>
+      )}
+
+      {invoice.status === 'draft' && (
+        <>
+          <form onSubmit={addItem} className="card space-y-2">
+            <p className="text-xs font-bold uppercase text-gray-400">Add line item</p>
+            <div className="grid gap-2 md:grid-cols-5">
+              <select className="input" value={item.kind} onChange={(e) => setItem({ ...item, kind: e.target.value })}>
+                <option value="labor">Labor</option>
+                <option value="disposal">Disposal</option>
+                <option value="materials">Materials</option>
+                <option value="other">Other</option>
+              </select>
+              <input className="input md:col-span-2" placeholder="Item name *" required value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} />
+              <input className="input" type="number" step="0.01" min="0" placeholder="Qty" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
+              <div className="flex gap-2">
+                <input className="input" type="number" step="0.01" min="0" placeholder="Price *" required value={item.unit_price} onChange={(e) => setItem({ ...item, unit_price: e.target.value })} />
+                <button className="btn-primary" disabled={busy}>+</button>
+              </div>
+            </div>
+            <input className="input" placeholder="Details shown under the item" value={item.details} onChange={(e) => setItem({ ...item, details: e.target.value })} />
+          </form>
+
+          <div className="card space-y-2">
+            <p className="text-xs font-bold uppercase text-gray-400">Payment instructions &amp; comments</p>
+            <input className="input" placeholder="Payment instructions (e.g. Venmo — sanchezjunknhaul)" value={extras.payment_instructions} onChange={(e) => setExtras({ ...extras, payment_instructions: e.target.value })} />
+            <textarea className="input" rows={2} placeholder="Comments / terms" value={extras.comments} onChange={(e) => setExtras({ ...extras, comments: e.target.value })} />
+            <button className="btn-ghost" disabled={busy} onClick={saveExtras}>Save</button>
           </div>
-        </form>
+        </>
       )}
     </div>
   );
