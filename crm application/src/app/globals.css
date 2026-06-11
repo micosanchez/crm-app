@@ -58,7 +58,18 @@
     color: var(--text-primary);
     letter-spacing: -0.02em;
   }
-  h1 { font-weight: 650; }
+  /* Luxury editorial display face for headlines (DESIGN-SYSTEM.md §2) */
+  h1 {
+    font-family: var(--font-display), Georgia, serif;
+    font-weight: 600;
+    letter-spacing: 0.005em;
+    font-size: 1.75rem;
+  }
+  h2 {
+    font-family: var(--font-display), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+  }
   ::selection { background: var(--brand-accent); color: #fff; }
   * { transition-timing-function: var(--ease-standard); }
   ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -88,6 +99,8 @@
   .panel-label { @apply text-[11px] font-semibold uppercase tracking-[0.08em]; color: var(--text-tertiary); }
 
   .metric { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  .font-display { font-family: var(--font-display), Georgia, serif; }
 
   .glass { background: rgba(17, 17, 17, 0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-subtle); }
 }

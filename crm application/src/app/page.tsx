@@ -84,7 +84,7 @@ export default async function CommandCenter() {
       {/* Alerts */}
       {(overdue.length > 0 || staleLeads > 0 || (expiringDocs?.length ?? 0) > 0) && (
         <div className="card border-amber-300 bg-amber-50">
-          <p className="mb-1 text-sm font-semibold text-amber-800">⚠ Needs attention</p>
+          <p className="panel-label mb-2 !text-amber-800">Needs attention</p>
           <ul className="space-y-1 text-sm text-amber-800">
             {overdue.map((i) => (
               <li key={i.id}>
@@ -94,7 +94,7 @@ export default async function CommandCenter() {
             ))}
             {staleLeads > 0 && <li><Link className="underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</li>}
             {expiringDocs?.map((d) => (
-              <li key={d.id}>📁 <Link className="underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</li>
+              <li key={d.id}><Link className="underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</li>
             ))}
           </ul>
         </div>
