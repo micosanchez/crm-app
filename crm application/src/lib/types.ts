@@ -57,6 +57,10 @@ export interface Invoice {
   subtotal: number;
   tax_rate: number;
   total: number;
+  tip?: number;
+  payment_method?: PaymentMethod | null;
+  payment_instructions?: string | null;
+  comments?: string | null;
   created_at: string;
   public_token?: string;
   signed_name?: string | null;
@@ -72,10 +76,13 @@ export interface InvoiceItem {
   invoice_id: string;
   kind: 'labor' | 'disposal' | 'materials' | 'other';
   description: string;
+  details?: string | null;
   quantity: number;
   unit_price: number;
   amount: number;
 }
+
+export type PaymentMethod = 'cash' | 'venmo' | 'card' | 'check' | 'other';
 
 export interface ScheduleEvent {
   id: string;
@@ -146,6 +153,8 @@ export interface Estimate {
   valid_until: string | null;
   accepted_at: string | null;
   created_at: string;
+  payment_instructions?: string | null;
+  comments?: string | null;
   public_token?: string;
   signed_name?: string | null;
   signed_at?: string | null;
@@ -159,6 +168,7 @@ export interface EstimateItem {
   id: string;
   estimate_id: string;
   description: string;
+  details?: string | null;
   quantity: number;
   unit_price: number;
   amount: number;
