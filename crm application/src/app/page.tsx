@@ -13,9 +13,11 @@ export default async function CommandCenter() {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthStartDate = monthStart.slice(0, 10);
 
+  const soonDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
   const [
     { data: todayJobs }, { data: monthInvoices }, { data: monthExpenses },
     { data: openInvoices }, { data: leads }, { data: activity }, { count: customerCount },
+    { data: expiringDocs },
   ] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)')
       .gte('scheduled_start', dayStart).lte('scheduled_start', dayEnd).order('scheduled_start'),
@@ -25,6 +27,8 @@ export default async function CommandCenter() {
     supabase.from('leads').select('status,created_at,est_value,source'),
     supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(8),
     supabase.from('customers').select('*', { count: 'exact', head: true }),
+    supabase.from('documents').select('id,name,expires_on').eq('archived', false)
+      .not('expires_on', 'is', null).lte('expires_on', soonDate).order('expires_on'),
   ]);
 
   // ----- Today -----
@@ -78,7 +82,7 @@ export default async function CommandCenter() {
       </div>
 
       {/* Alerts */}
-      {(overdue.length > 0 || staleLeads > 0) && (
+      {(overdue.length > 0 || staleLeads > 0 || (expiringDocs?.length ?? 0) > 0) && (
         <div className="card border-amber-300 bg-amber-50">
           <p className="mb-1 text-sm font-semibold text-amber-800">⚠ Needs attention</p>
           <ul className="space-y-1 text-sm text-amber-800">
@@ -89,6 +93,9 @@ export default async function CommandCenter() {
               </li>
             ))}
             {staleLeads > 0 && <li><Link className="underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</li>}
+            {expiringDocs?.map((d) => (
+              <li key={d.id}>📁 <Link className="underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</li>
+            ))}
           </ul>
         </div>
       )}
