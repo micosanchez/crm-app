@@ -3,12 +3,22 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import SignaturePad from '@/components/SignaturePad';
 
-interface DocItem { description: string; quantity: number; unit_price: number; amount: number }
+interface DocItem { description: string; details?: string | null; quantity: number; unit_price: number; amount: number }
 interface Doc {
-  kind: string; number: number; status: string; total: number;
+  kind: string; number: number; status: string; total: number; tip?: number;
   created_at: string; customer_name: string | null; items: DocItem[];
   signed_name: string | null; signed_at: string | null;
   notes?: string | null; valid_until?: string | null; due_at?: string | null;
+  payment_instructions?: string | null; comments?: string | null;
+  view_count?: number;
+}
+
+function notify(payload: Record<string, unknown>) {
+  fetch('/api/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoice'; token: string }) {
@@ -22,7 +32,13 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
     supabase.rpc(kind === 'invoice' ? 'invoice_by_token' : 'estimate_by_token', { p_token: token })
       .then(({ data, error }) => {
         if (error || !data) setError('This link is invalid or has expired.');
-        else setDoc(data as Doc);
+        else {
+          const d = data as Doc;
+          setDoc(d);
+          if (d.view_count === 1) {
+            notify({ event: 'viewed', kind, number: d.number, customer: d.customer_name, total: d.total });
+          }
+        }
       });
   }, [kind, token]);
 
@@ -34,7 +50,11 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
     });
     setBusy(false);
     if (error || !data) setError('Could not submit signature. Please try again.');
-    else { setJustSigned(true); setDoc((d) => d && { ...d, signed_name: name, signed_at: new Date().toISOString() }); }
+    else {
+      setJustSigned(true);
+      setDoc((d) => d && { ...d, signed_name: name, signed_at: new Date().toISOString() });
+      notify({ event: 'signed', kind, number: doc?.number, customer: doc?.customer_name, total: doc?.total, signer: name });
+    }
   }
 
   return (
@@ -62,15 +82,32 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
               <tbody>
                 {doc.items.map((it, i) => (
                   <tr key={i} className="border-b border-gray-100">
-                    <td className="py-2">{it.description}</td>
-                    <td className="py-2 text-right text-gray-500">{Number(it.quantity)} × ${Number(it.unit_price).toFixed(2)}</td>
-                    <td className="py-2 text-right font-medium">${Number(it.amount).toFixed(2)}</td>
+                    <td className="py-2">
+                      <p className="font-semibold uppercase">{it.description}</p>
+                      {it.details && <p className="mt-0.5 text-xs text-gray-500">{it.details}</p>}
+                    </td>
+                    <td className="py-2 text-right align-top text-gray-500">{Number(it.quantity)} × ${Number(it.unit_price).toFixed(2)}</td>
+                    <td className="py-2 text-right align-top font-medium">${Number(it.amount).toFixed(2)}</td>
                   </tr>
                 ))}
+                {kind === 'invoice' && Number(doc.tip ?? 0) > 0 && (
+                  <tr className="border-b border-gray-100">
+                    <td className="py-2 text-gray-500">Tip — thank you!</td>
+                    <td></td>
+                    <td className="py-2 text-right font-medium">${Number(doc.tip).toFixed(2)}</td>
+                  </tr>
+                )}
                 <tr><td colSpan={2} className="pt-3 font-bold">Total</td><td className="pt-3 text-right text-lg font-bold text-brand-700">${Number(doc.total).toFixed(2)}</td></tr>
               </tbody>
             </table>
 
+            {doc.payment_instructions && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-bold uppercase text-gray-400">Payment instructions</p>
+                <p className="text-sm">{doc.payment_instructions}</p>
+              </div>
+            )}
+            {doc.comments && <p className="text-sm text-gray-500">{doc.comments}</p>}
             {doc.notes && <p className="text-sm text-gray-500">{doc.notes}</p>}
 
             {doc.signed_at ? (
