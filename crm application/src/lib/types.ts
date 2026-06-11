@@ -133,6 +133,8 @@ export interface Lead {
   service: ServiceType;
   est_value: number | null;
   notes: string | null;
+  follow_up_on?: string | null;
+  reason_lost?: string | null;
   customer_id: string | null;
   job_id: string | null;
   created_at: string;
