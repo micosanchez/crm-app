@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/Nav';
 import SwRegister from '@/components/SwRegister';
+
+const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const metadata: Metadata = {
   title: 'SJHC Command Center',
@@ -10,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2a0a1c',
+  themeColor: '#050505',
   width: 'device-width',
   initialScale: 1,
 };
@@ -18,10 +21,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-50 text-gray-900">
+      <body className={`${inter.className} min-h-screen antialiased`}>
         <SwRegister />
         <Nav />
-        <main className="mx-auto max-w-7xl p-4 pb-24 md:pb-4">{children}</main>
+        <main className="mx-auto max-w-7xl p-4 pb-24 md:pb-8">{children}</main>
       </body>
     </html>
   );

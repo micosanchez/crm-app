@@ -2,17 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
-  .btn { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50; }
-  .btn-primary { @apply btn bg-brand-600 text-white hover:bg-brand-700; }
-  .btn-ghost { @apply btn border border-gray-300 text-gray-700 hover:bg-gray-50; }
-  .btn-big { @apply btn w-full py-4 text-lg; }
-  .input { @apply w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none; }
-  .card { @apply rounded-xl border border-gray-200 bg-white p-4 shadow-sm; }
-  .badge { @apply inline-block rounded-full px-2 py-0.5 text-xs font-medium; }
+/* ============================================================
+   SJHC DESIGN TOKENS — single source of truth (see DESIGN-SYSTEM.md)
+   ============================================================ */
+:root {
+  /* Backgrounds */
+  --bg-primary: #050505;
+  --bg-secondary: #090909;
+  --bg-tertiary: #111111;
+  --surface-primary: #151515;
+  --surface-secondary: #1a1a1a;
+  --surface-elevated: #202020;
+
+  /* Brand */
+  --brand-primary: #5b1225;
+  --brand-secondary: #75142c;
+  --brand-accent: #8d1d39;
+  --brand-text: #c25674;
+
+  /* Metallics */
+  --metal-titanium: #b8b8b8;
+  --metal-graphite: #707070;
+  --metal-aluminum: #d5d5d5;
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: #c7c7c7;
+  --text-tertiary: #8f8f8f;
+  --text-muted: #666666;
+
+  /* Status (muted) */
+  --status-success: #4ebb8d;
+  --status-warning: #d4a843;
+  --status-danger: #c25460;
+
+  /* Borders */
+  --border-subtle: #1f1f1f;
+  --border-standard: #2a2a2a;
+  --border-strong: #3a3a3a;
+
+  /* Motion */
+  --anim-fast: 120ms;
+  --anim-normal: 200ms;
+  --anim-slow: 320ms;
+  --ease-standard: cubic-bezier(0.25, 0.6, 0.3, 1);
 }
 
+@layer base {
+  body {
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  h1, h2, h3 {
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+  h1 { font-weight: 650; }
+  ::selection { background: var(--brand-accent); color: #fff; }
+  * { transition-timing-function: var(--ease-standard); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg-secondary); }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition-colors duration-200 disabled:opacity-50; }
+  .btn-primary { @apply btn text-white; background: var(--brand-secondary); border: 1px solid var(--brand-accent); }
+  .btn-primary:hover { background: var(--brand-accent); }
+  .btn-ghost { @apply btn; color: var(--text-secondary); border: 1px solid var(--border-standard); background: transparent; }
+  .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); background: var(--surface-secondary); }
+  .btn-big { @apply btn w-full py-4 text-base; }
+
+  .input { @apply w-full rounded-md px-3 py-2 text-sm; background: var(--bg-tertiary); border: 1px solid var(--border-standard); color: var(--text-primary); }
+  .input::placeholder { color: var(--text-muted); }
+  .input:focus { outline: none; border-color: var(--brand-accent); }
+
+  .card { @apply rounded-lg p-4; background: var(--surface-primary); border: 1px solid var(--border-subtle); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+
+  .badge { @apply inline-block rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider; }
+
+  .panel-label { @apply text-[11px] font-semibold uppercase tracking-[0.08em]; color: var(--text-tertiary); }
+
+  .metric { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  .glass { background: rgba(17, 17, 17, 0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-subtle); }
+}
+
+/* Documents must print paper-correct regardless of screen theme */
 @media print {
   .no-print { display: none !important; }
-  body { background: white; }
+  body { background: #fff !important; color: #111 !important; }
+  .card { background: #fff !important; border-color: #ddd !important; box-shadow: none !important; }
+  .card *, h1, h2, h3, p, td, th, span { color: #111 !important; }
+  .card .text-brand-700, .card h1 { color: var(--brand-primary) !important; }
 }
