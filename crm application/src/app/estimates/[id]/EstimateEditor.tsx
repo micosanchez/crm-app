@@ -11,7 +11,9 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   const [extras, setExtras] = useState({
     payment_instructions: estimate.payment_instructions ?? '',
     comments: estimate.comments ?? '',
+    valid_until: estimate.valid_until ?? '',
   });
+  const expired = !!estimate.valid_until && estimate.valid_until < new Date().toISOString().slice(0, 10) && estimate.status !== 'accepted';
 
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
@@ -41,6 +43,7 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
     await supabase.from('estimates').update({
       payment_instructions: extras.payment_instructions || null,
       comments: extras.comments || null,
+      valid_until: extras.valid_until || null,
     }).eq('id', estimate.id);
     setBusy(false);
     router.refresh();
@@ -87,6 +90,7 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
           <span className="badge self-center bg-gray-100 text-gray-500">Not viewed yet</span>
         )}
         {estimate.signed_at && <span className="badge self-center bg-brand-50 text-brand-700">✓ Signed by {estimate.signed_name}</span>}
+        {expired && <span className="badge self-center bg-red-50 text-red-700">Expired {new Date(estimate.valid_until! + 'T12:00:00').toLocaleDateString()}</span>}
         {estimate.status === 'draft' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('sent')}>Mark sent</button>}
         {estimate.status === 'sent' && (
           <>
@@ -125,9 +129,13 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
           </form>
 
           <div className="card space-y-2">
-            <p className="text-xs font-bold uppercase text-gray-400">Payment instructions &amp; comments</p>
+            <p className="text-xs font-bold uppercase text-gray-400">Payment instructions, comments &amp; expiry</p>
             <input className="input" placeholder="Payment instructions (e.g. Venmo — sanchezjunknhaul)" value={extras.payment_instructions} onChange={(e) => setExtras({ ...extras, payment_instructions: e.target.value })} />
             <textarea className="input" rows={2} placeholder="Comments / terms (e.g. Additional items may be negotiated at pickup. Payment due on completion.)" value={extras.comments} onChange={(e) => setExtras({ ...extras, comments: e.target.value })} />
+            <div>
+              <label className="panel-label mb-1 block">Valid until (customer can&apos;t sign after this date)</label>
+              <input className="input" type="date" value={extras.valid_until} onChange={(e) => setExtras({ ...extras, valid_until: e.target.value })} />
+            </div>
             <button className="btn-ghost" disabled={busy} onClick={saveExtras}>Save</button>
           </div>
         </>
