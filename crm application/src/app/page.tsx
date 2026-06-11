@@ -24,7 +24,7 @@ export default async function CommandCenter() {
     supabase.from('invoices').select('total,status,paid_at,issued_at,due_at,created_at').gte('created_at', monthStart),
     supabase.from('expenses').select('amount,category').gte('incurred_on', monthStartDate),
     supabase.from('invoices').select('id,invoice_number,total,due_at,status,customers(id,name)').in('status', ['sent', 'draft']).order('due_at'),
-    supabase.from('leads').select('status,created_at,est_value,source'),
+    supabase.from('leads').select('status,created_at,est_value,source,follow_up_on,name'),
     supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(8),
     supabase.from('customers').select('*', { count: 'exact', head: true }),
     supabase.from('documents').select('id,name,expires_on').eq('archived', false)
@@ -52,6 +52,8 @@ export default async function CommandCenter() {
   const closedLeads = wonLeads + allLeads.filter((l) => l.status === 'lost').length;
   const conversion = closedLeads > 0 ? wonLeads / closedLeads : null;
   const staleLeads = allLeads.filter((l) => l.status === 'new' && (now.getTime() - new Date(l.created_at).getTime()) > 2 * 86400_000).length;
+  const today = now.toISOString().slice(0, 10);
+  const followUpsDue = allLeads.filter((l) => l.follow_up_on && l.follow_up_on <= today && !['won', 'lost'].includes(l.status));
 
   // ----- Business Health Score (0-100) -----
   const factors: { label: string; score: number; max: number; why: string }[] = [
@@ -82,7 +84,7 @@ export default async function CommandCenter() {
       </div>
 
       {/* Alerts */}
-      {(overdue.length > 0 || staleLeads > 0 || (expiringDocs?.length ?? 0) > 0) && (
+      {(overdue.length > 0 || staleLeads > 0 || followUpsDue.length > 0 || (expiringDocs?.length ?? 0) > 0) && (
         <div className="card border-amber-300 bg-amber-50">
           <p className="panel-label mb-2 !text-amber-800">Needs attention</p>
           <ul className="space-y-1 text-sm text-amber-800">
@@ -93,6 +95,9 @@ export default async function CommandCenter() {
               </li>
             ))}
             {staleLeads > 0 && <li><Link className="underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</li>}
+            {followUpsDue.length > 0 && (
+              <li><Link className="underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link>: {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</li>
+            )}
             {expiringDocs?.map((d) => (
               <li key={d.id}><Link className="underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</li>
             ))}
