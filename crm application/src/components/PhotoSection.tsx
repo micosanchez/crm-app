@@ -49,7 +49,7 @@ export default function PhotoSection({ job, big = false }: { job: Job; big?: boo
       <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple hidden
         onChange={(e) => upload(e.target.files)} />
       <button className={big ? 'btn-ghost btn-big' : 'btn-ghost'} disabled={busy} onClick={() => inputRef.current?.click()}>
-        {busy ? 'Uploading…' : '📷 Add photos'}
+        {busy ? 'Uploading…' : 'Add photos'}
       </button>
     </div>
   );

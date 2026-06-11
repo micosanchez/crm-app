@@ -22,8 +22,8 @@ export default function BrandMark({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
       </svg>
       {big ? (
         <span className="flex flex-col leading-tight">
-          <span className="text-2xl font-extrabold tracking-wide text-white">SANCHEZ</span>
-          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[#b8b8b8]">Junk &amp; Haul Co.</span>
+          <span className="font-display text-3xl font-semibold tracking-wide text-white">SANCHEZ</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b8b8b8]">Junk &amp; Haul Co.</span>
         </span>
       ) : (
         <span className="font-extrabold tracking-wide text-white">
