@@ -88,8 +88,8 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span className="font-semibold text-red-700">-${Number(x.amount).toFixed(2)}</span>
-              <button className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" onClick={() => startEdit(x)}>✏️ Edit</button>
-              <button className="rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => remove(x.id)}>🗑</button>
+              <button className="rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100" onClick={() => startEdit(x)}>Edit</button>
+              <button className="rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600" onClick={() => remove(x.id)}>Delete</button>
             </div>
           </div>
         ))}
