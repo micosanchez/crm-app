@@ -18,7 +18,7 @@ export default async function FieldPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <h1 className="text-2xl font-bold">Field — today</h1>
+      <h1 className="text-2xl font-bold">Field — Today</h1>
       <FieldJobList jobs={(jobs ?? []) as Job[]} />
     </div>
   );

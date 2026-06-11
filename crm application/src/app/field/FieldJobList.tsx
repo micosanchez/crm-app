@@ -30,7 +30,7 @@ export default function FieldJobList({ jobs: initial }: { jobs: Job[] }) {
     router.refresh();
   }
 
-  if (!jobs.length) return <p className="text-gray-500">No jobs assigned for today. 🎉</p>;
+  if (!jobs.length) return <p className="text-gray-500">No jobs assigned for today.</p>;
 
   return (
     <div className="space-y-4">
@@ -51,15 +51,15 @@ export default function FieldJobList({ jobs: initial }: { jobs: Job[] }) {
 
           {j.address && (
             <a className="btn-ghost btn-big" href={`https://maps.apple.com/?q=${encodeURIComponent(j.address)}`} target="_blank" rel="noreferrer">
-              📍 {j.address}
+              Directions — {j.address}
             </a>
           )}
           {j.customers?.phone && (
-            <a className="btn-ghost btn-big" href={`tel:${j.customers.phone}`}>📞 Call {j.customers.name}</a>
+            <a className="btn-ghost btn-big" href={`tel:${j.customers.phone}`}>Call {j.customers.name}</a>
           )}
 
           {j.status === 'scheduled' && (
-            <button className="btn-primary btn-big" onClick={() => setStatus(j, 'in_progress')}>▶ Start job</button>
+            <button className="btn-primary btn-big" onClick={() => setStatus(j, 'in_progress')}>Start job</button>
           )}
           {j.status === 'in_progress' && (
             <button className="btn-primary btn-big" onClick={() => setStatus(j, 'completed')}>✓ Complete job</button>
@@ -73,7 +73,7 @@ export default function FieldJobList({ jobs: initial }: { jobs: Job[] }) {
               <button className="btn-primary" onClick={() => addNote(j.id)}>Save</button>
             </div>
           ) : (
-            <button className="btn-ghost btn-big" onClick={() => setNoteFor(j.id)}>📝 Add note</button>
+            <button className="btn-ghost btn-big" onClick={() => setNoteFor(j.id)}>Add note</button>
           )}
         </div>
       ))}
