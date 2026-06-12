@@ -17,7 +17,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
     supabase.from('job_status_history').select('*').eq('job_id', params.id).order('changed_at', { ascending: false }),
     supabase.from('notes').select('*').eq('entity_type', 'job').eq('entity_id', params.id).order('created_at', { ascending: false }),
     supabase.from('invoices').select('id,invoice_number,status,total').eq('job_id', params.id).maybeSingle(),
-    supabase.from('users').select('id,full_name').eq('is_active', true).order('full_name'),
+    supabase.from('users').select('id,full_name,email').eq('is_active', true).order('full_name'),
     supabase.from('job_assignments').select('user_id').eq('job_id', params.id),
   ]);
 
@@ -46,8 +46,8 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
         <JobEditForm job={j} />
       </div>
 
-      <CrewAssign jobId={j.id}
-        team={(team ?? []) as Pick<UserProfile, 'id' | 'full_name'>[]}
+      <CrewAssign job={j}
+        team={(team ?? []) as Pick<UserProfile, 'id' | 'full_name' | 'email'>[]}
         assigned={(assignments ?? []).map((a) => a.user_id)} />
 
       {invoice && (
