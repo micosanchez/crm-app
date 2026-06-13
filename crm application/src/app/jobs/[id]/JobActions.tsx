@@ -22,7 +22,8 @@ export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: 
       });
       if (!res.ok) alert('Could not generate invoice — are you online?');
     } else {
-      await mutate({ table: 'jobs', op: 'update', id: job.id, payload: { status: next } });
+      const res = await mutate({ table: 'jobs', op: 'update', id: job.id, label: 'job', payload: { status: next } });
+      if (res.status === 'failed') { setBusy(false); alert(`Couldn't update job: ${res.error}`); return; }
     }
     setBusy(false);
     router.refresh();

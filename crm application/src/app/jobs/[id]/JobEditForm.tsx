@@ -17,6 +17,7 @@ export default function JobEditForm({ job }: { job: Job }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: job.title,
     description: job.description ?? '',
@@ -30,6 +31,7 @@ export default function JobEditForm({ job }: { job: Job }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setError(null);
 
     const start = form.scheduled_start ? new Date(form.scheduled_start) : null;
     const end = form.scheduled_end ? new Date(form.scheduled_end) : start ? new Date(start.getTime() + 2 * 3600_000) : null;
@@ -55,8 +57,8 @@ export default function JobEditForm({ job }: { job: Job }) {
       }
     }
 
-    await mutate({
-      table: 'jobs', op: 'update', id: job.id,
+    const res = await mutate({
+      table: 'jobs', op: 'update', id: job.id, label: 'job',
       payload: {
         title: form.title,
         description: form.description || null,
@@ -68,6 +70,7 @@ export default function JobEditForm({ job }: { job: Job }) {
       },
     });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     setOpen(false);
     router.refresh();
   }
@@ -93,6 +96,7 @@ export default function JobEditForm({ job }: { job: Job }) {
         <input className="input" type="datetime-local" value={form.scheduled_end} onChange={(e) => setForm({ ...form, scheduled_end: e.target.value })} />
       </div>
       <textarea className="input md:col-span-2" rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      {error && <p className="text-sm text-red-600 md:col-span-2">Couldn&apos;t save: {error}</p>}
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
         <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>

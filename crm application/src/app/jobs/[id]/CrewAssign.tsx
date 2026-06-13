@@ -16,10 +16,12 @@ export default function CrewAssign({ job, team, assigned }: {
     setBusy(true);
     const supabase = createClient();
     if (ids.includes(member.id)) {
-      await supabase.from('job_assignments').delete().eq('job_id', job.id).eq('user_id', member.id);
+      const { error } = await supabase.from('job_assignments').delete().eq('job_id', job.id).eq('user_id', member.id);
+      if (error) { setBusy(false); alert(`Couldn't unassign ${member.full_name}: ${error.message}`); return; }
       setIds(ids.filter((i) => i !== member.id));
     } else {
-      await supabase.from('job_assignments').insert({ job_id: job.id, user_id: member.id });
+      const { error } = await supabase.from('job_assignments').insert({ job_id: job.id, user_id: member.id });
+      if (error) { setBusy(false); alert(`Couldn't assign ${member.full_name}: ${error.message}`); return; }
       setIds([...ids, member.id]);
       // Notify the crew member by email (fire-and-forget)
       fetch('/api/notify', {
