@@ -16,8 +16,14 @@ export default function KanbanBoard({ jobs: initial }: { jobs: Job[] }) {
   const [dragId, setDragId] = useState<string | null>(null);
 
   async function moveJob(id: string, status: JobStatus) {
+    const prev = jobs.find((j) => j.id === id)?.status;
     setJobs((js) => js.map((j) => (j.id === id ? { ...j, status } : j))); // optimistic
-    await mutate({ table: 'jobs', op: 'update', id, payload: { status } });
+    const res = await mutate({ table: 'jobs', op: 'update', id, label: 'job', payload: { status } });
+    if (res.status === 'failed') {
+      if (prev) setJobs((js) => js.map((j) => (j.id === id ? { ...j, status: prev } : j))); // revert
+      alert(`Couldn't move job: ${res.error}`);
+      return;
+    }
     router.refresh();
   }
 

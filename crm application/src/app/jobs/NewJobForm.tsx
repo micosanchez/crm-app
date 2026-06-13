@@ -8,6 +8,7 @@ export default function NewJobForm({ customers }: { customers: Pick<Customer, 'i
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: '', customer_id: '', service: 'junk_removal' as ServiceType,
     description: '', address: '', estimated_value: '', scheduled_start: '',
@@ -16,8 +17,9 @@ export default function NewJobForm({ customers }: { customers: Pick<Customer, 'i
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await mutate({
-      table: 'jobs', op: 'insert',
+    setError(null);
+    const res = await mutate({
+      table: 'jobs', op: 'insert', label: 'job',
       payload: {
         title: form.title,
         customer_id: form.customer_id,
@@ -30,6 +32,7 @@ export default function NewJobForm({ customers }: { customers: Pick<Customer, 'i
       },
     });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     setOpen(false);
     router.refresh();
   }
@@ -54,6 +57,7 @@ export default function NewJobForm({ customers }: { customers: Pick<Customer, 'i
         <input className="input" type="datetime-local" value={form.scheduled_start} onChange={(e) => setForm({ ...form, scheduled_start: e.target.value })} />
         <textarea className="input md:col-span-2" placeholder="Description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </div>
+      {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Create job'}</button>
         <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
