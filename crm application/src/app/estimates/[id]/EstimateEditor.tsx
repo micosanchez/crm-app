@@ -2,11 +2,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { mutate } from '@/lib/offline/sync';
 import type { Estimate } from '@/lib/types';
 
 export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState({ description: '', details: '', quantity: '1', unit_price: '' });
   const [extras, setExtras] = useState({
     payment_instructions: estimate.payment_instructions ?? '',
@@ -18,55 +20,78 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const supabase = createClient();
-    await supabase.from('estimate_items').insert({
-      estimate_id: estimate.id,
-      description: item.description,
-      details: item.details || null,
-      quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
+    setError(null);
+    const res = await mutate({
+      table: 'estimate_items', op: 'insert', label: 'estimate item',
+      payload: {
+        estimate_id: estimate.id,
+        description: item.description,
+        details: item.details || null,
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unit_price),
+      },
     });
-    setItem({ description: '', details: '', quantity: '1', unit_price: '' });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
+    setItem({ description: '', details: '', quantity: '1', unit_price: '' });
     router.refresh();
   }
 
   async function removeItem(id: string) {
-    const supabase = createClient();
-    await supabase.from('estimate_items').delete().eq('id', id);
+    const res = await mutate({ table: 'estimate_items', op: 'delete', id, label: 'estimate item' });
+    if (res.status === 'failed') { setError(res.error); return; }
     router.refresh();
   }
 
   async function saveExtras() {
     setBusy(true);
-    const supabase = createClient();
-    await supabase.from('estimates').update({
-      payment_instructions: extras.payment_instructions || null,
-      comments: extras.comments || null,
-      valid_until: extras.valid_until || null,
-    }).eq('id', estimate.id);
+    setError(null);
+    const res = await mutate({
+      table: 'estimates', op: 'update', id: estimate.id, label: 'estimate',
+      payload: {
+        payment_instructions: extras.payment_instructions || null,
+        comments: extras.comments || null,
+        valid_until: extras.valid_until || null,
+      },
+    });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     router.refresh();
   }
 
   async function setStatus(status: 'sent' | 'accepted' | 'declined') {
     setBusy(true);
-    const supabase = createClient();
+    setError(null);
     const patch: Record<string, unknown> = { status };
     if (status === 'accepted') patch.accepted_at = new Date().toISOString();
     if (status === 'declined') patch.declined_at = new Date().toISOString();
-    await supabase.from('estimates').update(patch).eq('id', estimate.id);
 
+    // Accepting spawns a job and links it back — multi-step, needs connectivity.
     if (status === 'accepted' && !estimate.job_id && estimate.customer_id) {
-      const { data: job } = await supabase.from('jobs').insert({
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setBusy(false);
+        setError('Accepting an estimate creates a job — you need to be online for this step.');
+        return;
+      }
+      const supabase = createClient();
+      const { error: upErr } = await supabase.from('estimates').update(patch).eq('id', estimate.id);
+      if (upErr) { setBusy(false); setError(upErr.message); return; }
+      const { data: job, error: jobErr } = await supabase.from('jobs').insert({
         customer_id: estimate.customer_id,
         title: `Estimate #${estimate.estimate_number} job`,
         status: 'lead',
         estimated_value: estimate.total,
       }).select().single();
+      if (jobErr) { setBusy(false); setError(`Estimate accepted, but job creation failed: ${jobErr.message}`); return; }
       if (job) await supabase.from('estimates').update({ job_id: job.id }).eq('id', estimate.id);
+      setBusy(false);
+      router.refresh();
+      return;
     }
+
+    const res = await mutate({ table: 'estimates', op: 'update', id: estimate.id, label: 'estimate', payload: patch });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     router.refresh();
   }
 
@@ -102,6 +127,8 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
           <a className="btn-ghost" href={`/jobs/${estimate.job_id}`}>View job →</a>
         )}
       </div>
+
+      {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}
 
       {editable && (
         <>
