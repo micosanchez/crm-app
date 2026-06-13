@@ -17,14 +17,21 @@ export default function FieldJobList({ jobs: initial }: { jobs: Job[] }) {
   const [note, setNote] = useState('');
 
   async function setStatus(job: Job, status: Job['status']) {
+    const prev = job.status;
     setJobs((js) => js.map((j) => (j.id === job.id ? { ...j, status } : j)));
-    await mutate({ table: 'jobs', op: 'update', id: job.id, payload: { status } });
+    const res = await mutate({ table: 'jobs', op: 'update', id: job.id, label: 'job', payload: { status } });
+    if (res.status === 'failed') {
+      setJobs((js) => js.map((j) => (j.id === job.id ? { ...j, status: prev } : j)));
+      alert(`Couldn't update job: ${res.error}`);
+      return;
+    }
     router.refresh();
   }
 
   async function addNote(jobId: string) {
     if (!note.trim()) return;
-    await mutate({ table: 'notes', op: 'insert', payload: { entity_type: 'job', entity_id: jobId, body: note } });
+    const res = await mutate({ table: 'notes', op: 'insert', label: 'note', payload: { entity_type: 'job', entity_id: jobId, body: note } });
+    if (res.status === 'failed') { alert(`Couldn't save note: ${res.error}`); return; }
     setNote('');
     setNoteFor(null);
     router.refresh();
