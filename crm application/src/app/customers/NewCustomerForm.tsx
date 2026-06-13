@@ -12,12 +12,15 @@ export default function NewCustomerForm() {
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', city: '' });
   const [tags, setTags] = useState<CustomerTag[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await mutate({ table: 'customers', op: 'insert', payload: { ...form, tags } });
+    setError(null);
+    const res = await mutate({ table: 'customers', op: 'insert', label: 'customer', payload: { ...form, tags } });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     setOpen(false);
     setForm({ name: '', phone: '', email: '', address: '', city: '' });
     setTags([]);
@@ -44,6 +47,7 @@ export default function NewCustomerForm() {
           </button>
         ))}
       </div>
+      {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save customer'}</button>
         <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
