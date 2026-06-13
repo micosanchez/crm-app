@@ -8,14 +8,16 @@ export const dynamic = 'force-dynamic';
 
 export default async function InvoiceDetail({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: invoice } = await supabase
-    .from('invoices')
-    .select('*, customers(id,name,email,address), invoice_items(*)')
-    .eq('id', params.id)
-    .single();
+  const [{ data: invoice }, { data: { user } }] = await Promise.all([
+    supabase.from('invoices').select('*, customers(id,name,email,address), invoice_items(*)').eq('id', params.id).single(),
+    supabase.auth.getUser(),
+  ]);
 
   if (!invoice) return <p>Invoice not found.</p>;
   const inv = invoice as Invoice;
+
+  const { data: me } = user ? await supabase.from('users').select('role').eq('id', user.id).single() : { data: null };
+  const canEdit = me?.role === 'admin' || me?.role === 'dispatcher';
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -80,7 +82,7 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
         {inv.comments && <p className="mt-3 text-sm text-gray-500">{inv.comments}</p>}
       </div>
 
-      <InvoiceEditor invoice={inv} />
+      <InvoiceEditor invoice={inv} canEdit={canEdit} />
     </div>
   );
 }

@@ -1,14 +1,15 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { mutate } from '@/lib/offline/sync';
 import type { Invoice, PaymentMethod } from '@/lib/types';
 
 const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
 
-export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
+export default function InvoiceEditor({ invoice, canEdit = true }: { invoice: Invoice; canEdit?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [item, setItem] = useState({ kind: 'labor', description: '', details: '', quantity: '1', unit_price: '' });
   const [tip, setTip] = useState(invoice.tip != null ? String(invoice.tip) : '0');
   const [method, setMethod] = useState<PaymentMethod>(invoice.payment_method ?? 'venmo');
@@ -17,52 +18,64 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
     comments: invoice.comments ?? '',
   });
 
+  /** Run a queued mutation; surface the error and stop on failure. */
+  async function run(fn: () => Promise<{ status: string; error?: string }>, after?: () => void) {
+    setBusy(true);
+    setError(null);
+    const res = await fn();
+    setBusy(false);
+    if (res.status === 'failed') { setError(res.error ?? 'Could not save'); return false; }
+    after?.();
+    router.refresh();
+    return true;
+  }
+
   async function addItem(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    const supabase = createClient();
-    await supabase.from('invoice_items').insert({
-      invoice_id: invoice.id,
-      kind: item.kind,
-      description: item.description,
-      details: item.details || null,
-      quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
-    });
-    setItem({ kind: 'labor', description: '', details: '', quantity: '1', unit_price: '' });
-    setBusy(false);
-    router.refresh();
+    await run(
+      () => mutate({
+        table: 'invoice_items', op: 'insert', label: 'invoice item',
+        payload: {
+          invoice_id: invoice.id,
+          kind: item.kind,
+          description: item.description,
+          details: item.details || null,
+          quantity: Number(item.quantity),
+          unit_price: Number(item.unit_price),
+        },
+      }),
+      () => setItem({ kind: 'labor', description: '', details: '', quantity: '1', unit_price: '' })
+    );
   }
 
   async function saveTip() {
-    setBusy(true);
-    const supabase = createClient();
-    await supabase.from('invoices').update({ tip: Number(tip) || 0 }).eq('id', invoice.id);
-    setBusy(false);
-    router.refresh();
+    await run(() => mutate({ table: 'invoices', op: 'update', id: invoice.id, label: 'tip', payload: { tip: Number(tip) || 0 } }));
   }
 
   async function saveExtras() {
-    setBusy(true);
-    const supabase = createClient();
-    await supabase.from('invoices').update({
-      payment_instructions: extras.payment_instructions || null,
-      comments: extras.comments || null,
-    }).eq('id', invoice.id);
-    setBusy(false);
-    router.refresh();
+    await run(() => mutate({
+      table: 'invoices', op: 'update', id: invoice.id, label: 'invoice',
+      payload: { payment_instructions: extras.payment_instructions || null, comments: extras.comments || null },
+    }));
   }
 
   async function setStatus(status: 'sent' | 'paid') {
-    setBusy(true);
-    const supabase = createClient();
     const patch: Record<string, unknown> = { status };
     if (status === 'sent') patch.issued_at = new Date().toISOString();
     if (status === 'paid') { patch.paid_at = new Date().toISOString(); patch.payment_method = method; }
-    await supabase.from('invoices').update(patch).eq('id', invoice.id);
-    if (status === 'paid') await supabase.from('jobs').update({ status: 'paid' }).eq('id', invoice.job_id);
-    setBusy(false);
-    router.refresh();
+    const ok = await run(() => mutate({ table: 'invoices', op: 'update', id: invoice.id, label: 'invoice', payload: patch }));
+    if (ok && status === 'paid') {
+      await mutate({ table: 'jobs', op: 'update', id: invoice.job_id, label: 'job', payload: { status: 'paid' } });
+      router.refresh();
+    }
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="no-print rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+        You have read-only access to invoices. Ask an admin or dispatcher to make changes.
+      </div>
+    );
   }
 
   return (
@@ -86,6 +99,8 @@ export default function InvoiceEditor({ invoice }: { invoice: Invoice }) {
         {invoice.status === 'draft' && <button className="btn-primary" disabled={busy} onClick={() => setStatus('sent')}>Mark sent</button>}
         {invoice.payment_method && <span className="badge self-center bg-emerald-50 capitalize text-emerald-700">paid via {invoice.payment_method}</span>}
       </div>
+
+      {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}
 
       {invoice.status === 'sent' && (
         <div className="card flex flex-wrap items-center gap-2">
