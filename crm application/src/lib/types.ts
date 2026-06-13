@@ -189,12 +189,27 @@ export interface Expense {
   jobs?: Pick<Job, 'id' | 'title'>;
 }
 
+/** Tables that may be written through the offline sync queue. */
+export type SyncTable =
+  | 'customers' | 'jobs' | 'notes' | 'schedule_events' | 'job_assignments'
+  | 'invoices' | 'invoice_items' | 'estimates' | 'estimate_items'
+  | 'expenses' | 'leads';
+
 /** One queued offline mutation. */
 export interface QueuedAction {
   idempotency_key: string; // uuid generated client-side
-  table: 'customers' | 'jobs' | 'notes' | 'schedule_events' | 'job_assignments';
-  op: 'insert' | 'update';
-  id?: string; // required for update
-  payload: Record<string, unknown>;
+  table: SyncTable;
+  op: 'insert' | 'update' | 'delete';
+  id?: string; // required for update + delete
+  payload?: Record<string, unknown>; // omitted for delete
   client_ts: string; // ISO timestamp when action happened (conflict resolution)
+  attempts?: number; // failed flush attempts so far
+  last_error?: string; // last server error message, if any
+  label?: string; // human label for toasts, e.g. "customer", "invoice item"
 }
+
+/** Result of a single mutate() call, so callers can react to failures. */
+export type MutateResult =
+  | { status: 'applied' }          // saved to the server
+  | { status: 'queued' }           // saved offline, will sync later
+  | { status: 'failed'; error: string }; // rejected by the server
