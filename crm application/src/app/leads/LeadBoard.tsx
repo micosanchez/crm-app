@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { mutate } from '@/lib/offline/sync';
 import { LEAD_PIPELINE, LEAD_SOURCES, type Lead, type LeadStatus, type LeadSource, type ServiceType } from '@/lib/types';
 
 const LABELS: Record<LeadStatus, string> = {
@@ -19,24 +20,31 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
   const [form, setForm] = useState({ name: '', phone: '', address: '', source: 'google' as LeadSource, service: 'junk_removal' as ServiceType, est_value: '', notes: '', follow_up_on: '' });
 
   async function createEstimate(l: Lead) {
+    // Multi-step (customer → estimate → link); opens the new estimate, so needs connectivity.
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      alert('Creating an estimate needs a connection. Reconnect and try again.');
+      return;
+    }
     setBusy(true);
     const supabase = createClient();
     let customerId = l.customer_id;
     if (!customerId) {
-      const { data: customer } = await supabase
+      const { data: customer, error: custErr } = await supabase
         .from('customers')
         .insert({ name: l.name, phone: l.phone, address: l.address, lead_source: l.source })
         .select()
         .single();
+      if (custErr) { setBusy(false); alert(`Couldn't create customer: ${custErr.message}`); return; }
       customerId = customer?.id ?? null;
       if (customerId) await supabase.from('leads').update({ customer_id: customerId }).eq('id', l.id);
     }
     if (!customerId) { setBusy(false); alert('Could not create customer for this lead.'); return; }
-    const { data: estimate } = await supabase
+    const { data: estimate, error: estErr } = await supabase
       .from('estimates')
       .insert({ customer_id: customerId, lead_id: l.id, notes: l.notes })
       .select()
       .single();
+    if (estErr) { setBusy(false); alert(`Couldn't create estimate: ${estErr.message}`); return; }
     await supabase.from('leads').update({ status: 'estimate_sent' }).eq('id', l.id);
     setBusy(false);
     if (estimate) router.push(`/estimates/${estimate.id}`);
@@ -55,27 +63,31 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
   }
 
   async function moveLead(id: string, status: LeadStatus) {
+    const prev = leads.find((l) => l.id === id)?.status;
+    const revert = () => prev && setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, status: prev } : l)));
+
     let reasonLost: string | null = null;
     if (status === 'lost') {
       reasonLost = prompt('Why was this lead lost? (price / timing / competitor / no response / other)') || null;
     }
     setLeads((ls) => ls.map((l) => (l.id === id ? { ...l, status } : l)));
-    const supabase = createClient();
-    if (status === 'lost') {
-      await supabase.from('leads').update({ status, reason_lost: reasonLost }).eq('id', id);
-      router.refresh();
-      return;
-    }
 
     if (status === 'won') {
-      // Convert: create customer (if none) so the lead becomes real business
+      // Convert: create customer (if none) so the lead becomes real business — multi-step, needs connectivity.
       const lead = leads.find((l) => l.id === id);
       if (lead && !lead.customer_id) {
-        const { data: customer } = await supabase
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          revert();
+          alert('Marking a lead won creates a customer — you need to be online for this.');
+          return;
+        }
+        const supabase = createClient();
+        const { data: customer, error: custErr } = await supabase
           .from('customers')
           .insert({ name: lead.name, phone: lead.phone, address: lead.address, lead_source: lead.source })
           .select()
           .single();
+        if (custErr) { revert(); alert(`Couldn't convert lead: ${custErr.message}`); return; }
         if (customer) {
           await supabase.from('leads').update({ status, customer_id: customer.id }).eq('id', id);
           router.refresh();
@@ -83,14 +95,16 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
         }
       }
     }
-    await supabase.from('leads').update({ status }).eq('id', id);
+
+    const payload = status === 'lost' ? { status, reason_lost: reasonLost } : { status };
+    const res = await mutate({ table: 'leads', op: 'update', id, label: 'lead', payload });
+    if (res.status === 'failed') { revert(); alert(`Couldn't update lead: ${res.error}`); return; }
     router.refresh();
   }
 
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const supabase = createClient();
     const payload = {
       name: form.name, phone: form.phone || null, address: form.address || null,
       source: form.source, service: form.service,
@@ -98,12 +112,11 @@ export default function LeadBoard({ leads: initial }: { leads: Lead[] }) {
       notes: form.notes || null,
       follow_up_on: form.follow_up_on || null,
     };
-    if (editingId) {
-      await supabase.from('leads').update(payload).eq('id', editingId);
-    } else {
-      await supabase.from('leads').insert(payload);
-    }
+    const res = editingId
+      ? await mutate({ table: 'leads', op: 'update', id: editingId, label: 'lead', payload })
+      : await mutate({ table: 'leads', op: 'insert', label: 'lead', payload });
     setBusy(false);
+    if (res.status === 'failed') { alert(`Couldn't save lead: ${res.error}`); return; }
     setOpen(false);
     setEditingId(null);
     setForm({ name: '', phone: '', address: '', source: 'google', service: 'junk_removal', est_value: '', notes: '', follow_up_on: '' });
