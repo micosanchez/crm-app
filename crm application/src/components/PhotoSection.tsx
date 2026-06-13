@@ -13,6 +13,10 @@ export default function PhotoSection({ job, big = false }: { job: Job; big?: boo
 
   async function upload(files: FileList | null) {
     if (!files?.length) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      alert("Photos upload to the cloud and need a connection. Reconnect, then add them.");
+      return;
+    }
     setBusy(true);
     const supabase = createClient();
     const added: { url: string; uploaded_at: string }[] = [];
@@ -28,7 +32,8 @@ export default function PhotoSection({ job, big = false }: { job: Job; big?: boo
       }
     }
     if (added.length) {
-      await supabase.from('jobs').update({ photos: [...photos, ...added] }).eq('id', job.id);
+      const { error: saveErr } = await supabase.from('jobs').update({ photos: [...photos, ...added] }).eq('id', job.id);
+      if (saveErr) alert(`Photos uploaded but couldn't be attached to the job: ${saveErr.message}`);
     }
     setBusy(false);
     router.refresh();
