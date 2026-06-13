@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { mutate } from '@/lib/offline/sync';
 import { EXPENSE_CATEGORIES, type Expense, type ExpenseCategory, type Job } from '@/lib/types';
 
 const EMPTY = {
@@ -35,12 +36,18 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    const supabase = createClient();
 
-    // Receipt photo → private documents bucket (admin/dispatcher only)
+    // Receipt photo → private documents bucket. Needs connectivity; if a file
+    // is attached while offline, tell the user rather than dropping it.
     let receiptPath: string | undefined;
     const file = receiptRef.current?.files?.[0];
     if (file) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        setBusy(false);
+        alert('Receipt photos need a connection. Reconnect, or save the expense without the photo for now.');
+        return;
+      }
+      const supabase = createClient();
       const ext = file.name.split('.').pop() || 'jpg';
       const path = `receipts/${crypto.randomUUID()}.${ext}`;
       const { error: upErr } = await supabase.storage.from('documents').upload(path, file);
@@ -57,12 +64,13 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
       job_id: form.job_id || null,
     };
     if (receiptPath) payload.receipt_url = receiptPath;
-    if (editingId) {
-      await supabase.from('expenses').update(payload).eq('id', editingId);
-    } else {
-      await supabase.from('expenses').insert(payload);
-    }
+
+    const res = editingId
+      ? await mutate({ table: 'expenses', op: 'update', id: editingId, label: 'expense', payload })
+      : await mutate({ table: 'expenses', op: 'insert', label: 'expense', payload });
     setBusy(false);
+    if (res.status === 'failed') { alert(`Couldn't save expense: ${res.error}`); return; }
+
     setEditingId(null);
     setForm(EMPTY);
     if (receiptRef.current) receiptRef.current.value = '';
@@ -72,9 +80,9 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
   async function remove(id: string) {
     if (!confirm('Delete this expense? (It stays in the audit log.)')) return;
     setBusy(true);
-    const supabase = createClient();
-    await supabase.from('expenses').delete().eq('id', id);
+    const res = await mutate({ table: 'expenses', op: 'delete', id, label: 'expense' });
     setBusy(false);
+    if (res.status === 'failed') { alert(`Couldn't delete expense: ${res.error}`); return; }
     if (editingId === id) { setEditingId(null); setForm(EMPTY); }
     router.refresh();
   }
