@@ -10,6 +10,7 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: customer.name,
     phone: customer.phone ?? '',
@@ -22,8 +23,9 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await mutate({
-      table: 'customers', op: 'update', id: customer.id,
+    setError(null);
+    const res = await mutate({
+      table: 'customers', op: 'update', id: customer.id, label: 'customer',
       payload: {
         name: form.name,
         phone: form.phone || null,
@@ -34,6 +36,7 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
       },
     });
     setBusy(false);
+    if (res.status === 'failed') { setError(res.error); return; }
     setOpen(false);
     router.refresh();
   }
@@ -56,6 +59,7 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
           </button>
         ))}
       </div>
+      {error && <p className="text-sm text-red-600 md:col-span-2">Couldn&apos;t save: {error}</p>}
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>
         <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>

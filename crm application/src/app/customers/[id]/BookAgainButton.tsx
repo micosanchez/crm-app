@@ -12,13 +12,14 @@ export default function BookAgainButton({ customer }: { customer: Customer }) {
   async function book() {
     setBusy(true);
     const supabase = createClient();
-    const { data: job } = await supabase.from('jobs').insert({
+    const { data: job, error } = await supabase.from('jobs').insert({
       customer_id: customer.id,
       title: `${customer.name} — repeat job`,
       address: customer.address,
       status: 'lead',
     }).select().single();
     setBusy(false);
+    if (error) { alert(`Couldn't create job: ${error.message}`); return; }
     if (job) router.push(`/jobs/${job.id}`);
   }
 
