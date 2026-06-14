@@ -4,7 +4,11 @@ import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
 import type { Customer, ServiceType } from '@/lib/types';
 
-export default function NewJobForm({ customers }: { customers: Pick<Customer, 'id' | 'name'>[] }) {
+export default function NewJobForm({ customers, triggerClassName = 'btn-primary', triggerLabel = '+ New job' }: {
+  customers: Pick<Customer, 'id' | 'name'>[];
+  triggerClassName?: string;
+  triggerLabel?: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +41,7 @@ export default function NewJobForm({ customers }: { customers: Pick<Customer, 'i
     router.refresh();
   }
 
-  if (!open) return <button className="btn-primary" onClick={() => setOpen(true)}>+ New job</button>;
+  if (!open) return <button className={triggerClassName} onClick={() => setOpen(true)}>{triggerLabel}</button>;
 
   return (
     <form onSubmit={submit} className="card space-y-3">

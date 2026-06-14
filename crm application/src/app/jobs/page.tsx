@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
+import JobsDashboard from './JobsDashboard';
 import KanbanBoard from './KanbanBoard';
-import NewJobForm from './NewJobForm';
 import type { Job, Customer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -12,11 +12,15 @@ export default async function JobsPage() {
     supabase.from('customers').select('id,name').order('name'),
   ]);
 
+  const allJobs = (jobs ?? []) as Job[];
+
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Job pipeline</h1>
-      <NewJobForm customers={(customers ?? []) as Pick<Customer, 'id' | 'name'>[]} />
-      <KanbanBoard jobs={(jobs ?? []) as Job[]} />
+    <div className="space-y-8">
+      <JobsDashboard jobs={allJobs} customers={(customers ?? []) as Pick<Customer, 'id' | 'name'>[]} />
+      <section className="space-y-3">
+        <h2 className="panel-label">Pipeline board</h2>
+        <KanbanBoard jobs={allJobs} />
+      </section>
     </div>
   );
 }
