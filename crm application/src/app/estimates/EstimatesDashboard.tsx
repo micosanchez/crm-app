@@ -57,7 +57,7 @@ export default function EstimatesDashboard({ estimates, customers }: {
     const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     if (!map.has(curKey)) map.set(curKey, []);
 
-    const asc = [...map.keys()].sort().map((key) => {
+    const asc = Array.from(map.keys()).sort().map((key) => {
       const [y, m] = key.split('-').map(Number);
       const list = map.get(key)!;
       return {
@@ -146,7 +146,7 @@ export default function EstimatesDashboard({ estimates, customers }: {
       {/* Month performance strip */}
       <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-smooth px-4 pb-1"
         style={{ scrollPaddingLeft: 16 }}>
-        {[...months].reverse().map((m) => {
+        {months.slice().reverse().map((m) => {
           const active = m.key === selectedKey;
           return (
             <button key={m.key} onClick={() => setSelectedKey(m.key)}
