@@ -22,14 +22,14 @@
 
   /* Metallics */
   --metal-titanium: #b8b8b8;
-  --metal-graphite: #707070;
+  --metal-graphite: #9a9a9a;
   --metal-aluminum: #d5d5d5;
 
-  /* Text */
+  /* Text — lightened for legibility on the dark canvas */
   --text-primary: #ffffff;
   --text-secondary: #c7c7c7;
-  --text-tertiary: #8f8f8f;
-  --text-muted: #666666;
+  --text-tertiary: #b0b0b0;
+  --text-muted: #9a9a9a;
 
   /* Status (muted) */
   --status-success: #4ebb8d;
