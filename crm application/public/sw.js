@@ -1,5 +1,5 @@
 /* Fieldtrack CRM service worker: offline shell cache + background sync trigger */
-const CACHE = 'fieldtrack-v1';
+const CACHE = 'fieldtrack-v2';
 const SHELL = ['/', '/field', '/offline'];
 
 self.addEventListener('install', (e) => {
