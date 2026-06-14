@@ -83,19 +83,24 @@ export default function EstimatesDashboard({ estimates, customers }: {
 
   const stats = useMemo(() => {
     const list = selected?.list ?? [];
-    const g = { accepted: { v: 0, n: 0 }, pending: { v: 0, n: 0 }, declined: { v: 0, n: 0 } };
+    let aV = 0, aN = 0, pV = 0, pN = 0, dV = 0, dN = 0;
     for (const e of list) {
       const { tone } = classify(e.status);
-      g[tone].v += Number(e.total);
-      g[tone].n += 1;
+      const v = Number(e.total);
+      if (tone === 'accepted') { aV += v; aN += 1; }
+      else if (tone === 'pending') { pV += v; pN += 1; }
+      else { dV += v; dN += 1; }
     }
-    const total = g.accepted.v + g.pending.v + g.declined.v;
+    const total = aV + pV + dV;
     const count = list.length;
-    const decided = g.accepted.n + g.declined.n;
+    const decided = aN + dN;
     return {
-      total, count, ...g,
+      total, count,
+      accepted: { v: aV, n: aN },
+      pending: { v: pV, n: pN },
+      declined: { v: dV, n: dN },
       avg: count ? total / count : 0,
-      acceptance: decided ? Math.round((g.accepted.n / decided) * 100) : 0,
+      acceptance: decided ? Math.round((aN / decided) * 100) : 0,
       pct: selected?.pct ?? null,
     };
   }, [selected]);
@@ -179,8 +184,12 @@ export default function EstimatesDashboard({ estimates, customers }: {
 
           {/* Composition bar */}
           <div className="mt-4 flex h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--bg-tertiary)' }}>
-            {(['accepted', 'pending', 'declined'] as Tone[]).map((t) => (
-              <div key={t} style={{ width: `${(stats[t].v / barTotal) * 100}%`, background: TONE_BAR[t] }} />
+            {([
+              { tone: 'accepted' as Tone, v: stats.accepted.v },
+              { tone: 'pending' as Tone, v: stats.pending.v },
+              { tone: 'declined' as Tone, v: stats.declined.v },
+            ]).map((s) => (
+              <div key={s.tone} style={{ width: `${(s.v / barTotal) * 100}%`, background: TONE_BAR[s.tone] }} />
             ))}
           </div>
 
