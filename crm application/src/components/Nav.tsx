@@ -86,17 +86,30 @@ export default function Nav() {
       {/* Mobile "More" sheet — glass overlay (DESIGN-SYSTEM.md §5) */}
       {moreOpen && (
         <div className="no-print fixed inset-0 z-50 bg-black/60 md:hidden" onClick={() => setMoreOpen(false)}>
-          <div className="glass absolute bottom-14 left-0 right-0 rounded-t-xl p-4 pb-6" onClick={(e) => e.stopPropagation()}>
-            <div className="grid grid-cols-3 gap-3">
-              {moreLinks.map((l) => (
-                <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
-                  className={`font-display flex flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium tracking-wide ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'bg-[var(--surface-primary)] text-[var(--text-secondary)]'}`}>
-                  <Icon name={l.icon} />
-                  {l.label}
-                </Link>
-              ))}
+          <div className="glass hud-rise absolute bottom-16 left-0 right-0 rounded-t-xl p-4 pb-6"
+            style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full" style={{ background: 'var(--border-strong)' }} aria-hidden />
+            <div className="grid grid-cols-3 gap-2.5">
+              {moreLinks.map((l) => {
+                const active = pathname === l.href;
+                return (
+                  <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
+                    className="font-display flex flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium tracking-wide transition-colors duration-200"
+                    style={{
+                      background: active ? 'var(--brand-primary)' : 'var(--surface-primary)',
+                      border: `1px solid ${active ? 'var(--brand-accent)' : 'var(--border-subtle)'}`,
+                      color: active ? '#fff' : 'var(--text-secondary)',
+                      boxShadow: active ? '0 0 14px rgba(141, 29, 57, 0.45)' : undefined,
+                    }}>
+                    <Icon name={l.icon} />
+                    {l.label}
+                  </Link>
+                );
+              })}
               <button onClick={handleSignOut}
-                className="font-display flex flex-col items-center gap-1.5 rounded-lg bg-[var(--surface-primary)] py-3 text-xs font-medium tracking-wide text-[var(--text-secondary)]">
+                className="font-display flex flex-col items-center gap-1.5 rounded-lg py-3 text-xs font-medium tracking-wide text-[var(--text-secondary)]"
+                style={{ background: 'var(--surface-primary)', border: '1px solid var(--border-subtle)' }}>
                 <Icon name="signout" />
                 Sign out
               </button>
@@ -105,19 +118,39 @@ export default function Nav() {
         </div>
       )}
 
-      {/* Mobile instrument bar */}
-      <nav className="no-print fixed bottom-0 left-0 right-0 z-40 flex border-t border-[var(--border-subtle)] bg-[var(--bg-secondary)] md:hidden">
-        {LINKS.filter((l) => l.mobile).map((l) => (
-          <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
-            className={`font-display flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium tracking-wide ${pathname === l.href ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-            <Icon name={l.icon} />
-            {l.label}
-          </Link>
-        ))}
+      {/* Mobile instrument bar — HUD glass, active-tab burgundy glow + indicator hairline */}
+      <nav
+        className="no-print fixed bottom-0 left-0 right-0 z-40 flex md:hidden"
+        style={{
+          background: 'rgba(9, 9, 9, 0.82)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderTop: '1px solid var(--border-standard)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+        }}
+      >
+        {LINKS.filter((l) => l.mobile).map((l) => {
+          const active = pathname === l.href;
+          return (
+            <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
+              className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium tracking-wide transition-colors duration-200"
+              style={{ color: active ? '#fff' : 'var(--text-muted)' }}>
+              {active && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)', boxShadow: '0 0 8px var(--brand-accent)' }} />}
+              <span style={active ? { filter: 'drop-shadow(0 0 6px var(--brand-accent))' } : undefined}>
+                <Icon name={l.icon} />
+              </span>
+              <span className="font-display">{l.label}</span>
+            </Link>
+          );
+        })}
         <button onClick={() => setMoreOpen(!moreOpen)}
-          className={`font-display flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-medium tracking-wide ${moreOpen || moreActive ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-          <Icon name="more" />
-          More
+          className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium tracking-wide transition-colors duration-200"
+          style={{ color: moreOpen || moreActive ? '#fff' : 'var(--text-muted)' }}>
+          {(moreOpen || moreActive) && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)', boxShadow: '0 0 8px var(--brand-accent)' }} />}
+          <span style={moreOpen || moreActive ? { filter: 'drop-shadow(0 0 6px var(--brand-accent))' } : undefined}>
+            <Icon name="more" />
+          </span>
+          <span className="font-display">More</span>
         </button>
       </nav>
     </>
