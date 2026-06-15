@@ -32,9 +32,8 @@ function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: strin
 
 const LINKS = [
   { href: '/', label: 'Dashboard', icon: 'dashboard', mobile: true },
-  { href: '/leads', label: 'Leads', icon: 'leads', mobile: true },
+  { href: '/estimates', label: 'Estimates', icon: 'estimates', mobile: true },
   { href: '/customers', label: 'Customers', icon: 'customers', mobile: false },
-  { href: '/estimates', label: 'Estimates', icon: 'estimates', mobile: false },
   { href: '/jobs', label: 'Jobs', icon: 'jobs', mobile: true },
   { href: '/schedule', label: 'Schedule', icon: 'schedule', mobile: true },
   { href: '/invoices', label: 'Invoices', icon: 'invoices', mobile: false },
