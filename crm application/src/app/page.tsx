@@ -32,13 +32,15 @@ export default async function CommandCenter() {
   const soonDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
 
   const [
-    { data: todayJobs }, { data: monthInvoices }, { data: monthExpenses },
+    { data: todayJobs }, { data: monthInvoices }, { data: monthCollected }, { data: monthExpenses },
     { data: openInvoices }, { data: leads }, { data: activity }, { count: customerCount },
     { data: expiringDocs },
   ] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)')
       .gte('scheduled_start', dayStart).lte('scheduled_start', dayEnd).order('scheduled_start'),
     supabase.from('invoices').select('total,status,paid_at,issued_at,due_at,created_at').gte('created_at', monthStart),
+    // Cash basis: revenue is recognized when the invoice is PAID (paid_at), not when created.
+    supabase.from('invoices').select('total').eq('status', 'paid').gte('paid_at', monthStart),
     supabase.from('expenses').select('amount,category').gte('incurred_on', monthStartDate),
     supabase.from('invoices').select('id,invoice_number,total,due_at,status,customers(id,name)').in('status', ['sent', 'draft']).order('due_at'),
     supabase.from('leads').select('status,created_at,est_value,source,follow_up_on,name'),
@@ -54,7 +56,7 @@ export default async function CommandCenter() {
   const jobsActive = tJobs.filter((j) => j.status === 'in_progress').length;
 
   // ----- Month money -----
-  const collected = (monthInvoices ?? []).filter((i) => i.status === 'paid').reduce((s, i) => s + Number(i.total), 0);
+  const collected = (monthCollected ?? []).reduce((s, i) => s + Number(i.total), 0); // cash in this month (paid_at)
   const booked = (monthInvoices ?? []).reduce((s, i) => s + Number(i.total), 0);
   const expenses = ((monthExpenses ?? []) as Expense[]).reduce((s, e) => s + Number(e.amount), 0);
   const profit = collected - expenses;
