@@ -105,6 +105,11 @@
   .glass { background: rgba(17, 17, 17, 0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-subtle); }
 }
 
+/* The palette remap sets `white` to a dark surface so legacy `bg-white` panels
+   render dark — but that also makes `text-white` nearly black. Force the text
+   utility back to real white (surfaces keep using bg-white = dark). */
+.text-white { color: #ffffff !important; }
+
 /* Documents must print paper-correct regardless of screen theme */
 @media print {
   .no-print { display: none !important; }
