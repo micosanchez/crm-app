@@ -8,11 +8,14 @@ export const dynamic = 'force-dynamic';
 export default async function FieldPage() {
   const supabase = createClient();
   const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+  const dayEnd = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
 
+  // Cash/ops basis: the field crew only sees jobs scheduled for TODAY.
   const { data: jobs } = await supabase
     .from('jobs')
     .select('*, customers(id,name,phone,address)')
-    .or(`scheduled_start.gte.${dayStart},status.eq.in_progress`)
+    .gte('scheduled_start', dayStart)
+    .lte('scheduled_start', dayEnd)
     .in('status', ['scheduled', 'in_progress'])
     .order('scheduled_start');
 
