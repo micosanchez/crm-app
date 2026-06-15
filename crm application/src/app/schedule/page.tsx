@@ -14,7 +14,8 @@ function startOfWeek(d: Date) {
 
 export default async function SchedulePage({ searchParams }: { searchParams: { week?: string } }) {
   const supabase = createClient();
-  const base = searchParams.week ? new Date(searchParams.week) : new Date();
+  // Parse the chosen week at local noon so it never lands on the wrong day across time zones.
+  const base = searchParams.week ? new Date(searchParams.week + 'T12:00:00') : new Date();
   const weekStart = startOfWeek(base);
   const weekEnd = new Date(weekStart.getTime() + 7 * 86400_000);
 
@@ -31,12 +32,17 @@ export default async function SchedulePage({ searchParams }: { searchParams: { w
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Schedule</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link href={`/schedule?week=${prev}`} className="btn-ghost">← Prev</Link>
           <Link href="/schedule" className="btn-ghost">Today</Link>
           <Link href={`/schedule?week=${next}`} className="btn-ghost">Next →</Link>
+          {/* Jump to any week — native GET form, works without client JS */}
+          <form action="/schedule" className="flex items-center gap-1">
+            <input type="date" name="week" defaultValue={weekStart.toISOString().slice(0, 10)} className="input w-auto py-1" />
+            <button className="btn-ghost" type="submit">Go</button>
+          </form>
         </div>
       </div>
       <p className="text-sm text-gray-500">
