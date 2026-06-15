@@ -39,6 +39,7 @@ export interface Job {
   scheduled_end: string | null;
   address: string | null;
   estimated_value: number | null;
+  lead_source?: string | null;
   photos: { url: string; caption?: string; uploaded_by?: string; uploaded_at?: string }[];
   created_at: string;
   updated_at: string;
