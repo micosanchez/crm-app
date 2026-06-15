@@ -36,6 +36,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
           <Link href={`/customers/${j.customer_id}`} className="text-brand-600 hover:underline">{j.customers?.name}</Link>
           {' · '}{j.service.replace('_', ' ')} · {j.address ?? 'no address'}
           {j.scheduled_start && <> · {new Date(j.scheduled_start).toLocaleString()}</>}
+          {j.lead_source && <> · source: {j.lead_source.replace(/_/g, ' ')}</>}
         </p>
         {j.description && <p className="mt-2 text-sm">{j.description}</p>}
         {j.estimated_value != null && <p className="mt-1 font-semibold text-brand-700">Est. ${Number(j.estimated_value).toFixed(2)}</p>}
