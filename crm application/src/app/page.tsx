@@ -1,9 +1,26 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import StatusBadge from '@/components/StatusBadge';
+import { Label, Cluster, Cell, Gauge, FactorBar, Row, Stack } from '@/components/Hud';
 import type { Job, Expense, Lead, Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+const SUCCESS = 'var(--status-success)';
+const WARNING = 'var(--status-warning)';
+const DANGER = 'var(--status-danger)';
+const BRAND = 'var(--brand-text)';
+const TITANIUM = 'var(--metal-titanium)';
+
+/** Muted instrument color by fill ratio. */
+const ratioColor = (r: number) => (r >= 0.75 ? SUCCESS : r >= 0.5 ? WARNING : DANGER);
+const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
+
+function jobTone(status: string): { tag: string; color: string } {
+  if (status === 'paid') return { tag: 'Paid', color: BRAND };
+  if (status === 'lead') return { tag: 'Lead', color: 'var(--text-tertiary)' };
+  const tag = status === 'in_progress' ? 'Active' : status.charAt(0).toUpperCase() + status.slice(1);
+  return { tag, color: TITANIUM };
+}
 
 export default async function CommandCenter() {
   const supabase = createClient();
@@ -12,8 +29,8 @@ export default async function CommandCenter() {
   const dayEnd = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
   const monthStartDate = monthStart.slice(0, 10);
-
   const soonDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+
   const [
     { data: todayJobs }, { data: monthInvoices }, { data: monthExpenses },
     { data: openInvoices }, { data: leads }, { data: activity }, { count: customerCount },
@@ -56,136 +73,151 @@ export default async function CommandCenter() {
   const followUpsDue = allLeads.filter((l) => l.follow_up_on && l.follow_up_on <= today && !['won', 'lost'].includes(l.status));
 
   // ----- Business Health Score (0-100) -----
-  const factors: { label: string; score: number; max: number; why: string }[] = [
-    { label: 'Profit margin', max: 30,
+  const factors = [
+    { label: 'Margin', max: 30,
       score: collected === 0 ? 15 : Math.max(0, Math.min(30, Math.round(margin * 100 * 0.75))),
-      why: collected === 0 ? 'No revenue collected yet this month' : `${Math.round(margin * 100)}% margin this month` },
+      why: collected === 0 ? 'No revenue collected yet' : `${Math.round(margin * 100)}% margin this month` },
     { label: 'Receivables', max: 25,
       score: overdue.length === 0 ? 25 : Math.max(0, 25 - overdue.length * 8),
-      why: overdue.length === 0 ? 'No overdue invoices' : `${overdue.length} overdue invoice${overdue.length > 1 ? 's' : ''}` },
-    { label: 'Lead conversion', max: 25,
+      why: overdue.length === 0 ? 'No overdue invoices' : `${overdue.length} overdue` },
+    { label: 'Conversion', max: 25,
       score: conversion === null ? 13 : Math.round(conversion * 25),
       why: conversion === null ? 'No closed leads yet' : `${Math.round(conversion * 100)}% of closed leads won` },
-    { label: 'Pipeline freshness', max: 20,
+    { label: 'Pipeline', max: 20,
       score: Math.max(0, 20 - staleLeads * 5),
-      why: staleLeads === 0 ? 'All new leads contacted promptly' : `${staleLeads} lead${staleLeads > 1 ? 's' : ''} waiting 2+ days` },
+      why: staleLeads === 0 ? 'Leads contacted promptly' : `${staleLeads} waiting 2+ days` },
   ];
   const health = factors.reduce((s, f) => s + f.score, 0);
-  const healthColor = health >= 75 ? 'text-emerald-600' : health >= 50 ? 'text-amber-600' : 'text-red-600';
+  const status = health >= 75
+    ? { word: 'Nominal', color: SUCCESS }
+    : health >= 50
+      ? { word: 'Elevated', color: WARNING }
+      : { word: 'Critical', color: DANGER };
+
+  const dateline = now.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const monthName = now.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  const hasAlerts = overdue.length > 0 || staleLeads > 0 || followUpsDue.length > 0 || (expiringDocs?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Command Center</h1>
-        <div className="card flex items-center gap-3 py-2">
-          <span className={`text-3xl font-extrabold ${healthColor}`}>{health}</span>
-          <span className="text-xs leading-tight text-gray-500">Business<br />Health</span>
+    <div className="space-y-5">
+      {/* Command header */}
+      <header className="flex items-baseline justify-between">
+        <div>
+          <p className="panel-label">Command Center</p>
+          <h1 className="mt-0.5 text-2xl">{dateline}</h1>
+        </div>
+        <p className="panel-label" style={{ color: 'var(--text-muted)' }}>SJHC</p>
+      </header>
+
+      {/* SYSTEM STATUS */}
+      <div className="card hud-rise">
+        <Label right="System status">Business health</Label>
+        <div className="flex items-center gap-5">
+          <Gauge value={health} word={status.word} color={status.color} />
+          <div className="min-w-0 flex-1 space-y-3">
+            {factors.map((f) => (
+              <FactorBar key={f.label} label={f.label} score={f.score} max={f.max} why={f.why} color={ratioColor(f.score / f.max)} />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Alerts */}
-      {(overdue.length > 0 || staleLeads > 0 || followUpsDue.length > 0 || (expiringDocs?.length ?? 0) > 0) && (
-        <div className="card border-amber-300 bg-amber-50">
-          <p className="panel-label mb-2 !text-amber-800">Needs attention</p>
-          <ul className="space-y-1 text-sm text-amber-800">
+      {/* ATTENTION CHANNEL */}
+      {hasAlerts && (
+        <div className="card hud-rise" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 0 18px rgba(141,29,57,0.25)' }}>
+          <Label right={`${overdue.length + (staleLeads ? 1 : 0) + (followUpsDue.length ? 1 : 0) + (expiringDocs?.length ?? 0)} signals`}>Attention required</Label>
+          <ul className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
             {overdue.map((i) => (
-              <li key={i.id}>
-                <Link className="underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link>
-                {' '}({i.customers?.name}) — ${Number(i.total).toFixed(0)} overdue since {new Date(i.due_at!).toLocaleDateString()}
+              <li key={i.id} className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: DANGER }} />
+                <span><Link className="font-medium text-white underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
               </li>
             ))}
-            {staleLeads > 0 && <li><Link className="underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</li>}
+            {staleLeads > 0 && (
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
+                <span><Link className="font-medium text-white hover:underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</span>
+              </li>
+            )}
             {followUpsDue.length > 0 && (
-              <li><Link className="underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link>: {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</li>
+              <li className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
+                <span><Link className="font-medium text-white hover:underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link> · {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</span>
+              </li>
             )}
             {expiringDocs?.map((d) => (
-              <li key={d.id}><Link className="underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</li>
+              <li key={d.id} className="flex items-start gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
+                <span><Link className="font-medium text-white hover:underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</span>
+              </li>
             ))}
           </ul>
         </div>
       )}
 
-      {/* Today */}
+      {/* TODAY — live ops */}
       <section>
-        <h2 className="mb-2 font-semibold">Today</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Stat label="Jobs scheduled" value={String(tJobs.length)} href="/schedule" />
-          <Stat label="In progress" value={String(jobsActive)} href="/jobs" />
-          <Stat label="Completed" value={String(jobsDone)} href="/jobs" />
-          <Stat label="Customers" value={String(customerCount ?? 0)} href="/customers" />
-        </div>
+        <Label right="Live">Today</Label>
+        <Cluster cols="grid-cols-2 sm:grid-cols-4">
+          <Cell label="Scheduled" value={String(tJobs.length)} href="/schedule" />
+          <Cell label="Active" value={String(jobsActive)} href="/jobs" tone={jobsActive > 0 ? BRAND : undefined} />
+          <Cell label="Completed" value={String(jobsDone)} href="/jobs" />
+          <Cell label="Customers" value={String(customerCount ?? 0)} href="/customers" />
+        </Cluster>
       </section>
 
-      {/* This month */}
+      {/* MONTH TO DATE — money cluster */}
       <section>
-        <h2 className="mb-2 font-semibold">This month</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <Stat label="Collected" value={`$${collected.toFixed(0)}`} href="/money" />
-          <Stat label="Booked" value={`$${booked.toFixed(0)}`} href="/invoices" />
-          <Stat label="Expenses" value={`$${expenses.toFixed(0)}`} href="/expenses" />
-          <Stat label="Profit" value={`$${profit.toFixed(0)}`} href="/money" accent={profit >= 0} />
-          <Stat label="Outstanding (AR)" value={`$${arTotal.toFixed(0)}`} href="/invoices" />
-        </div>
+        <Label right={monthName}>Month to date</Label>
+        <Cluster cols="grid-cols-2 sm:grid-cols-3">
+          <Cell label="Collected" value={money(collected)} href="/money" tone={BRAND} />
+          <Cell label="Booked" value={money(booked)} href="/invoices" />
+          <Cell label="Expenses" value={money(expenses)} href="/expenses" />
+          <Cell label="Profit" value={money(profit)} href="/money" tone={profit >= 0 ? SUCCESS : DANGER} sub={collected > 0 ? `${Math.round(margin * 100)}% margin` : undefined} />
+          <Cell label="Outstanding" value={money(arTotal)} href="/invoices" tone={overdue.length > 0 ? DANGER : undefined} sub={overdue.length > 0 ? `${overdue.length} overdue` : undefined} />
+          <Cell label="Conversion" value={conversion === null ? '—' : `${Math.round(conversion * 100)}%`} href="/leads" />
+        </Cluster>
       </section>
 
-      {/* Health breakdown */}
+      {/* MANIFEST — today's jobs */}
       <section>
-        <h2 className="mb-2 font-semibold">Health score breakdown</h2>
-        <div className="card divide-y divide-gray-100 p-0">
-          {factors.map((f) => (
-            <div key={f.label} className="flex items-center justify-between px-4 py-2 text-sm">
-              <div>
-                <p className="font-medium">{f.label}</p>
-                <p className="text-xs text-gray-500">{f.why}</p>
-              </div>
-              <span className="font-semibold">{f.score}/{f.max}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Today's schedule */}
-      <section>
-        <h2 className="mb-2 font-semibold">Today&apos;s jobs</h2>
+        <Label right={`${tJobs.length} job${tJobs.length === 1 ? '' : 's'}`}>Today&apos;s manifest</Label>
         {tJobs.length ? (
-          <div className="space-y-2">
-            {tJobs.map((j) => (
-              <Link key={j.id} href={`/jobs/${j.id}`} className="card flex items-center justify-between hover:border-brand-500">
-                <div>
-                  <p className="font-medium">{j.title}</p>
-                  <p className="text-sm text-gray-500">
-                    {j.scheduled_start && new Date(j.scheduled_start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {j.customers?.name}
-                  </p>
-                </div>
-                <StatusBadge status={j.status} />
-              </Link>
-            ))}
+          <Stack>
+            {tJobs.map((j) => {
+              const t = jobTone(j.status);
+              return (
+                <Row key={j.id} href={`/jobs/${j.id}`}
+                  lead={j.scheduled_start ? new Date(j.scheduled_start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                  title={j.title} meta={j.customers?.name ?? 'No customer'} tag={t.tag} tagColor={t.color} />
+              );
+            })}
+          </Stack>
+        ) : (
+          <div className="rounded-lg px-4 py-6 text-center text-sm" style={{ border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+            Nothing scheduled today.
           </div>
-        ) : <p className="text-sm text-gray-500">Nothing scheduled today.</p>}
+        )}
       </section>
 
-      {/* Activity */}
+      {/* FEED — activity log */}
       <section>
-        <h2 className="mb-2 font-semibold">Recent activity <span className="text-xs font-normal text-gray-400">(memory log)</span></h2>
-        <div className="card divide-y divide-gray-100 p-0">
-          {activity?.map((a) => (
-            <div key={a.id} className="flex justify-between px-4 py-2 text-sm">
-              <span><b className="capitalize">{a.entity_type}</b> {a.action_type.replace('_', ' ')}</span>
-              <span className="text-xs text-gray-400">{new Date(a.created_at).toLocaleString()}</span>
-            </div>
-          ))}
-          {!activity?.length && <p className="p-4 text-sm text-gray-500">No activity yet.</p>}
-        </div>
+        <Label right="Memory log">Activity feed</Label>
+        {activity?.length ? (
+          <Stack>
+            {activity.map((a) => (
+              <Row key={a.id}
+                title={<span><span className="capitalize">{a.entity_type}</span> <span style={{ color: 'var(--text-tertiary)' }}>{a.action_type.replace(/_/g, ' ')}</span></span>}
+                tag={new Date(a.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                tagColor="var(--text-muted)" />
+            ))}
+          </Stack>
+        ) : (
+          <div className="rounded-lg px-4 py-6 text-center text-sm" style={{ border: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
+            No activity yet.
+          </div>
+        )}
       </section>
     </div>
-  );
-}
-
-function Stat({ label, value, href, accent }: { label: string; value: string; href: string; accent?: boolean }) {
-  return (
-    <Link href={href} className="card hover:border-brand-500">
-      <p className={`text-2xl font-bold ${accent === false ? 'text-red-700' : 'text-brand-700'}`}>{value}</p>
-      <p className="text-sm text-gray-500">{label}</p>
-    </Link>
   );
 }
