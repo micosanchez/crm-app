@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
-import type { Customer, ServiceType } from '@/lib/types';
+import { LEAD_SOURCES, type Customer, type ServiceType } from '@/lib/types';
 
 export default function NewJobForm({ customers, triggerClassName = 'btn-primary', triggerLabel = '+ New job' }: {
   customers: Pick<Customer, 'id' | 'name'>[];
@@ -15,7 +15,7 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: '', customer_id: '', service: 'junk_removal' as ServiceType,
-    description: '', address: '', estimated_value: '', scheduled_start: '',
+    description: '', address: '', estimated_value: '', scheduled_start: '', lead_source: '',
   });
 
   async function submit(e: React.FormEvent) {
@@ -32,6 +32,7 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
         address: form.address || null,
         estimated_value: form.estimated_value ? Number(form.estimated_value) : null,
         scheduled_start: form.scheduled_start ? new Date(form.scheduled_start).toISOString() : null,
+        lead_source: form.lead_source || null,
         status: form.scheduled_start ? 'scheduled' : 'lead',
       },
     });
@@ -59,6 +60,10 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
         <input className="input" type="number" step="0.01" placeholder="Estimated value $" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
         <input className="input" placeholder="Job address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         <input className="input" type="datetime-local" value={form.scheduled_start} onChange={(e) => setForm({ ...form, scheduled_start: e.target.value })} />
+        <select className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })}>
+          <option value="">Lead source…</option>
+          {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
         <textarea className="input md:col-span-2" placeholder="Description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
       </div>
       {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}

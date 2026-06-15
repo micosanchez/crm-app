@@ -49,7 +49,9 @@ export default function JobsDashboard({ jobs, customers }: {
   const months = useMemo<MonthEntry[]>(() => {
     const map = new Map<string, Job[]>();
     for (const j of jobs) {
-      const d = new Date(j.created_at);
+      // Cash/ops basis: attribute a job to the month it's scheduled for (when the
+      // work + payment happen), not when it was entered. Unscheduled → created date.
+      const d = new Date(j.scheduled_start ?? j.created_at);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(j);
@@ -236,7 +238,7 @@ export default function JobsDashboard({ jobs, customers }: {
                 }}>
                 <div className="min-w-0">
                   <p className="truncate font-medium text-white">{j.title}</p>
-                  <p className="panel-label mt-0.5">{j.customers?.name ?? 'No customer'} · {new Date(j.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
+                  <p className="panel-label mt-0.5">{j.customers?.name ?? 'No customer'} · {new Date(j.scheduled_start ?? j.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="metric font-semibold text-white">{j.estimated_value != null ? fmtFull(val(j)) : '—'}</p>
