@@ -110,8 +110,46 @@
    utility back to real white (surfaces keep using bg-white = dark). */
 .text-white { color: #ffffff !important; }
 
+/* ============================================================
+   HUD / COMMAND-TERMINAL LAYER (mobile-first, on-brand)
+   Faint instrument grid, machined panel depth, tactile motion.
+   CSS-only, GPU-cheap, no new dependencies.
+   ============================================================ */
+
+/* Instrument-grid canvas behind all content — a single fixed layer,
+   masked to fade downward so it reads as a HUD backdrop, not wallpaper. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--border-standard) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-standard) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.5;
+  -webkit-mask-image: radial-gradient(125% 85% at 50% 0%, #000 28%, transparent 80%);
+          mask-image: radial-gradient(125% 85% at 50% 0%, #000 28%, transparent 80%);
+}
+main { position: relative; z-index: 1; }
+
+/* Panels read as machined instrument surfaces (top edge highlight + ambient occlusion) */
+.card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.5); }
+
+/* Tactile press feedback — primarily for touch (Tesla/DJI-style instrument response) */
+.btn { transition: transform var(--anim-fast), background-color var(--anim-normal), border-color var(--anim-normal), color var(--anim-normal); }
+@media (hover: none) {
+  .btn:active { transform: scale(0.97); }
+}
+
+/* Reusable entrance primitive (opt-in; keeps motion cheap and intentional) */
+@keyframes hudRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.hud-rise { animation: hudRise var(--anim-normal) var(--ease-standard) both; }
+
 /* Documents must print paper-correct regardless of screen theme */
 @media print {
+  body::before { display: none !important; }
   .no-print { display: none !important; }
   body { background: #fff !important; color: #111 !important; }
   .card { background: #fff !important; border-color: #ddd !important; box-shadow: none !important; }
