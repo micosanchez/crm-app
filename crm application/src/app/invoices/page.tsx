@@ -1,11 +1,13 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
+import { requireStaff } from '@/lib/auth';
 import type { Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InvoicesPage() {
+  await requireStaff();
   const supabase = createClient();
   const { data: invoices } = await supabase
     .from('invoices')
