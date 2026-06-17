@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { Label, Cluster, Cell, Gauge, FactorBar, Row, Stack } from '@/components/Hud';
+import { requireStaff } from '@/lib/auth';
 import type { Job, Expense, Lead, Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ function jobTone(status: string): { tag: string; color: string } {
 }
 
 export default async function CommandCenter() {
+  await requireStaff();
   const supabase = createClient();
   const now = new Date();
   const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
