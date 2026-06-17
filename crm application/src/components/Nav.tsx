@@ -1,9 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import BrandMark from './BrandMark';
+import { flags } from '@/lib/flags';
+import type { UserRole } from '@/lib/types';
 
 /** Geometric monochrome iconography — 1.5px stroke, currentColor (DESIGN-SYSTEM.md §7) */
 function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: string }) {
@@ -22,6 +24,9 @@ function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: strin
     team: <><path d="M12 3l8 3v6c0 4.5-3.2 7.7-8 9-4.8-1.3-8-4.5-8-9V6l8-3z" /></>,
     signout: <><path d="M9 5H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h4" /><path d="M14 16l4-4-4-4M18 12H9" /></>,
     more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
+    reports: <><path d="M4 20V11M9.5 20V4M15 20v-6M20.5 20V8" /><path d="M3 20h18" /></>,
+    pricebook: <><path d="M3 11l8.5-8 8.5 8.5-8 8z" /><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none" /></>,
+    recurring: <><path d="M4 11a8 8 0 0 1 13.5-4.5L20 9" /><path d="M20 13a8 8 0 0 1-13.5 4.5L4 15" /><path d="M20 4v5h-5M4 20v-5h5" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -30,24 +35,43 @@ function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: strin
   );
 }
 
-const LINKS = [
-  { href: '/', label: 'Dashboard', icon: 'dashboard', mobile: true },
-  { href: '/estimates', label: 'Estimates', icon: 'estimates', mobile: true },
+const STAFF: UserRole[] = ['admin', 'dispatcher'];
+const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles?: UserRole[]; flag?: keyof typeof flags }[] = [
+  { href: '/', label: 'Dashboard', icon: 'dashboard', mobile: true, roles: STAFF },
+  { href: '/estimates', label: 'Estimates', icon: 'estimates', mobile: true, roles: STAFF },
   { href: '/customers', label: 'Customers', icon: 'customers', mobile: false },
   { href: '/jobs', label: 'Jobs', icon: 'jobs', mobile: true },
   { href: '/schedule', label: 'Schedule', icon: 'schedule', mobile: true },
-  { href: '/invoices', label: 'Invoices', icon: 'invoices', mobile: false },
-  { href: '/expenses', label: 'Expenses', icon: 'expenses', mobile: false },
-  { href: '/money', label: 'Money', icon: 'money', mobile: false },
+  { href: '/invoices', label: 'Invoices', icon: 'invoices', mobile: false, roles: STAFF },
+  { href: '/expenses', label: 'Expenses', icon: 'expenses', mobile: false, roles: STAFF },
+  { href: '/money', label: 'Money', icon: 'money', mobile: false, roles: STAFF },
+  { href: '/reports', label: 'Reports', icon: 'reports', mobile: false, roles: STAFF },
+  { href: '/price-book', label: 'Price book', icon: 'pricebook', mobile: false, roles: STAFF, flag: 'priceBook' },
+  { href: '/recurring', label: 'Recurring', icon: 'recurring', mobile: false, roles: STAFF, flag: 'recurring' },
   { href: '/field', label: 'Field', icon: 'field', mobile: true },
   { href: '/documents', label: 'Documents', icon: 'documents', mobile: false },
-  { href: '/team', label: 'Team', icon: 'team', mobile: false },
+  { href: '/team', label: 'Team', icon: 'team', mobile: false, roles: ['admin'] },
 ];
 
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('users').select('role').eq('id', user.id).single()
+        .then(({ data }) => setRole((data?.role as UserRole) ?? null));
+    });
+  }, []);
+
+  // Show a link if it has no role restriction, or while role is still loading
+  // (keeps the admin nav instant), or the loaded role is permitted.
+  const allowed = (l: { roles?: UserRole[]; flag?: keyof typeof flags }) =>
+    (!l.flag || flags[l.flag]) && (!l.roles || !role || l.roles.includes(role));
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -58,7 +82,7 @@ export default function Nav() {
 
   if (pathname === '/login' || pathname?.startsWith('/sign') || pathname?.includes('/print')) return null;
 
-  const moreLinks = LINKS.filter((l) => !l.mobile);
+  const moreLinks = LINKS.filter((l) => !l.mobile && allowed(l));
   const moreActive = moreLinks.some((l) => pathname === l.href);
 
   return (
@@ -67,7 +91,7 @@ export default function Nav() {
       <nav className="no-print hidden border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] md:block">
         <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 py-2">
           <Link href="/" className="mr-6"><BrandMark /></Link>
-          {LINKS.map((l) => (
+          {LINKS.filter(allowed).map((l) => (
             <Link key={l.href} href={l.href}
               className={`font-display rounded-md px-3 py-1.5 text-[15px] font-medium tracking-wide transition-colors duration-200 ${pathname === l.href ? 'bg-[var(--brand-primary)] text-white' : 'text-[var(--text-tertiary)] hover:bg-[var(--surface-secondary)] hover:text-[var(--text-primary)]'}`}>
               {l.label}
@@ -128,7 +152,7 @@ export default function Nav() {
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}
       >
-        {LINKS.filter((l) => l.mobile).map((l) => {
+        {LINKS.filter((l) => l.mobile && allowed(l)).map((l) => {
           const active = pathname === l.href;
           return (
             <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
