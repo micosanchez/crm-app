@@ -1,7 +1,10 @@
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import { Label, Cluster, Cell, Stack, Row } from '@/components/Hud';
-import type { Job, Expense, TimeEntry } from '@/lib/types';
+import type { Job, Expense } from '@/lib/types';
+
+type PaidRow = { total: number | string; paid_at: string; customers: { name: string } | null };
+type TimeRow = { started_at: string; ended_at: string | null; users: { full_name: string | null } | null };
 
 export const dynamic = 'force-dynamic';
 
@@ -37,13 +40,16 @@ export default async function ReportsPage() {
     supabase.from('time_entries').select('started_at,ended_at,users(id,full_name)').gte('started_at', since.toISOString()),
   ]);
 
+  const paidRows = (paid ?? []) as unknown as PaidRow[];
+  const timeRows = (times ?? []) as unknown as TimeRow[];
+
   // Revenue by month
   const revByMonth = new Map<string, number>();
-  (paid ?? []).forEach((i) => { const k = monthKey(new Date(i.paid_at as string)); revByMonth.set(k, (revByMonth.get(k) ?? 0) + Number(i.total)); });
+  paidRows.forEach((i) => { const k = monthKey(new Date(i.paid_at)); revByMonth.set(k, (revByMonth.get(k) ?? 0) + Number(i.total)); });
   const months = Array.from({ length: 6 }, (_, i) => { const d = new Date(since); d.setMonth(since.getMonth() + i); return monthKey(d); });
   const revRows = months.map((k) => ({ k, v: revByMonth.get(k) ?? 0 }));
   const revMax = Math.max(1, ...revRows.map((r) => r.v));
-  const collected = (paid ?? []).reduce((s, i) => s + Number(i.total), 0);
+  const collected = paidRows.reduce((s, i) => s + Number(i.total), 0);
 
   // Jobs
   const allJobs = (jobs ?? []) as Job[];
@@ -69,7 +75,7 @@ export default async function ReportsPage() {
 
   // Labor hours by tech
   const hoursByTech = new Map<string, number>();
-  ((times ?? []) as (TimeEntry & { users?: { full_name?: string } })[]).forEach((t) => {
+  timeRows.forEach((t) => {
     if (!t.ended_at) return;
     const h = (new Date(t.ended_at).getTime() - new Date(t.started_at).getTime()) / 3600000;
     const name = t.users?.full_name ?? 'Unassigned';
@@ -81,7 +87,7 @@ export default async function ReportsPage() {
 
   // Top customers
   const byCust = new Map<string, number>();
-  (paid ?? []).forEach((i) => { const n = (i.customers as { name?: string } | null)?.name ?? 'Unknown'; byCust.set(n, (byCust.get(n) ?? 0) + Number(i.total)); });
+  paidRows.forEach((i) => { const n = i.customers?.name ?? 'Unknown'; byCust.set(n, (byCust.get(n) ?? 0) + Number(i.total)); });
   const topCust = Array.from(byCust.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
   return (
