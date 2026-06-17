@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
+import PaymentPanel from './PaymentPanel';
 import type { Invoice, PaymentMethod } from '@/lib/types';
 
 const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
@@ -80,6 +81,7 @@ export default function InvoiceEditor({ invoice, canEdit = true }: { invoice: In
 
   return (
     <div className="no-print space-y-4">
+      <PaymentPanel invoice={invoice} />
       <div className="flex flex-wrap gap-2">
         <button className="btn-ghost" onClick={() => window.print()}>Export PDF</button>
         {invoice.public_token && (
