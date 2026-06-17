@@ -23,7 +23,7 @@ export default async function FieldPage() {
   ]);
 
   const todayJobs = (jobs ?? []) as Job[];
-  const openEntry = ((openEntries ?? []) as TimeEntry[])[0] ?? null;
+  const openEntry = ((openEntries ?? []) as unknown as TimeEntry[])[0] ?? null;
 
   return (
     <div className="mx-auto max-w-md space-y-4">
