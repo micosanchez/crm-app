@@ -58,6 +58,7 @@ export interface Invoice {
   subtotal: number;
   tax_rate: number;
   total: number;
+  amount_paid?: number;
   tip?: number;
   payment_method?: PaymentMethod | null;
   payment_instructions?: string | null;
@@ -195,6 +196,40 @@ export type SyncTable =
   | 'customers' | 'jobs' | 'notes' | 'schedule_events' | 'job_assignments'
   | 'invoices' | 'invoice_items' | 'estimates' | 'estimate_items'
   | 'expenses' | 'leads';
+
+export interface ServiceItem {
+  id: string;
+  name: string;
+  description: string | null;
+  default_price: number;
+  kind: 'labor' | 'disposal' | 'materials' | 'other';
+  active: boolean;
+}
+
+export interface JobRecurrence {
+  id: string;
+  customer_id: string;
+  title: string;
+  service: ServiceType;
+  estimated_value: number | null;
+  address: string | null;
+  interval_days: number;
+  next_run: string;
+  active: boolean;
+  lead_source: string | null;
+  customers?: Pick<Customer, 'id' | 'name'>;
+}
+
+export interface TimeEntry {
+  id: string;
+  user_id: string;
+  job_id: string | null;
+  started_at: string;
+  ended_at: string | null;
+  note: string | null;
+  jobs?: Pick<Job, 'id' | 'title'>;
+  users?: Pick<UserProfile, 'id' | 'full_name'>;
+}
 
 /** One queued offline mutation. */
 export interface QueuedAction {
