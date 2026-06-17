@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { requireStaff } from '@/lib/auth';
 import type { Expense } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,7 @@ interface ProfitRow { job_id: string; title: string; service: string; status: st
 
 /** Money — P&L lite + job costing. Visible data is RLS-guarded (admin/dispatcher). */
 export default async function MoneyPage() {
+  await requireStaff();
   const supabase = createClient();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
