@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
-import type { Estimate } from '@/lib/types';
+import { flags } from '@/lib/flags';
+import type { Estimate, ServiceItem } from '@/lib/types';
 
-export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
+export default function EstimateEditor({ estimate, serviceItems = [] }: { estimate: Estimate; serviceItems?: ServiceItem[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +135,16 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
         <>
           <form onSubmit={addItem} className="card space-y-2">
             <p className="text-xs font-bold uppercase text-gray-400">Add line item</p>
+            {flags.priceBook && serviceItems.length > 0 && (
+              <select className="input" defaultValue="" onChange={(e) => {
+                const si = serviceItems.find((s) => s.id === e.target.value);
+                if (si) setItem({ ...item, description: si.name.toUpperCase(), unit_price: String(si.default_price), details: si.description ?? item.details });
+                e.currentTarget.value = '';
+              }}>
+                <option value="">+ From price book…</option>
+                {serviceItems.map((s) => <option key={s.id} value={s.id}>{s.name} — ${Number(s.default_price).toFixed(0)}</option>)}
+              </select>
+            )}
             <div className="grid gap-2 md:grid-cols-4">
               <input className="input md:col-span-2" placeholder="Item name * (e.g. MEDICAL CHAIR REMOVAL)" required value={item.description} onChange={(e) => setItem({ ...item, description: e.target.value })} />
               <input className="input" type="number" step="0.01" min="0" placeholder="Qty" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />

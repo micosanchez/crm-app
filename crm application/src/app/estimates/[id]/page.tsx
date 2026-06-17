@@ -1,17 +1,16 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import EstimateEditor from './EstimateEditor';
-import type { Estimate } from '@/lib/types';
+import type { Estimate, ServiceItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function EstimateDetail({ params }: { params: { id: string } }) {
   const supabase = createClient();
-  const { data: estimate } = await supabase
-    .from('estimates')
-    .select('*, customers(id,name), estimate_items(*)')
-    .eq('id', params.id)
-    .single();
+  const [{ data: estimate }, { data: serviceItems }] = await Promise.all([
+    supabase.from('estimates').select('*, customers(id,name), estimate_items(*)').eq('id', params.id).single(),
+    supabase.from('service_items').select('*').eq('active', true).order('name'),
+  ]);
 
   if (!estimate) return <p>Estimate not found.</p>;
   const est = estimate as Estimate;
@@ -57,7 +56,7 @@ export default async function EstimateDetail({ params }: { params: { id: string 
         {est.comments && <p className="mt-3 text-sm text-gray-500">{est.comments}</p>}
         {est.notes && <p className="mt-4 text-sm text-gray-500">{est.notes}</p>}
       </div>
-      <EstimateEditor estimate={est} />
+      <EstimateEditor estimate={est} serviceItems={(serviceItems ?? []) as ServiceItem[]} />
     </div>
   );
 }
