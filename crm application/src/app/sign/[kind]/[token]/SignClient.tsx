@@ -2,12 +2,13 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import SignaturePad from '@/components/SignaturePad';
+import { flags } from '@/lib/flags';
 
 interface DocItem { description: string; details?: string | null; quantity: number; unit_price: number; amount: number }
 interface Doc {
-  kind: string; number: number; status: string; total: number; tip?: number;
+  kind: string; number: number; status: string; total: number; tip?: number; amount_paid?: number;
   created_at: string; customer_name: string | null; customer_address?: string | null; items: DocItem[];
-  signed_name: string | null; signed_at: string | null;
+  signed_name: string | null; signed_at: string | null; signature_data?: string | null;
   notes?: string | null; valid_until?: string | null; due_at?: string | null;
   payment_instructions?: string | null; comments?: string | null;
   view_count?: number;
@@ -61,10 +62,32 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
     }
   }
 
+  const [payBusy, setPayBusy] = useState(false);
+  const justPaid = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('paid') === '1';
+
+  async function payNow() {
+    setPayBusy(true);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (res.ok && data.url) { window.location.href = data.url; return; }
+      alert(data.error ?? 'Online payment is not available right now — please use the payment instructions above.');
+    } catch {
+      alert('Could not start the payment — please check your connection and try again.');
+    }
+    setPayBusy(false);
+  }
+
   const label = kind === 'invoice' ? 'INVOICE' : 'ESTIMATE';
   const prefix = kind === 'invoice' ? 'INV' : 'EST';
   const subtotal = doc ? doc.items.reduce((s, it) => s + Number(it.amount), 0) : 0;
   const tip = Number(doc?.tip ?? 0);
+  const balance = doc ? Math.max(Number(doc.total) - Number(doc.amount_paid ?? 0), 0) : 0;
+  const canPay = kind === 'invoice' && flags.stripe && doc?.status !== 'paid' && balance > 0 && !justPaid;
   const expired = !!(doc && !doc.signed_at && doc.valid_until && doc.valid_until < new Date().toISOString().slice(0, 10));
 
   return (
@@ -160,10 +183,27 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
                   </div>
                 </div>
 
+                {/* Online payment */}
+                {justPaid && (
+                  <div className="rounded-lg p-4 text-center" style={{ background: '#eef7f2' }}>
+                    <p className="font-semibold" style={{ color: '#1e7a56' }}>✓ Payment received — thank you!</p>
+                    <p className="text-sm" style={{ color: '#6b7280' }}>Your receipt is on its way from our payment processor.</p>
+                  </div>
+                )}
+                {canPay && (
+                  <button onClick={payNow} disabled={payBusy}
+                    className="no-print w-full rounded-xl py-3.5 text-base font-bold text-white disabled:opacity-60"
+                    style={{ background: 'linear-gradient(90deg, var(--brand-secondary), var(--brand-primary))', boxShadow: '0 2px 10px rgba(91,18,37,0.3)' }}>
+                    {payBusy ? 'Opening secure checkout…' : `Pay ${money(balance)} securely online`}
+                  </button>
+                )}
+
                 {/* Payment instructions */}
                 {doc.payment_instructions && (
                   <div className="rounded-lg p-3" style={{ background: '#f6f3f5' }}>
-                    <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--brand-accent)' }}>Payment instructions</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--brand-accent)' }}>
+                      {canPay ? 'Other ways to pay' : 'Payment instructions'}
+                    </p>
                     <p className="mt-0.5 text-sm">{doc.payment_instructions}</p>
                   </div>
                 )}
@@ -178,17 +218,32 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
                       <p className="text-sm" style={{ color: '#6b7280' }}>Reply to the message that sent you this link and we&apos;ll send a fresh quote.</p>
                     </div>
                   ) : doc.signed_at ? (
-                    <div className="flex items-end justify-between gap-4">
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--brand-accent)' }}>
-                          {justSigned ? 'Thank you!' : 'Approved'}
-                        </p>
-                        {justSigned && kind === 'estimate' && <p className="text-sm" style={{ color: '#6b7280' }}>We&apos;ll be in touch to schedule your job.</p>}
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--brand-accent)' }}>
+                        {justSigned ? 'Thank you!' : 'Signature of record'}
+                      </p>
+                      {justSigned && kind === 'estimate' && <p className="mt-1 text-sm" style={{ color: '#6b7280' }}>We&apos;ll be in touch to schedule your job.</p>}
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-6">
+                        <div>
+                          {doc.signature_data ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={doc.signature_data} alt={`Signature of ${doc.signed_name}`}
+                              className="h-16 w-auto" style={{ borderBottom: '1px solid #9ca3af' }} />
+                          ) : (
+                            <p className="font-[cursive] text-xl" style={{ borderBottom: '1px solid #9ca3af', paddingBottom: 2, minWidth: 160 }}>{doc.signed_name}</p>
+                          )}
+                          <p className="mt-1 text-xs" style={{ color: '#6b7280' }}>Signature</p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <p className="font-semibold">{doc.signed_name}</p>
+                          <p style={{ color: '#6b7280' }}>
+                            {new Date(doc.signed_at).toLocaleString(undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-center">
-                        <p className="font-[cursive] text-xl" style={{ borderBottom: '1px solid #9ca3af', paddingBottom: 2, minWidth: 160 }}>{doc.signed_name}</p>
-                        <p className="mt-1 text-xs" style={{ color: '#6b7280' }}>{doc.signed_name} · {new Date(doc.signed_at).toLocaleDateString()}</p>
-                      </div>
+                      <p className="mt-4 text-[11px]" style={{ color: '#9ca3af' }}>
+                        Approved electronically via secure signing link. A permanent copy of this signed document is retained on record by {BIZ.name}.
+                      </p>
                     </div>
                   ) : (
                     <div>
