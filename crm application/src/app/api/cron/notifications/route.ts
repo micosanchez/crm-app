@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     .select('id, title, address, scheduled_start, customers(name), job_assignments(user_id, users(full_name, email))')
     .gte('scheduled_start', dayStart)
     .lte('scheduled_start', dayEnd)
-    .not('status', 'in', '("invoiced","paid")')
+    .not('status', 'in', '("invoiced","paid","cancelled")')
     .order('scheduled_start');
 
   type CrewJob = { title: string; address: string | null; scheduled_start: string; customer?: string };
