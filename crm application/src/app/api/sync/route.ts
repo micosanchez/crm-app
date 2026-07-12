@@ -9,10 +9,15 @@ import type { QueuedAction } from '@/lib/types';
  * table and skipped.
  *
  * Inserts get the acting user stamped into their audit column server-side
- * (offline forms can't know the user id). Updates apply the partial column
- * set the user changed — last-write-wins per column. We do NOT silently drop
- * an update just because the row's updated_at moved; doing so was discarding
- * legitimate offline edits.
+ * (offline forms can't know the user id).
+ *
+ * CONFLICT DETECTION (updates): if the server row's updated_at is newer than
+ * the action's client_ts, someone else changed the record after this offline
+ * edit was made. Applying it blindly would silently erase their changes, so
+ * the action is rejected with status 'conflict_server_newer' and surfaced to
+ * the user instead. Updates from the SAME batch are exempt (a batch is one
+ * device's ordered edits — applying the first bumps updated_at, which must
+ * not fail the second). Tables without an updated_at column skip the check.
  */
 const ALLOWED_TABLES = new Set([
   'customers', 'jobs', 'notes', 'schedule_events', 'job_assignments',
@@ -45,6 +50,8 @@ export async function POST(req: NextRequest) {
   }
 
   const results: { idempotency_key: string; status: string; error?: string }[] = [];
+  // Rows already written by THIS batch — exempt from the conflict check.
+  const touchedInBatch = new Set<string>();
 
   for (const action of actions) {
     const { idempotency_key, table, op, id, payload } = action;
@@ -77,13 +84,37 @@ export async function POST(req: NextRequest) {
       if (auditCol && body[auditCol] == null) body[auditCol] = user.id;
       const { error: e } = await supabase.from(table).insert(body);
       error = e?.message ?? null;
+      if (!error && typeof body.id === 'string') touchedInBatch.add(`${table}:${body.id}`);
     } else if (op === 'update' && id) {
       if (!payload || typeof payload !== 'object') {
         results.push({ idempotency_key, status: 'rejected', error: 'missing payload' });
         continue;
       }
+      // Conflict guard: don't overwrite a row someone else changed after this
+      // offline edit was made. Skipped for rows this batch already wrote, and
+      // for tables without updated_at (the select errors → check is skipped).
+      if (action.client_ts && !touchedInBatch.has(`${table}:${id}`)) {
+        const { data: row, error: selErr } = await supabase
+          .from(table).select('updated_at').eq('id', id).maybeSingle();
+        const serverTs = !selErr && row && (row as { updated_at?: string }).updated_at;
+        if (serverTs && new Date(serverTs).getTime() > new Date(action.client_ts).getTime()) {
+          // Record the key so retries of this exact action are skipped as duplicates.
+          await supabase.from('idempotency_keys').insert({
+            key: idempotency_key,
+            user_id: user.id,
+            response: { table, op, id, conflict: true },
+          });
+          results.push({
+            idempotency_key,
+            status: 'conflict_server_newer',
+            error: 'This record was changed by someone else after your offline edit — your change was NOT applied. Re-open the record and make the edit again.',
+          });
+          continue;
+        }
+      }
       const { error: e } = await supabase.from(table).update(payload).eq('id', id);
       error = e?.message ?? null;
+      if (!error) touchedInBatch.add(`${table}:${id}`);
     } else if (op === 'delete' && id) {
       const { error: e } = await supabase.from(table).delete().eq('id', id);
       error = e?.message ?? null;
