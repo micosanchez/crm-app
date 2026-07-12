@@ -1,71 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { sendNotification, APP_URL } from '@/lib/notify';
 
 /**
- * Owner email notifications via Resend.
- * Fired from the public sign pages (viewed / signed events).
- * Requires env vars: RESEND_API_KEY, NOTIFY_EMAIL.
- * Without a verified domain, Resend only delivers to the account owner's email.
+ * Instant email notifications (Resend). Every send is logged to the
+ * notifications outbox via src/lib/notify — nothing fails silently.
+ *
+ * SECURITY: this route does not trust the request body for content or
+ * recipients (/api/* is exempt from the auth middleware).
+ *  - 'assigned'          → requires an authenticated admin/dispatcher session;
+ *                          recipient + job details are looked up server-side.
+ *  - 'viewed' / 'signed' → caller must present a valid sign-link token; doc
+ *                          details come from the notify_doc_by_token RPC
+ *                          (migration 0015) and mail only goes to NOTIFY_EMAIL.
  */
 export async function POST(req: NextRequest) {
-  const key = process.env.RESEND_API_KEY;
-  const to = process.env.NOTIFY_EMAIL;
-  if (!key || !to) return NextResponse.json({ skipped: 'notifications not configured' });
+  const owner = process.env.NOTIFY_EMAIL;
+  if (!process.env.RESEND_API_KEY || !owner) {
+    return NextResponse.json({ skipped: 'notifications not configured' });
+  }
 
-  let body: {
-    event?: string; kind?: string; number?: number; customer?: string; total?: number; signer?: string;
-    to?: string; crewName?: string; jobTitle?: string; when?: string; address?: string;
-  };
+  let body: { event?: string; kind?: string; token?: string; job_id?: string; user_id?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'bad body' }, { status: 400 }); }
 
-  const { event, kind, number, customer, total, signer } = body;
+  const supabase = createClient();
 
-  // Crew assignment notification → goes to the crew member's email.
-  // NOTE: until a domain is verified in Resend, delivery only works to the
-  // Resend account owner's address; others are rejected by Resend.
-  if (event === 'assigned') {
-    if (!body.to || !body.jobTitle) return NextResponse.json({ error: 'missing fields' }, { status: 400 });
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        from: 'SJHC Command Center <onboarding@resend.dev>',
-        to: [body.to],
-        subject: `You're on a job: ${body.jobTitle}${body.when ? ` — ${body.when}` : ''}`,
-        text: `${body.crewName ?? 'Hey'}, you've been assigned to a job.\n\nJob: ${body.jobTitle}\n${body.when ? `When: ${body.when}\n` : ''}${body.address ? `Where: ${body.address}\n` : ''}${customer ? `Customer: ${customer}\n` : ''}\nDetails, photos, and directions are in the app: https://crmsjh.netlify.app/field\n\n— Sanchez Junk & Haul Co.`,
-      }),
+  // ---- Crew assignment: authenticated staff only; everything derived server-side ----
+  if (body.event === 'assigned') {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    const { data: me } = await supabase.from('users').select('role').eq('id', user.id).single();
+    if (me?.role !== 'admin' && me?.role !== 'dispatcher') {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
+    if (!body.job_id || !body.user_id) return NextResponse.json({ error: 'missing fields' }, { status: 400 });
+
+    const [{ data: member }, { data: job }] = await Promise.all([
+      supabase.from('users').select('full_name, email').eq('id', body.user_id).single(),
+      supabase.from('jobs').select('title, scheduled_start, address, customers(name)').eq('id', body.job_id).single(),
+    ]);
+    if (!member?.email || !job) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+    const when = job.scheduled_start
+      ? new Date(job.scheduled_start).toLocaleString('en-US', {
+          timeZone: 'America/Detroit', weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+        })
+      : null;
+    const customerName = (job.customers as { name?: string } | null)?.name;
+    const result = await sendNotification({
+      event: 'assigned',
+      to: member.email,
+      entityKind: 'job',
+      entityId: body.job_id,
+      subject: `You're on a job: ${job.title}${when ? ` — ${when}` : ''}`,
+      text: `${member.full_name ?? 'Hey'}, you've been assigned to a job.\n\nJob: ${job.title}\n${when ? `When: ${when}\n` : ''}${job.address ? `Where: ${job.address}\n` : ''}${customerName ? `Customer: ${customerName}\n` : ''}\nDetails, photos, and directions are in the app: ${APP_URL}/field\n\n— Sanchez Junk & Haul Co.`,
     });
-    if (!res.ok) return NextResponse.json({ error: (await res.text()).slice(0, 300) }, { status: 502 });
-    return NextResponse.json({ sent: true });
+    return result.ok
+      ? NextResponse.json({ sent: true })
+      : NextResponse.json({ error: result.error ?? 'send failed' }, { status: 502 });
   }
 
-  if (!event || !kind || !number) return NextResponse.json({ error: 'missing fields' }, { status: 400 });
+  // ---- Sign-page events: a valid token is the proof of legitimacy ----
+  const { event, kind, token } = body;
+  if ((event !== 'viewed' && event !== 'signed') || (kind !== 'estimate' && kind !== 'invoice') || !token) {
+    return NextResponse.json({ error: 'missing fields' }, { status: 400 });
+  }
 
-  const docName = `${kind === 'invoice' ? 'Invoice' : 'Estimate'} #${number}`;
-  const amount = total != null ? ` — $${Number(total).toFixed(2)}` : '';
-  const who = customer ? ` (${customer})` : '';
+  // Read-only lookup (does NOT bump view_count) — migration 0015.
+  const { data: doc, error: rpcErr } = await supabase.rpc('notify_doc_by_token', { p_kind: kind, p_token: token });
+  if (rpcErr || !doc) return NextResponse.json({ error: 'invalid token' }, { status: 404 });
 
-  const subject = event === 'signed'
-    ? `✍️ ${signer ?? 'Customer'} signed ${docName}${amount}`
-    : `👁 ${docName}${who} was just opened`;
+  const d = doc as { number: number; customer_name: string | null; total: number | null; signed_name: string | null };
+  const docName = `${kind === 'invoice' ? 'Invoice' : 'Estimate'} #${d.number}`;
+  const amount = d.total != null ? ` — $${Number(d.total).toFixed(2)}` : '';
+  const who = d.customer_name ? ` (${d.customer_name})` : '';
 
-  const text = event === 'signed'
-    ? `${signer ?? 'Your customer'} signed ${docName}${who}${amount}.\n\n${kind === 'estimate' ? 'A job was created automatically — schedule it in the app.' : 'Waiting on payment — mark it paid when the money lands.'}\n\nhttps://crmsjh.netlify.app`
-    : `${docName}${who}${amount} was just viewed by the customer.\n\nhttps://crmsjh.netlify.app`;
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      from: 'SJHC Command Center <onboarding@resend.dev>',
-      to: [to],
-      subject,
-      text,
-    }),
+  const result = await sendNotification({
+    event,
+    to: owner,
+    entityKind: kind,
+    subject: event === 'signed'
+      ? `✍️ ${d.signed_name ?? 'Customer'} signed ${docName}${amount}`
+      : `👁 ${docName}${who} was just opened`,
+    text: event === 'signed'
+      ? `${d.signed_name ?? 'Your customer'} signed ${docName}${who}${amount}.\n\n${kind === 'estimate' ? 'A job was created automatically — schedule it in the app.' : 'Waiting on payment — mark it paid when the money lands.'}\n\n${APP_URL}`
+      : `${docName}${who}${amount} was just viewed by the customer.\n\n${APP_URL}`,
   });
-
-  if (!res.ok) {
-    const err = await res.text();
-    return NextResponse.json({ error: err.slice(0, 300) }, { status: 502 });
-  }
-  return NextResponse.json({ sent: true });
+  return result.ok
+    ? NextResponse.json({ sent: true })
+    : NextResponse.json({ error: result.error ?? 'send failed' }, { status: 502 });
 }
