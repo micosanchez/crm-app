@@ -50,6 +50,7 @@ const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles
   { href: '/recurring', label: 'Recurring', icon: 'recurring', mobile: false, roles: STAFF, flag: 'recurring' },
   { href: '/field', label: 'Field', icon: 'field', mobile: true },
   { href: '/documents', label: 'Documents', icon: 'documents', mobile: false },
+  { href: '/signatures', label: 'Signatures', icon: 'estimates', mobile: false, roles: STAFF },
   { href: '/team', label: 'Team', icon: 'team', mobile: false, roles: ['admin'] },
 ];
 
