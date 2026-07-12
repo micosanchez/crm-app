@@ -23,19 +23,12 @@ export default function CrewAssign({ job, team, assigned }: {
       const { error } = await supabase.from('job_assignments').insert({ job_id: job.id, user_id: member.id });
       if (error) { setBusy(false); alert(`Couldn't assign ${member.full_name}: ${error.message}`); return; }
       setIds([...ids, member.id]);
-      // Notify the crew member by email (fire-and-forget)
+      // Notify the crew member by email (fire-and-forget).
+      // The route derives recipient + job details server-side; we only send ids.
       fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'assigned',
-          to: member.email,
-          crewName: member.full_name,
-          jobTitle: job.title,
-          when: job.scheduled_start ? new Date(job.scheduled_start).toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : undefined,
-          address: job.address ?? undefined,
-          customer: job.customers?.name,
-        }),
+        body: JSON.stringify({ event: 'assigned', job_id: job.id, user_id: member.id }),
       }).catch(() => {});
     }
     setBusy(false);
