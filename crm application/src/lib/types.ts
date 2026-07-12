@@ -1,9 +1,10 @@
 export type UserRole = 'admin' | 'dispatcher' | 'technician';
-export type JobStatus = 'lead' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced' | 'paid';
+export type JobStatus = 'lead' | 'scheduled' | 'in_progress' | 'completed' | 'invoiced' | 'paid' | 'cancelled';
 export type InvoiceStatus = 'draft' | 'sent' | 'paid';
 export type CustomerTag = 'residential' | 'commercial' | 'repeat' | 'high_value';
 export type ServiceType = 'junk_removal' | 'landscaping' | 'other';
 
+/** Forward pipeline only — 'cancelled' is a side exit, never a column/next step. */
 export const JOB_PIPELINE: JobStatus[] = ['lead', 'scheduled', 'in_progress', 'completed', 'invoiced', 'paid'];
 
 export interface UserProfile {
