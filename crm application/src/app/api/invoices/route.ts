@@ -5,11 +5,19 @@ import { createClient } from '@/lib/supabase/server';
  * POST /api/invoices  { job_id }
  * Auto-generates a draft invoice from a job, seeding a labor line item
  * from the job's estimated value, and advances the job to "invoiced".
+ * Admin/dispatcher only; idempotent — a job can only ever have one invoice
+ * from this route (double-taps and retries return the existing one).
  */
 export async function POST(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+
+  // Role gate — technicians must not create invoices (matches migration 0014).
+  const { data: me } = await supabase.from('users').select('role').eq('id', user.id).single();
+  if (me?.role !== 'admin' && me?.role !== 'dispatcher') {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
 
   const { job_id } = await req.json();
   if (!job_id) return NextResponse.json({ error: 'job_id required' }, { status: 400 });
@@ -17,6 +25,14 @@ export async function POST(req: NextRequest) {
   const { data: job, error: jobErr } = await supabase
     .from('jobs').select('*').eq('id', job_id).single();
   if (jobErr || !job) return NextResponse.json({ error: 'job not found' }, { status: 404 });
+
+  // Idempotency — if an invoice already exists for this job, return it
+  // instead of creating a duplicate (double-tap / retry safety).
+  const { data: dupes } = await supabase
+    .from('invoices').select('id, invoice_number, status').eq('job_id', job_id).limit(1);
+  if (dupes && dupes.length > 0) {
+    return NextResponse.json({ invoice: dupes[0], existing: true });
+  }
 
   const { data: invoice, error: invErr } = await supabase
     .from('invoices')
