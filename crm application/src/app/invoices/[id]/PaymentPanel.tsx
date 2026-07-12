@@ -46,7 +46,7 @@ export default function PaymentPanel({ invoice }: { invoice: Invoice }) {
       <div className="flex items-center justify-between">
         <div>
           <p className="panel-label">Balance due</p>
-          <p className="metric text-2xl font-bold text-white">${balance.toFixed(2)}</p>
+          <p className="metric text-2xl font-bold text-gray-900">${balance.toFixed(2)}</p>
         </div>
         <div className="text-right">
           <p className="panel-label">Paid</p>
