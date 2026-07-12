@@ -40,7 +40,7 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
           const d = data as Doc;
           setDoc(d);
           if (d.view_count === 1) {
-            notify({ event: 'viewed', kind, number: d.number, customer: d.customer_name, total: d.total });
+            notify({ event: 'viewed', kind, token });
           }
         }
       });
@@ -57,7 +57,7 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
     else {
       setJustSigned(true);
       setDoc((d) => d && { ...d, signed_name: name, signed_at: new Date().toISOString() });
-      notify({ event: 'signed', kind, number: doc?.number, customer: doc?.customer_name, total: doc?.total, signer: name });
+      notify({ event: 'signed', kind, token });
     }
   }
 
@@ -154,7 +154,7 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
                     </div>
                   )}
                   <div className="mt-1 flex w-full max-w-xs items-center justify-between rounded px-4 py-2.5 text-white"
-                    style={{ background: 'linear-gradient(90deg, #2b2b2b, #050505)' }}>
+                    style={{ background: 'linear-gradient(90deg, var(--brand-secondary), var(--brand-primary))' }}>
                     <span className="font-bold tracking-wide">TOTAL</span>
                     <span className="text-lg font-bold">{money(doc.total)}</span>
                   </div>
