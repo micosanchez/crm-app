@@ -7,7 +7,7 @@ import { JOB_PIPELINE, type Job, type JobStatus } from '@/lib/types';
 
 const LABELS: Record<JobStatus, string> = {
   lead: 'Leads', scheduled: 'Scheduled', in_progress: 'In progress',
-  completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid',
+  completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled',
 };
 
 export default function KanbanBoard({ jobs: initial }: { jobs: Job[] }) {

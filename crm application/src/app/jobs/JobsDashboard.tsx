@@ -13,6 +13,7 @@ import type { Job, Customer } from '@/lib/types';
 type Tone = 'paid' | 'active' | 'lead';
 function classify(status: string): { label: string; tone: Tone } {
   if (status === 'paid') return { label: 'Paid', tone: 'paid' };
+  if (status === 'cancelled') return { label: 'Cancelled', tone: 'lead' };
   if (status === 'lead') return { label: 'Lead', tone: 'lead' };
   const label = status === 'in_progress' ? 'In progress' : status.charAt(0).toUpperCase() + status.slice(1);
   return { label, tone: 'active' };
@@ -67,7 +68,7 @@ export default function JobsDashboard({ jobs, customers }: {
         key,
         label: new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
         list,
-        total: list.reduce((s, j) => s + val(j), 0),
+        total: list.reduce((s, j) => s + (j.status === 'cancelled' ? 0 : val(j)), 0), // cancelled jobs don't count toward pipeline value
         pct: null as number | null,
       };
     });
@@ -88,6 +89,7 @@ export default function JobsDashboard({ jobs, customers }: {
     const list = selected?.list ?? [];
     let pV = 0, pN = 0, aV = 0, aN = 0, lV = 0, lN = 0;
     for (const j of list) {
+      if (j.status === 'cancelled') continue; // out of the numbers, still in the list below
       const { tone } = classify(j.status);
       const v = val(j);
       if (tone === 'paid') { pV += v; pN += 1; }
