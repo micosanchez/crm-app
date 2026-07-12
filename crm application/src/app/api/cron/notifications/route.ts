@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  for (const [userId, member] of byMember) {
+  for (const [userId, member] of Array.from(byMember.entries())) {
     const lines = member.jobs.map((jb) => {
       const t = new Date(jb.scheduled_start).toLocaleTimeString('en-US', { timeZone: 'America/Detroit', hour: 'numeric', minute: '2-digit' });
       return `• ${t} — ${jb.title}${jb.customer ? ` (${jb.customer})` : ''}${jb.address ? `\n   ${jb.address}` : ''}`;
