@@ -56,10 +56,12 @@ export async function flushQueue(): Promise<SyncSummary> {
       continue;
     }
 
-    // 'error' (transient/validation) or 'rejected' (permanent).
+    // 'error' (transient/validation), 'rejected' (permanent), or
+    // 'conflict_server_newer' (permanent — retrying can never succeed;
+    // surface it so the user re-applies their edit on fresh data).
     const attempts = (a.attempts ?? 0) + 1;
     const last_error = r.error || r.status;
-    if (r.status === 'rejected' || attempts >= MAX_ATTEMPTS) {
+    if (r.status === 'rejected' || r.status === 'conflict_server_newer' || attempts >= MAX_ATTEMPTS) {
       removeKeys.push(a.idempotency_key);
       await recordFailure({ ...a, attempts, last_error }); // dead-letter, surfaced to user
     } else {
