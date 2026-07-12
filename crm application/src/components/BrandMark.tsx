@@ -22,12 +22,12 @@ export default function BrandMark({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
       </svg>
       {big ? (
         <span className="flex flex-col leading-tight">
-          <span className="font-display text-3xl font-semibold tracking-wide text-white">SANCHEZ</span>
-          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[#b8b8b8]">Junk &amp; Haul Co.</span>
+          <span className="font-display text-3xl font-semibold tracking-wide text-gray-900">SANCHEZ</span>
+          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--text-tertiary)]">Junk &amp; Haul Co.</span>
         </span>
       ) : (
-        <span className="font-extrabold tracking-wide text-white">
-          SJHC <span className="hidden font-medium text-[#8f8f8f] sm:inline">Command Center</span>
+        <span className="font-extrabold tracking-wide text-gray-900">
+          SJHC <span className="hidden font-medium text-[var(--text-tertiary)] sm:inline">Command Center</span>
         </span>
       )}
     </span>

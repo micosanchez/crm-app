@@ -108,7 +108,7 @@ export default function Nav() {
 
       {/* Mobile "More" sheet — glass overlay (DESIGN-SYSTEM.md §5) */}
       {moreOpen && (
-        <div className="no-print fixed inset-0 z-50 bg-black/60 md:hidden" onClick={() => setMoreOpen(false)}>
+        <div className="no-print fixed inset-0 z-50 bg-black/30 md:hidden" onClick={() => setMoreOpen(false)}>
           <div className="glass hud-rise absolute bottom-16 left-0 right-0 rounded-t-xl p-4 pb-6"
             style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))' }}
             onClick={(e) => e.stopPropagation()}>
@@ -123,7 +123,7 @@ export default function Nav() {
                       background: active ? 'var(--brand-primary)' : 'var(--surface-primary)',
                       border: `1px solid ${active ? 'var(--brand-accent)' : 'var(--border-subtle)'}`,
                       color: active ? '#fff' : 'var(--text-secondary)',
-                      boxShadow: active ? '0 0 14px rgba(141, 29, 57, 0.45)' : undefined,
+                      boxShadow: active ? '0 2px 10px rgba(141, 29, 57, 0.25)' : undefined,
                     }}>
                     <Icon name={l.icon} />
                     {l.label}
@@ -145,7 +145,7 @@ export default function Nav() {
       <nav
         className="no-print fixed bottom-0 left-0 right-0 z-40 flex md:hidden"
         style={{
-          background: 'rgba(9, 9, 9, 0.82)',
+          background: 'rgba(255, 255, 255, 0.88)',
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           borderTop: '1px solid var(--border-standard)',
@@ -157,9 +157,9 @@ export default function Nav() {
           return (
             <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
               className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium tracking-wide transition-colors duration-200"
-              style={{ color: active ? '#fff' : 'var(--text-muted)' }}>
-              {active && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)', boxShadow: '0 0 8px var(--brand-accent)' }} />}
-              <span style={active ? { filter: 'drop-shadow(0 0 6px var(--brand-accent))' } : undefined}>
+              style={{ color: active ? 'var(--brand-accent)' : 'var(--text-muted)' }}>
+              {active && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)' }} />}
+              <span>
                 <Icon name={l.icon} />
               </span>
               <span className="font-display">{l.label}</span>
@@ -168,9 +168,9 @@ export default function Nav() {
         })}
         <button onClick={() => setMoreOpen(!moreOpen)}
           className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium tracking-wide transition-colors duration-200"
-          style={{ color: moreOpen || moreActive ? '#fff' : 'var(--text-muted)' }}>
-          {(moreOpen || moreActive) && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)', boxShadow: '0 0 8px var(--brand-accent)' }} />}
-          <span style={moreOpen || moreActive ? { filter: 'drop-shadow(0 0 6px var(--brand-accent))' } : undefined}>
+          style={{ color: moreOpen || moreActive ? 'var(--brand-accent)' : 'var(--text-muted)' }}>
+          {(moreOpen || moreActive) && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)' }} />}
+          <span>
             <Icon name="more" />
           </span>
           <span className="font-display">More</span>

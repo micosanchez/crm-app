@@ -33,7 +33,7 @@ export function Cell({ label, value, sub, href, tone }: {
   const inner = (
     <div className="flex h-full flex-col gap-1 bg-surface px-4 py-3.5 transition-colors duration-200 group-hover:bg-[var(--bg-tertiary)]">
       <p className="panel-label">{label}</p>
-      <p className="metric text-[22px] font-bold leading-none" style={{ color: tone ?? '#ffffff' }}>{value}</p>
+      <p className="metric text-[22px] font-bold leading-none" style={{ color: tone ?? 'var(--text-primary)' }}>{value}</p>
       {sub ? <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>{sub}</p> : null}
     </div>
   );
@@ -63,7 +63,7 @@ export function Gauge({ value, max = 100, word, color }: {
           strokeDasharray={c} style={arc as CSSProperties} />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="metric text-[40px] font-bold leading-none text-white">{value}</span>
+        <span className="metric text-[40px] font-bold leading-none text-gray-900">{value}</span>
         <span className="panel-label mt-1.5" style={{ color }}>{word}</span>
       </div>
     </div>
@@ -97,7 +97,7 @@ export function Row({ href, lead, title, meta, tag, tagColor }: {
     <div className="flex items-center gap-3 bg-surface px-4 py-3 transition-colors duration-200 group-hover:bg-[var(--bg-tertiary)]">
       {lead ? <span className="metric shrink-0 text-[11px]" style={{ color: 'var(--metal-titanium)' }}>{lead}</span> : null}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-white">{title}</p>
+        <p className="truncate text-sm font-medium text-gray-900">{title}</p>
         {meta ? <p className="panel-label mt-0.5 normal-case" style={{ letterSpacing: 0 }}>{meta}</p> : null}
       </div>
       {tag ? <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: tagColor ?? 'var(--text-tertiary)' }}>{tag}</span> : null}
