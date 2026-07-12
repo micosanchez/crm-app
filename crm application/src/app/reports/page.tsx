@@ -17,7 +17,7 @@ function Bar({ label, value, max, display }: { label: string; value: number; max
   return (
     <div className="px-4 py-2.5">
       <div className="flex items-baseline justify-between text-sm">
-        <span className="text-white">{label}</span>
+        <span className="text-gray-900">{label}</span>
         <span className="metric" style={{ color: 'var(--metal-titanium)' }}>{display}</span>
       </div>
       <div className="mt-1.5 h-1 overflow-hidden rounded-full" style={{ background: 'var(--bg-tertiary)' }}>
