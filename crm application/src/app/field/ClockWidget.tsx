@@ -45,10 +45,10 @@ export default function ClockWidget({ userId, openEntry, jobs }: {
   if (openEntry) {
     const elapsed = now - new Date(openEntry.started_at).getTime();
     return (
-      <div className="card flex items-center justify-between" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 0 14px rgba(141,29,57,0.25)' }}>
+      <div className="card flex items-center justify-between" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 2px 10px rgba(141,29,57,0.12)' }}>
         <div>
           <p className="panel-label" style={{ color: 'var(--brand-text)' }}>On the clock</p>
-          <p className="metric text-3xl font-bold text-white">{fmtDur(elapsed)}</p>
+          <p className="metric text-3xl font-bold text-gray-900">{fmtDur(elapsed)}</p>
           {openEntry.jobs?.title && <p className="mt-0.5 text-xs text-gray-500">{openEntry.jobs.title}</p>}
         </div>
         <button className="btn-primary btn-big w-auto px-6" disabled={busy} onClick={clockOut}>{busy ? '…' : 'Clock out'}</button>
