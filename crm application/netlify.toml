@@ -16,7 +16,15 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Daily notification sweep — 10:30 UTC = 6:30 AM Michigan (EDT).
+# Calls /api/cron/notifications with CRON_SECRET.
+[functions."notify-cron"]
+  schedule = "30 10 * * *"
+
 # Required environment variables (set in Netlify UI → Site settings → Environment variables):
 #   NEXT_PUBLIC_SUPABASE_URL
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY
-#   SUPABASE_SERVICE_ROLE_KEY  (server-only, never exposed to client)
+#   SUPABASE_SERVICE_ROLE_KEY  (server-only — outbox logging + daily reminders)
+#   RESEND_API_KEY, NOTIFY_EMAIL (email sending)
+#   CRON_SECRET                (any random string — protects /api/cron/notifications)
+#   NOTIFY_FROM                (optional — set after verifying a domain in Resend)
