@@ -4,7 +4,7 @@
   "description": "Sanchez Junk & Haul Co. — Remove. Refresh. Reclaim.",
   "start_url": "/field",
   "display": "standalone",
-  "background_color": "#2a0a1c",
+  "background_color": "#f7f6f4",
   "theme_color": "#7b2153",
   "orientation": "portrait",
   "icons": [
