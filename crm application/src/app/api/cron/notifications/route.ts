@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   type CrewJob = { title: string; address: string | null; scheduled_start: string; customer?: string };
   const byMember = new Map<string, { name: string | null; email: string; jobs: CrewJob[] }>();
   for (const j of todaysJobs ?? []) {
-    const assignments = (j.job_assignments ?? []) as { user_id: string; users: { full_name: string | null; email: string | null } | null }[];
+    const assignments = (j.job_assignments ?? []) as unknown as { user_id: string; users: { full_name: string | null; email: string | null } | null }[];
     for (const a of assignments) {
       if (!a.users?.email) continue;
       const entry = byMember.get(a.user_id) ?? { name: a.users.full_name, email: a.users.email, jobs: [] };
