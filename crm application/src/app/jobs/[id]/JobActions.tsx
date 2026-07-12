@@ -8,7 +8,7 @@ export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: 
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const idx = JOB_PIPELINE.indexOf(job.status);
-  const next: JobStatus | undefined = JOB_PIPELINE[idx + 1];
+  const next: JobStatus | undefined = job.status === 'cancelled' ? undefined : JOB_PIPELINE[idx + 1];
 
   async function advance() {
     if (!next) return;
@@ -29,11 +29,35 @@ export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: 
     router.refresh();
   }
 
+  async function setStatus(status: JobStatus, confirmMsg?: string) {
+    if (confirmMsg && !window.confirm(confirmMsg)) return;
+    setBusy(true);
+    const res = await mutate({ table: 'jobs', op: 'update', id: job.id, label: 'job', payload: { status } });
+    setBusy(false);
+    if (res.status === 'failed') { alert(`Couldn't update job: ${res.error}`); return; }
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {next && (
         <button className="btn-primary" onClick={advance} disabled={busy}>
           {busy ? 'Working…' : next === 'invoiced' && !hasInvoice ? 'Generate invoice' : `Mark ${next.replace('_', ' ')}`}
+        </button>
+      )}
+      {/* Couldn't do the job (no access, customer bailed, etc.) — keep the record, drop it from the pipeline */}
+      {job.status !== 'cancelled' && job.status !== 'paid' && (
+        <button
+          className="btn-ghost"
+          style={{ color: 'var(--status-danger)' }}
+          disabled={busy}
+          onClick={() => setStatus('cancelled', 'Cancel this job? It stays on the record but leaves the pipeline, field list, and revenue numbers.')}>
+          Cancel job
+        </button>
+      )}
+      {job.status === 'cancelled' && (
+        <button className="btn-ghost" disabled={busy} onClick={() => setStatus('scheduled')}>
+          Reopen job
         </button>
       )}
     </div>
