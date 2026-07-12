@@ -1,11 +1,14 @@
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
+import { flags } from '@/lib/flags';
 import RecurringManager from './RecurringManager';
 import type { JobRecurrence, Customer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function RecurringPage() {
+  if (!flags.recurring) notFound(); // flag off → page doesn't exist, even by direct URL
   await requireStaff();
   const supabase = createClient();
   const [{ data: recurrences }, { data: customers }] = await Promise.all([

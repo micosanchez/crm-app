@@ -89,7 +89,7 @@ export default function RecurringManager({ recurrences, customers }: {
         {recurrences.map((r) => (
           <div key={r.id} className="flex items-center justify-between gap-3 bg-surface px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="min-w-0">
-              <p className="truncate font-medium text-white">{r.title} <span className="panel-label">{intervalLabel(r.interval_days)}</span></p>
+              <p className="truncate font-medium text-gray-900">{r.title} <span className="panel-label">{intervalLabel(r.interval_days)}</span></p>
               <p className="truncate text-xs text-gray-500">{r.customers?.name ?? 'Customer'} · next {new Date(r.next_run + 'T12:00:00').toLocaleDateString()}{r.estimated_value != null && ` · $${Number(r.estimated_value).toFixed(0)}/visit`}</p>
             </div>
             <button className="shrink-0 text-xs text-gray-500 hover:text-red-600" onClick={() => stop(r.id)}>Stop</button>
