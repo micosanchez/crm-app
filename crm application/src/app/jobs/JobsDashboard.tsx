@@ -153,12 +153,12 @@ export default function JobsDashboard({ jobs, customers }: {
             <button key={m.key} onClick={() => setSelectedKey(m.key)}
               className="min-w-[150px] shrink-0 snap-start rounded-lg px-4 py-3 text-left transition-colors duration-fast"
               style={{
-                background: active ? 'var(--brand-50, #1c0a11)' : 'var(--surface-primary)',
+                background: active ? '#f3dde6' : 'var(--surface-primary)',
                 border: `1px solid ${active ? 'var(--brand-accent)' : 'var(--border-subtle)'}`,
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 1px 2px rgba(0,0,0,0.5)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
               }}>
               <p className={`panel-label ${active ? 'text-brand-700' : ''}`}>{m.label}</p>
-              <p className="metric mt-1 text-2xl font-bold text-white">{fmtK(m.total)}</p>
+              <p className="metric mt-1 text-2xl font-bold text-gray-900">{fmtK(m.total)}</p>
               <p className="mt-0.5 text-xs metric" style={{ color: m.pct == null ? 'var(--text-muted)' : m.pct >= 0 ? 'var(--metal-titanium)' : 'var(--text-muted)' }}>
                 {m.pct == null ? '—' : `${m.pct >= 0 ? '↑' : '↓'} ${Math.abs(m.pct)}%`}
               </p>
@@ -173,7 +173,7 @@ export default function JobsDashboard({ jobs, customers }: {
           <div className="flex items-start justify-between">
             <div>
               <p className="panel-label">{selected?.label} · Pipeline value</p>
-              <p className="metric mt-1 text-4xl font-bold text-white">{fmtFull(stats.total)}</p>
+              <p className="metric mt-1 text-4xl font-bold text-gray-900">{fmtFull(stats.total)}</p>
               <p className="mt-1 text-sm metric" style={{ color: stats.pct == null ? 'var(--text-muted)' : 'var(--metal-titanium)' }}>
                 {stats.pct == null ? 'No prior month' : `${stats.pct >= 0 ? '↑' : '↓'} ${Math.abs(stats.pct)}% vs prior month`}
               </p>
@@ -202,8 +202,8 @@ export default function JobsDashboard({ jobs, customers }: {
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t pt-3 text-sm" style={{ borderColor: 'var(--border-subtle)' }}>
-            <span className="text-gray-500">Paid rate <b className="text-white metric">{stats.paidRate}%</b></span>
-            <span className="text-gray-500">Average <b className="text-white metric">{fmtFull(stats.avg)}</b></span>
+            <span className="text-gray-500">Paid rate <b className="text-gray-900 metric">{stats.paidRate}%</b></span>
+            <span className="text-gray-500">Average <b className="text-gray-900 metric">{fmtFull(stats.avg)}</b></span>
           </div>
         </div>
 
@@ -214,7 +214,7 @@ export default function JobsDashboard({ jobs, customers }: {
           <div className="flex gap-1">
             {(['all', 'paid', 'active', 'lead'] as const).map((f) => (
               <button key={f} onClick={() => setStatusFilter(f)}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors duration-fast ${statusFilter === f ? 'text-white' : 'text-gray-500'}`}
+                className={`rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors duration-fast ${statusFilter === f ? 'text-gray-900' : 'text-gray-500'}`}
                 style={{
                   background: statusFilter === f ? 'var(--surface-elevated)' : 'transparent',
                   border: `1px solid ${statusFilter === f ? 'var(--border-strong)' : 'var(--border-subtle)'}`,
@@ -237,11 +237,11 @@ export default function JobsDashboard({ jobs, customers }: {
                   borderLeft: `2px solid ${c.tone === 'paid' ? 'var(--brand-accent)' : 'transparent'}`,
                 }}>
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-white">{j.title}</p>
+                  <p className="truncate font-medium text-gray-900">{j.title}</p>
                   <p className="panel-label mt-0.5">{j.customers?.name ?? 'No customer'} · {new Date(j.scheduled_start ?? j.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="metric font-semibold text-white">{j.estimated_value != null ? fmtFull(val(j)) : '—'}</p>
+                  <p className="metric font-semibold text-gray-900">{j.estimated_value != null ? fmtFull(val(j)) : '—'}</p>
                   <p className={`mt-0.5 text-[11px] font-semibold uppercase tracking-wider ${TONE_TEXT[c.tone]}`}>{c.label}</p>
                 </div>
               </button>
@@ -257,7 +257,7 @@ export default function JobsDashboard({ jobs, customers }: {
 
       {/* Persistent command action */}
       <div className="sticky bottom-20 z-30 md:bottom-4">
-        <NewJobForm customers={customers} triggerClassName="btn-big glass w-full uppercase tracking-[0.08em] text-white" triggerLabel="New job" />
+        <NewJobForm customers={customers} triggerClassName="btn-big btn-primary w-full uppercase tracking-[0.08em]" triggerLabel="New job" />
       </div>
     </div>
   );
