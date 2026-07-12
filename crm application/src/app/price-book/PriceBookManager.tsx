@@ -65,11 +65,11 @@ export default function PriceBookManager({ items }: { items: ServiceItem[] }) {
         {items.map((it) => (
           <div key={it.id} className="flex items-center justify-between gap-3 bg-surface px-4 py-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
             <div className="min-w-0">
-              <p className="truncate font-medium text-white">{it.name} <span className="panel-label">{it.kind}</span></p>
+              <p className="truncate font-medium text-gray-900">{it.name} <span className="panel-label">{it.kind}</span></p>
               {it.description && <p className="truncate text-xs text-gray-500">{it.description}</p>}
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              <span className="metric font-semibold text-white">${Number(it.default_price).toFixed(2)}</span>
+              <span className="metric font-semibold text-gray-900">${Number(it.default_price).toFixed(2)}</span>
               <button className="text-xs text-gray-500 hover:text-brand-700" onClick={() => edit(it)}>Edit</button>
               <button className="text-xs text-gray-500 hover:text-red-600" onClick={() => remove(it.id)}>Remove</button>
             </div>

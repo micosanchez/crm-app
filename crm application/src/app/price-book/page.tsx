@@ -1,11 +1,14 @@
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
+import { flags } from '@/lib/flags';
 import PriceBookManager from './PriceBookManager';
 import type { ServiceItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PriceBookPage() {
+  if (!flags.priceBook) notFound(); // flag off → page doesn't exist, even by direct URL
   await requireStaff();
   const supabase = createClient();
   const { data } = await supabase.from('service_items').select('*').eq('active', true).order('name');
