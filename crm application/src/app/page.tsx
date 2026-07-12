@@ -128,31 +128,31 @@ export default async function CommandCenter() {
 
       {/* ATTENTION CHANNEL */}
       {hasAlerts && (
-        <div className="card hud-rise" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 0 18px rgba(141,29,57,0.25)' }}>
+        <div className="card hud-rise" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 2px 12px rgba(141,29,57,0.12)' }}>
           <Label right={`${overdue.length + (staleLeads ? 1 : 0) + (followUpsDue.length ? 1 : 0) + (expiringDocs?.length ?? 0)} signals`}>Attention required</Label>
           <ul className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
             {overdue.map((i) => (
               <li key={i.id} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: DANGER }} />
-                <span><Link className="font-medium text-white underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
+                <span><Link className="font-medium text-gray-900 underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
               </li>
             ))}
             {staleLeads > 0 && (
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-white hover:underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</span>
+                <span><Link className="font-medium text-gray-900 hover:underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</span>
               </li>
             )}
             {followUpsDue.length > 0 && (
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-white hover:underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link> · {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</span>
+                <span><Link className="font-medium text-gray-900 hover:underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link> · {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</span>
               </li>
             )}
             {expiringDocs?.map((d) => (
               <li key={d.id} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-white hover:underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</span>
+                <span><Link className="font-medium text-gray-900 hover:underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</span>
               </li>
             ))}
           </ul>

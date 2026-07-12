@@ -4,42 +4,43 @@
 
 /* ============================================================
    SJHC DESIGN TOKENS — single source of truth (see DESIGN-SYSTEM.md)
+   LIGHT THEME — soft white surfaces, charcoal text, burgundy brand
    ============================================================ */
 :root {
   /* Backgrounds */
-  --bg-primary: #050505;
-  --bg-secondary: #090909;
-  --bg-tertiary: #111111;
-  --surface-primary: #151515;
-  --surface-secondary: #1a1a1a;
-  --surface-elevated: #202020;
+  --bg-primary: #f7f6f4;
+  --bg-secondary: #f1efec;
+  --bg-tertiary: #edebe7;
+  --surface-primary: #ffffff;
+  --surface-secondary: #faf9f7;
+  --surface-elevated: #ffffff;
 
   /* Brand */
   --brand-primary: #5b1225;
   --brand-secondary: #75142c;
   --brand-accent: #8d1d39;
-  --brand-text: #c25674;
+  --brand-text: #7b2153;
 
-  /* Metallics */
-  --metal-titanium: #c4c4c4;
-  --metal-graphite: #b8b8b8;
-  --metal-aluminum: #d5d5d5;
+  /* Metallics (darkened for legibility on light surfaces) */
+  --metal-titanium: #5f5f5f;
+  --metal-graphite: #9a9a9a;
+  --metal-aluminum: #454545;
 
-  /* Text — lightened for legibility on the dark canvas */
-  --text-primary: #ffffff;
-  --text-secondary: #d2d2d2;
-  --text-tertiary: #cfcfcf;
-  --text-muted: #b8b8b8;
+  /* Text — charcoal scale on light canvas */
+  --text-primary: #1c1b1a;
+  --text-secondary: #3f3d3b;
+  --text-tertiary: #6b6966;
+  --text-muted: #8a8783;
 
-  /* Status (muted) */
-  --status-success: #4ebb8d;
-  --status-warning: #d4a843;
-  --status-danger: #c25460;
+  /* Status (muted, contrast-checked on white) */
+  --status-success: #1e7a56;
+  --status-warning: #946a12;
+  --status-danger: #b03040;
 
   /* Borders */
-  --border-subtle: #1f1f1f;
-  --border-standard: #2a2a2a;
-  --border-strong: #3a3a3a;
+  --border-subtle: #eae7e3;
+  --border-standard: #dcd8d3;
+  --border-strong: #c4bfb9;
 
   /* Motion */
   --anim-fast: 120ms;
@@ -81,18 +82,19 @@
 }
 
 @layer components {
-  .btn { @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold transition-colors duration-200 disabled:opacity-50; }
-  .btn-primary { @apply btn text-white; background: var(--brand-secondary); border: 1px solid var(--brand-accent); }
+  /* Soft buttons: fuller radius, gentle shadow, tactile press */
+  .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold transition-colors duration-200 disabled:opacity-50; }
+  .btn-primary { @apply btn text-white; background: var(--brand-secondary); border: 1px solid var(--brand-secondary); box-shadow: 0 1px 3px rgba(91, 18, 37, 0.25); }
   .btn-primary:hover { background: var(--brand-accent); }
-  .btn-ghost { @apply btn; color: var(--text-secondary); border: 1px solid var(--border-standard); background: transparent; }
+  .btn-ghost { @apply btn; color: var(--text-secondary); border: 1px solid var(--border-standard); background: var(--surface-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
   .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); background: var(--surface-secondary); }
   .btn-big { @apply btn w-full py-4 text-base; }
 
-  .input { @apply w-full rounded-md px-3 py-2 text-sm; background: var(--bg-tertiary); border: 1px solid var(--border-standard); color: var(--text-primary); }
+  .input { @apply w-full rounded-lg px-3 py-2 text-sm; background: var(--surface-primary); border: 1px solid var(--border-standard); color: var(--text-primary); }
   .input::placeholder { color: var(--text-muted); }
-  .input:focus { outline: none; border-color: var(--brand-accent); }
+  .input:focus { outline: none; border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(141, 29, 57, 0.1); }
 
-  .card { @apply rounded-lg p-4; background: var(--surface-primary); border: 1px solid var(--border-subtle); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+  .card { @apply rounded-xl p-4; background: var(--surface-primary); border: 1px solid var(--border-subtle); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05); }
 
   .badge { @apply inline-block rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider; }
 
@@ -102,22 +104,15 @@
 
   .font-display { font-family: var(--font-display), Georgia, serif; }
 
-  .glass { background: rgba(17, 17, 17, 0.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-subtle); }
+  .glass { background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--border-subtle); }
 }
 
-/* The palette remap sets `white` to a dark surface so legacy `bg-white` panels
-   render dark — but that also makes `text-white` nearly black. Force the text
-   utility back to real white (surfaces keep using bg-white = dark). */
-.text-white { color: #ffffff !important; }
-
 /* ============================================================
-   HUD / COMMAND-TERMINAL LAYER (mobile-first, on-brand)
-   Faint instrument grid, machined panel depth, tactile motion.
-   CSS-only, GPU-cheap, no new dependencies.
+   HUD / INSTRUMENT LAYER — light edition
+   Faint paper-grid backdrop, soft panel depth, tactile motion.
    ============================================================ */
 
-/* Instrument-grid canvas behind all content — a single fixed layer,
-   masked to fade downward so it reads as a HUD backdrop, not wallpaper. */
+/* Instrument-grid canvas behind all content, faded downward */
 body::before {
   content: '';
   position: fixed;
@@ -128,22 +123,19 @@ body::before {
     linear-gradient(var(--border-standard) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-standard) 1px, transparent 1px);
   background-size: 40px 40px;
-  opacity: 0.5;
+  opacity: 0.35;
   -webkit-mask-image: radial-gradient(125% 85% at 50% 0%, #000 28%, transparent 80%);
           mask-image: radial-gradient(125% 85% at 50% 0%, #000 28%, transparent 80%);
 }
 main { position: relative; z-index: 1; }
 
-/* Panels read as machined instrument surfaces (top edge highlight + ambient occlusion) */
-.card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.5); }
-
-/* Tactile press feedback — primarily for touch (Tesla/DJI-style instrument response) */
+/* Tactile press feedback — primarily for touch */
 .btn { transition: transform var(--anim-fast), background-color var(--anim-normal), border-color var(--anim-normal), color var(--anim-normal); }
 @media (hover: none) {
   .btn:active { transform: scale(0.97); }
 }
 
-/* Reusable entrance primitive (opt-in; keeps motion cheap and intentional) */
+/* Reusable entrance primitive (opt-in) */
 @keyframes hudRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .hud-rise { animation: hudRise var(--anim-normal) var(--ease-standard) both; }
 
