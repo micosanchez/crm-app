@@ -57,7 +57,10 @@ export default function SignClient({ kind, token }: { kind: 'estimate' | 'invoic
     if (error || !data) setError('Could not submit signature. Please try again.');
     else {
       setJustSigned(true);
-      setDoc((d) => d && { ...d, signed_name: name, signed_at: new Date().toISOString() });
+      // Include the drawn signature so the page shows the real ink immediately
+      // (it's already stored server-side; without this the view falls back to
+      // a cursive-font name until the next reload).
+      setDoc((d) => d && { ...d, signed_name: name, signed_at: new Date().toISOString(), signature_data: dataUrl });
       notify({ event: 'signed', kind, token });
     }
   }
