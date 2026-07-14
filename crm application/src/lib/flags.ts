@@ -14,6 +14,7 @@ export const flags = {
   priceBook: on(process.env.NEXT_PUBLIC_FF_PRICE_BOOK),    // saved service items for fast quoting
   recurring: on(process.env.NEXT_PUBLIC_FF_RECURRING),     // recurring jobs / maintenance plans
   sms: on(process.env.NEXT_PUBLIC_FF_SMS),                 // text quote/invoice links — also needs Twilio creds
+  accounting: on(process.env.NEXT_PUBLIC_FF_ACCOUNTING),   // double-entry books + bank reconciliation (needs migration 0018)
 } as const;
 
 /** Server-only gates (never exposed to the client bundle). */
