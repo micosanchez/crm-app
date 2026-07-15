@@ -8,18 +8,19 @@ import {
   type ColumnMapping, type NormalizedBankTxn,
 } from '@/lib/accounting/bank';
 import {
-  importBankTransactions, confirmMatch, unmatch, setTransactionIgnored, createEntryFromBankTxn, saveReconciliation,
+  importBankTransactions, confirmMatch, unmatch, setTransactionIgnored, createEntryFromBankTxn, saveReconciliation, matchDepositBatch,
 } from '../actions';
 
-type Acct = Pick<Account, 'id' | 'number' | 'name' | 'type' | 'normal_side'>;
+type Acct = Pick<Account, 'id' | 'number' | 'name' | 'type' | 'normal_side' | 'system_key'>;
 const monthEndOf = (m: string) => { const d = new Date(m + 'T00:00:00'); return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10); };
 
 export default function ReconciliationWorkspace({
-  cashAccountId, cashAccount, accounts, bankTxns, candidates, reconciliations, currentMonth,
+  cashAccountId, cashAccount, accounts, reconcilable, bankTxns, candidates, reconciliations, currentMonth,
 }: {
-  cashAccountId: string; cashAccount: AccountBalance | null; accounts: Acct[];
+  cashAccountId: string; cashAccount: AccountBalance | null; accounts: Acct[]; reconcilable: Acct[];
   bankTxns: BankTransaction[]; candidates: CashLineCandidate[]; reconciliations: Reconciliation[]; currentMonth: string;
 }) {
+  const router = useRouter();
   const unmatched = bankTxns.filter((t) => t.status === 'unmatched');
   const matched = bankTxns.filter((t) => t.status === 'matched');
   const ignored = bankTxns.filter((t) => t.status === 'ignored');
@@ -27,6 +28,15 @@ export default function ReconciliationWorkspace({
 
   return (
     <div className="space-y-5">
+      {reconcilable.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="panel-label">Reconciling</span>
+          <select className="input h-8 w-64 py-1" value={cashAccountId}
+            onChange={(e) => router.push(`/accounting/reconciliation?account=${e.target.value}`)}>
+            {reconcilable.map((a) => <option key={a.id} value={a.id}>{a.number} · {a.name}</option>)}
+          </select>
+        </div>
+      )}
       <ImportPanel cashAccountId={cashAccountId} />
       <ReconSummary
         cashAccountId={cashAccountId} bookBalance={bookBalance} unmatched={unmatched}
@@ -253,6 +263,14 @@ function MatchRow({ txn, candidates, accounts }: { txn: BankTransaction; candida
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [offset, setOffset] = useState('');
+  const [batch, setBatch] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [feeAcct, setFeeAcct] = useState(accounts.find((a) => a.system_key === 'exp_processing_fees')?.id ?? '');
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const eligible = candidates.filter((c) => (txn.direction === 'credit' ? c.debit > 0 : c.credit > 0));
+  const selectedIds = eligible.filter((c) => selected[c.lineId]).map((c) => c.lineId);
+  const selectedSum = round2(eligible.filter((c) => selected[c.lineId]).reduce((s, c) => s + (txn.direction === 'credit' ? c.debit : c.credit), 0));
+  const fee = round2(selectedSum - Number(txn.amount));
   const suggestions: Suggestion[] = useMemo(
     () => suggestMatches({ postedDate: txn.posted_date, amount: Number(txn.amount), direction: txn.direction, description: txn.description }, candidates),
     [txn, candidates],
@@ -280,6 +298,8 @@ function MatchRow({ txn, candidates, accounts }: { txn: BankTransaction; candida
           {txn.direction === 'credit' ? '+' : '−'}{money(Number(txn.amount)).replace('-', '')}
         </span>
         <div className="flex shrink-0 items-center gap-1">
+          <button className="rounded-md px-2 py-1 text-xs" style={{ border: '1px solid var(--border-standard)', color: 'var(--brand-text)' }}
+            onClick={() => setBatch((b) => !b)}>Deposit / split</button>
           <button className="rounded-md px-2 py-1 text-xs" style={{ border: '1px solid var(--border-standard)', color: 'var(--brand-text)' }}
             onClick={() => { setCreating((c) => !c); if (!offset && defaultOffset) setOffset(defaultOffset); }}>Create entry</button>
           <button className="rounded-md px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }} onClick={() => act(() => setTransactionIgnored(txn.id, true))} disabled={busy}>Ignore</button>
@@ -315,6 +335,43 @@ function MatchRow({ txn, candidates, accounts }: { txn: BankTransaction; candida
             <button className="btn-primary px-3 py-1.5 text-xs" disabled={!offset || busy}
               onClick={() => act(() => createEntryFromBankTxn({ bankTxnId: txn.id, offsetAccountId: offset }))}>Post &amp; match</button>
           </div>
+        </div>
+      )}
+
+      {batch && (
+        <div className="border-t px-4 py-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          <p className="panel-label mb-1">Match a deposit to several entries (Stripe / Venmo payouts, net of fees)</p>
+          <div className="max-h-48 overflow-auto rounded" style={{ border: '1px solid var(--border-subtle)' }}>
+            {eligible.map((c) => (
+              <label key={c.lineId} className="flex items-center gap-2 px-2 py-0.5 text-sm">
+                <input type="checkbox" checked={!!selected[c.lineId]} onChange={(e) => setSelected({ ...selected, [c.lineId]: e.target.checked })} />
+                <span className="w-20 shrink-0 text-xs" style={{ color: 'var(--text-muted)' }}>{c.entryDate}</span>
+                <span className="min-w-0 flex-1 truncate text-xs" style={{ color: 'var(--text-secondary)' }}>{c.memo}</span>
+                <span className="metric shrink-0 text-xs">{money(txn.direction === 'credit' ? c.debit : c.credit)}</span>
+              </label>
+            ))}
+            {!eligible.length && <p className="px-2 py-1 text-xs" style={{ color: 'var(--text-muted)' }}>No unreconciled entries on this side yet.</p>}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span style={{ color: 'var(--text-secondary)' }}>Selected {money(selectedSum)} vs bank {money(Number(txn.amount))}</span>
+            {fee > 0.005 && (
+              <>
+                <span style={{ color: 'var(--text-muted)' }}>fee {money(fee)} →</span>
+                <select className="input h-7 py-0.5 text-xs" value={feeAcct} onChange={(e) => setFeeAcct(e.target.value)}>
+                  <option value="">Fee account…</option>
+                  {accounts.filter((a) => a.type === 'expense').map((a) => <option key={a.id} value={a.id}>{a.number} · {a.name}</option>)}
+                </select>
+              </>
+            )}
+            <button className="btn-primary px-3 py-1 text-xs"
+              disabled={busy || !selectedIds.length || fee < -0.005 || (fee > 0.005 && !feeAcct)}
+              onClick={() => act(() => matchDepositBatch({ bankTxnId: txn.id, lineIds: selectedIds, feeAccountId: fee > 0.005 ? feeAcct : undefined, feeAmount: fee > 0.005 ? fee : 0 }))}>
+              Match {selectedIds.length} {selectedIds.length === 1 ? 'entry' : 'entries'}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+            Fee = selected book total − bank amount, booked to the fee account so book cash nets to the actual deposit. Select more entries if the bank amount is larger.
+          </p>
         </div>
       )}
     </div>
