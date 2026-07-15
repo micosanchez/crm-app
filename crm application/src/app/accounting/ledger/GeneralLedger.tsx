@@ -90,28 +90,30 @@ export default function GeneralLedger({ entries, accounts }: { entries: JournalE
             <input className="input h-9 w-40" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             <input className="input h-9 flex-1" placeholder="Memo (e.g. owner draw, depreciation, correction)" value={memo} onChange={(e) => setMemo(e.target.value)} />
           </div>
-          <div className="overflow-hidden rounded-lg" style={{ border: '1px solid var(--border-subtle)' }}>
-            <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
+          <div className="space-y-2 md:space-y-0 md:overflow-hidden md:rounded-lg md:border md:border-[var(--border-subtle)]">
+            <div className="hidden gap-2 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide md:grid md:grid-cols-12" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
               <span className="col-span-5">Account</span><span className="col-span-3">Memo</span>
               <span className="col-span-2 text-right">Debit</span><span className="col-span-2 text-right">Credit</span>
             </div>
             {lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-12 items-center gap-2 px-3 py-1.5">
-                <select className="input col-span-5 h-8 py-1" value={l.account_id} onChange={(e) => setLine(i, { account_id: e.target.value })}>
+              <div key={i} className="space-y-1.5 rounded-lg border border-[var(--border-subtle)] p-2 md:grid md:grid-cols-12 md:items-center md:gap-2 md:space-y-0 md:rounded-none md:border-0 md:p-0 md:px-3 md:py-1.5">
+                <select className="input h-9 w-full py-1 md:col-span-5 md:h-8" value={l.account_id} onChange={(e) => setLine(i, { account_id: e.target.value })}>
                   <option value="">Select account…</option>
                   {accounts.map((a) => <option key={a.id} value={a.id}>{a.number} · {a.name}</option>)}
                 </select>
-                <input className="input col-span-3 h-8 py-1" placeholder="—" value={l.memo} onChange={(e) => setLine(i, { memo: e.target.value })} />
-                <input className="input col-span-2 h-8 py-1 text-right" type="number" step="0.01" min="0" placeholder="0.00" value={l.debit}
-                  onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} />
-                <input className="input col-span-2 h-8 py-1 text-right" type="number" step="0.01" min="0" placeholder="0.00" value={l.credit}
-                  onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} />
+                <input className="input h-9 w-full py-1 md:col-span-3 md:h-8" placeholder="Memo" value={l.memo} onChange={(e) => setLine(i, { memo: e.target.value })} />
+                <div className="flex gap-2 md:contents">
+                  <input className="input h-9 w-full py-1 text-right md:col-span-2 md:h-8" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Debit" value={l.debit}
+                    onChange={(e) => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} />
+                  <input className="input h-9 w-full py-1 text-right md:col-span-2 md:h-8" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Credit" value={l.credit}
+                    onChange={(e) => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} />
+                </div>
               </div>
             ))}
           </div>
-          <div className="flex items-center justify-between text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
             <button className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setLines((ls) => [...ls, blankLine()])}>+ Add line</button>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="metric" style={{ color: 'var(--text-secondary)' }}>Dr {money(totals.dr)} · Cr {money(totals.cr)}</span>
               <span className="text-xs font-semibold" style={{ color: balanced ? 'var(--status-success)' : 'var(--status-danger)' }}>
                 {balanced ? 'Balanced' : `Out of balance ${money(totals.dr - totals.cr)}`}
