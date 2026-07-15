@@ -3,11 +3,11 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
-import { EXPENSE_CATEGORIES, type Expense, type ExpenseCategory, type Job } from '@/lib/types';
+import { EXPENSE_CATEGORIES, PAID_WITH_OPTIONS, type Expense, type ExpenseCategory, type Job, type PaidWith } from '@/lib/types';
 
 const EMPTY = {
   category: 'dump_fees' as ExpenseCategory, amount: '', incurred_on: new Date().toISOString().slice(0, 10),
-  vendor: '', description: '', job_id: '',
+  vendor: '', description: '', job_id: '', paid_with: 'bluevine' as PaidWith,
 };
 
 export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]; jobs: Pick<Job, 'id' | 'title'>[] }) {
@@ -29,6 +29,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
     setForm({
       category: x.category, amount: String(x.amount), incurred_on: x.incurred_on,
       vendor: x.vendor ?? '', description: x.description ?? '', job_id: x.job_id ?? '',
+      paid_with: x.paid_with ?? 'bluevine',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -62,6 +63,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
       vendor: form.vendor || null,
       description: form.description || null,
       job_id: form.job_id || null,
+      paid_with: form.paid_with,
     };
     if (receiptPath) payload.receipt_url = receiptPath;
 
@@ -104,6 +106,9 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
         <select className="input" value={form.job_id} onChange={(e) => setForm({ ...form, job_id: e.target.value })}>
           <option value="">No job (overhead)</option>
           {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+        </select>
+        <select className="input" title="Paid with" value={form.paid_with} onChange={(e) => setForm({ ...form, paid_with: e.target.value as PaidWith })}>
+          {PAID_WITH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <button className="btn-primary" disabled={busy}>{busy ? '…' : editingId ? 'Save changes' : '+ Add'}</button>
         <input className="input md:col-span-4" placeholder="Description / notes" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
