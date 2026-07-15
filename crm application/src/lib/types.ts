@@ -179,6 +179,14 @@ export interface EstimateItem {
   amount: number;
 }
 
+export type PaidWith = 'bluevine' | 'credit_card' | 'cash' | 'other';
+export const PAID_WITH_OPTIONS: { value: PaidWith; label: string }[] = [
+  { value: 'bluevine', label: 'Bluevine' },
+  { value: 'credit_card', label: 'Credit card' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'other', label: 'Other' },
+];
+
 export interface Expense {
   id: string;
   category: ExpenseCategory;
@@ -188,6 +196,7 @@ export interface Expense {
   description: string | null;
   job_id: string | null;
   receipt_url: string | null;
+  paid_with?: PaidWith;
   created_at: string;
   jobs?: Pick<Job, 'id' | 'title'>;
 }
