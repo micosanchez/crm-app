@@ -159,13 +159,13 @@ export default function Nav() {
           const active = pathname === l.href;
           return (
             <Link key={l.href} href={l.href} onClick={() => setMoreOpen(false)}
-              className="relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10px] font-medium tracking-wide transition-colors duration-200"
+              className="relative flex min-w-0 flex-1 flex-col items-center gap-1 px-0.5 py-2 text-[10px] font-medium transition-colors duration-200"
               style={{ color: active ? 'var(--brand-accent)' : 'var(--text-muted)' }}>
               {active && <span aria-hidden className="absolute inset-x-4 top-0 h-px" style={{ background: 'var(--brand-accent)' }} />}
               <span>
                 <Icon name={l.icon} />
               </span>
-              <span className="font-display">{l.label}</span>
+              <span className="w-full truncate text-center leading-tight">{l.label}</span>
             </Link>
           );
         })}
@@ -176,7 +176,7 @@ export default function Nav() {
           <span>
             <Icon name="more" />
           </span>
-          <span className="font-display">More</span>
+          <span className="w-full truncate text-center leading-tight">More</span>
         </button>
       </nav>
     </>
