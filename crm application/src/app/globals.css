@@ -50,6 +50,15 @@
 }
 
 @layer base {
+  /* Never let a page scroll sideways — otherwise the fixed bottom nav
+     (left:0;right:0) widens past the screen and its left edge (Dashboard)
+     gets clipped, forcing a pinch to reach it. Wide content must scroll
+     inside its own container, not the page. */
+  html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+  }
   body {
     background: var(--bg-primary);
     color: var(--text-secondary);
