@@ -129,3 +129,80 @@ export function balanceSheetCsv(bs: BalanceSheet): string {
 function toCsv(rows: string[][]): string {
   return rows.map((r) => r.map((c) => (/[",\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(',')).join('\n');
 }
+
+/* ---------------------------------------------------------------- Trial Balance */
+export interface TrialBalanceLine { number: string; name: string; debit: number; credit: number; }
+export interface TrialBalance {
+  asOf: string; lines: TrialBalanceLine[]; totalDebit: number; totalCredit: number; balanced: boolean;
+}
+
+export function buildTrialBalance(rows: LedgerBalanceRow[], asOf: string): TrialBalance {
+  const lines = rows
+    .map((r) => {
+      const net = round(Number(r.debit) - Number(r.credit));
+      return { number: r.number, name: r.name, debit: net > 0 ? net : 0, credit: net < 0 ? -net : 0 };
+    })
+    .filter((l) => l.debit !== 0 || l.credit !== 0)
+    .sort((a, b) => a.number.localeCompare(b.number));
+  const totalDebit = round(lines.reduce((s, l) => s + l.debit, 0));
+  const totalCredit = round(lines.reduce((s, l) => s + l.credit, 0));
+  return { asOf, lines, totalDebit, totalCredit, balanced: Math.abs(totalDebit - totalCredit) < 0.01 };
+}
+
+/* ---------------------------------------------------------------- A/R Aging */
+export interface AgingInvoice {
+  invoice_number: number | string; customer: string; issued: string; outstanding: number; days: number; bucket: string;
+}
+export interface ArAging {
+  asOf: string;
+  buckets: { label: string; total: number }[];
+  invoices: AgingInvoice[];
+  total: number;
+}
+const BUCKETS = ['Current (0–30)', '31–60', '61–90', '90+'];
+
+export function buildArAging(
+  invoices: { invoice_number: number | string; total: number; amount_paid?: number | null; issued_at: string | null; customers?: { name?: string } | null }[],
+  asOf: string,
+): ArAging {
+  const asOfMs = new Date(asOf + 'T00:00:00').getTime();
+  const totals = [0, 0, 0, 0];
+  const rows: AgingInvoice[] = [];
+  for (const i of invoices) {
+    const outstanding = round(Number(i.total) - Number(i.amount_paid ?? 0));
+    if (outstanding <= 0) continue;
+    const issued = i.issued_at ?? asOf;
+    const days = Math.max(0, Math.round((asOfMs - new Date(issued.slice(0, 10) + 'T00:00:00').getTime()) / 86_400_000));
+    const bi = days <= 30 ? 0 : days <= 60 ? 1 : days <= 90 ? 2 : 3;
+    totals[bi] += outstanding;
+    rows.push({ invoice_number: i.invoice_number, customer: i.customers?.name ?? 'Unknown', issued: issued.slice(0, 10), outstanding, days, bucket: BUCKETS[bi] });
+  }
+  rows.sort((a, b) => b.days - a.days);
+  return {
+    asOf,
+    buckets: BUCKETS.map((label, i) => ({ label, total: round(totals[i]) })),
+    invoices: rows,
+    total: round(totals.reduce((s, t) => s + t, 0)),
+  };
+}
+
+/* ---------------------------------------------------------------- Cash Flow */
+export interface CashFlow {
+  from: string; to: string; openingCash: number; closingCash: number;
+  inflows: { name: string; amount: number }[];
+  outflows: { name: string; amount: number }[];
+  totalIn: number; totalOut: number; net: number;
+  ties: boolean;
+}
+
+export function buildCashFlow(
+  rows: { number: string; name: string; inflow: number; outflow: number }[],
+  from: string, to: string, openingCash: number, closingCash: number,
+): CashFlow {
+  const inflows = rows.filter((r) => Number(r.inflow) > 0).map((r) => ({ name: r.name, amount: round(Number(r.inflow)) })).sort((a, b) => b.amount - a.amount);
+  const outflows = rows.filter((r) => Number(r.outflow) > 0).map((r) => ({ name: r.name, amount: round(Number(r.outflow)) })).sort((a, b) => b.amount - a.amount);
+  const totalIn = round(inflows.reduce((s, l) => s + l.amount, 0));
+  const totalOut = round(outflows.reduce((s, l) => s + l.amount, 0));
+  const net = round(totalIn - totalOut);
+  return { from, to, openingCash, closingCash, inflows, outflows, totalIn, totalOut, net, ties: Math.abs(round(openingCash + net) - closingCash) < 0.01 };
+}
