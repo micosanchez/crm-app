@@ -151,6 +151,31 @@ export interface DraftLine {
   memo?: string | null;
 }
 
+export interface DepreciationSchedule {
+  id: string;
+  asset_name: string;
+  asset_account_id: string;
+  accum_account_id: string | null;
+  expense_account_id: string | null;
+  cost: number;
+  salvage: number;
+  useful_life_months: number;
+  method: string;
+  start_date: string;
+  monthly_amount: number;
+  months_posted: number;
+  active: boolean;
+}
+
+/** Row from the cash_activity(account, from, to) RPC. */
+export interface CashActivityRow {
+  number: string;
+  name: string;
+  type: AccountType;
+  inflow: number;
+  outflow: number;
+}
+
 export const money = (n: number) =>
   (n < 0 ? '-$' : '$') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 

@@ -8,7 +8,9 @@ const TABS = [
   { href: '/accounting/ledger', label: 'General Ledger' },
   { href: '/accounting/income-statement', label: 'Income Statement' },
   { href: '/accounting/balance-sheet', label: 'Balance Sheet' },
+  { href: '/accounting/reports', label: 'Reports' },
   { href: '/accounting/close', label: 'Close Books' },
+  { href: '/accounting/setup', label: 'Setup' },
 ];
 
 export default function AccountingTabs() {

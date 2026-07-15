@@ -150,11 +150,19 @@ export async function importBankTransactions(input: {
     .select('id').single();
   if (bErr) return { ok: false, error: bErr.message };
 
-  const rows = input.txns.map((t) => ({
-    account_id: input.accountId, source: input.source, external_id: t.externalId,
-    posted_date: t.postedDate, description: t.description, amount: t.amount, direction: t.direction,
-    raw: t.raw ?? {}, import_batch_id: batch.id,
-  }));
+  // De-collide identical content-hash ids so genuine same-day duplicates (e.g. two
+  // $20 fuel stops) both import, while re-importing the same file still dedupes.
+  const seen = new Map<string, number>();
+  const rows = input.txns.map((t) => {
+    const n = (seen.get(t.externalId) ?? 0) + 1;
+    seen.set(t.externalId, n);
+    return {
+      account_id: input.accountId, source: input.source,
+      external_id: n === 1 ? t.externalId : `${t.externalId}#${n}`,
+      posted_date: t.postedDate, description: t.description, amount: t.amount, direction: t.direction,
+      raw: t.raw ?? {}, import_batch_id: batch.id,
+    };
+  });
 
   const { data: inserted, error } = await supabase.from('bank_transactions')
     .upsert(rows, { onConflict: 'account_id,source,external_id', ignoreDuplicates: true })
@@ -299,6 +307,98 @@ export async function reopenPeriod(month: string): Promise<Result> {
   if (error) return { ok: false, error: error.message };
   bump();
   return { ok: true };
+}
+
+// ---------------------------------------------------------------- opening balances
+export async function setOpeningBalances(input: {
+  asOf: string; lines: { account_id: string; balance: number }[];
+}): Promise<Result> {
+  const supabase = await db();
+  const lines = input.lines
+    .filter((l) => l.account_id && Number(l.balance) !== 0)
+    .map((l) => ({ account_id: l.account_id, balance: round2(Number(l.balance)) }));
+  const { error } = await supabase.rpc('set_opening_balances', { p_as_of: input.asOf, p_lines: lines });
+  if (error) return { ok: false, error: error.message };
+  bump();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- batched / fee-aware deposit match
+/** Match one bank deposit to several book cash lines (e.g. a Stripe payout that
+ *  bundles multiple payments), booking any shortfall to a fee account so book
+ *  cash nets down to the actual deposit. Works for a single line too. */
+export async function matchDepositBatch(input: {
+  bankTxnId: string; lineIds: string[]; feeAccountId?: string; feeAmount?: number;
+}): Promise<Result> {
+  const supabase = await db();
+  if (!input.lineIds.length) return { ok: false, error: 'Select at least one entry to match.' };
+  const { data: txn } = await supabase.from('bank_transactions')
+    .select('id,account_id,amount,direction,posted_date').eq('id', input.bankTxnId).single();
+  if (!txn) return { ok: false, error: 'Bank transaction not found.' };
+  const cash = txn.account_id;
+
+  const { data: lines } = await supabase.from('journal_lines').select('id,entry_id').in('id', input.lineIds);
+  const entryIds = Array.from(new Set((lines ?? []).map((l) => l.entry_id)));
+  for (const lineId of input.lineIds) {
+    await supabase.from('journal_lines').update({ reconciled: true, bank_transaction_id: input.bankTxnId }).eq('id', lineId);
+  }
+  for (const eid of entryIds) await supabase.from('journal_entries').update({ reconciled: true }).eq('id', eid);
+
+  const fee = round2(Number(input.feeAmount) || 0);
+  if (fee > 0 && input.feeAccountId) {
+    // Deposit was net of a fee: Dr Fees / Cr Cash reduces book cash to the deposited amount.
+    const feeLines = [
+      { account_id: input.feeAccountId, debit: fee, credit: 0, memo: 'Processing / merchant fee' },
+      { account_id: cash, debit: 0, credit: fee, memo: 'Fee deducted from deposit' },
+    ];
+    const { data: feeEntry, error } = await supabase.rpc('post_entry', {
+      p_date: txn.posted_date, p_memo: 'Deposit fee adjustment', p_source: 'adjustment',
+      p_source_table: 'bank_transactions', p_source_id: txn.id, p_lines: feeLines, p_is_closing: false,
+    });
+    if (error) return { ok: false, error: error.message };
+    const { data: feeCashLine } = await supabase.from('journal_lines')
+      .select('id').eq('entry_id', String(feeEntry)).eq('account_id', cash).single();
+    if (feeCashLine) await supabase.from('journal_lines').update({ reconciled: true, bank_transaction_id: txn.id }).eq('id', feeCashLine.id);
+  }
+
+  await supabase.from('bank_transactions')
+    .update({ status: 'matched', matched_entry_id: entryIds[0] ?? null }).eq('id', input.bankTxnId);
+  bump();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- depreciation
+export async function createDepreciationSchedule(input: {
+  asset_name: string; asset_account_id: string; accum_account_id: string; expense_account_id: string;
+  cost: number; salvage: number; useful_life_months: number; start_date: string;
+}): Promise<Result> {
+  const supabase = await db();
+  const { error } = await supabase.from('depreciation_schedules').insert({
+    asset_name: input.asset_name.trim(), asset_account_id: input.asset_account_id,
+    accum_account_id: input.accum_account_id, expense_account_id: input.expense_account_id,
+    cost: round2(input.cost), salvage: round2(input.salvage || 0),
+    useful_life_months: Math.max(1, Math.round(input.useful_life_months)), start_date: input.start_date,
+  });
+  if (error) return { ok: false, error: error.message };
+  bump();
+  return { ok: true };
+}
+
+export async function postDepreciation(scheduleId: string, month: string): Promise<Result> {
+  const supabase = await db();
+  const { error } = await supabase.rpc('post_depreciation', { p_schedule_id: scheduleId, p_month: month });
+  if (error) return { ok: false, error: error.message };
+  bump();
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------- edit (void + repost, audit-preserving)
+export async function repostJournalEntry(oldId: string, input: {
+  entry_date: string; memo: string; lines: DraftLine[];
+}): Promise<Result<{ entryId: string }>> {
+  const v = await voidJournalEntry(oldId, 'edited — superseded');
+  if (!v.ok) return v;
+  return createJournalEntry({ entry_date: input.entry_date, memo: input.memo, lines: input.lines, source: 'adjustment' });
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
