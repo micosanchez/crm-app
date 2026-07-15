@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { money, type Account, type JournalEntry } from '@/lib/accounting/types';
-import { createJournalEntry, voidJournalEntry } from '../actions';
+import { createJournalEntry, voidJournalEntry, repostJournalEntry } from '../actions';
 
 type Acct = Pick<Account, 'id' | 'number' | 'name' | 'type' | 'normal_side'>;
 type Line = { account_id: string; debit: string; credit: string; memo: string };
@@ -18,6 +18,7 @@ export default function GeneralLedger({ entries, accounts }: { entries: JournalE
   const [memo, setMemo] = useState('');
   const [lines, setLines] = useState<Line[]>([blankLine(), blankLine()]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const totals = useMemo(() => {
     const dr = lines.reduce((s, l) => s + (Number(l.debit) || 0), 0);
@@ -30,17 +31,36 @@ export default function GeneralLedger({ entries, accounts }: { entries: JournalE
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   }
 
+  function startEdit(e: JournalEntry) {
+    setEditingId(e.id);
+    setDate(e.entry_date);
+    setMemo(e.memo ?? '');
+    setLines((e.journal_lines ?? []).sort((a, b) => a.line_no - b.line_no).map((l) => ({
+      account_id: l.account_id, debit: Number(l.debit) ? String(l.debit) : '', credit: Number(l.credit) ? String(l.credit) : '', memo: l.memo ?? '',
+    })));
+    setOpen(true);
+    setExpanded(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function resetForm() {
+    setOpen(false); setEditingId(null); setMemo(''); setLines([blankLine(), blankLine()]); setDate(today());
+  }
+
   async function submit() {
     if (!balanced) return;
     setBusy(true);
-    const res = await createJournalEntry({
-      entry_date: date, memo, source: 'adjustment',
+    const payload = {
+      entry_date: date, memo,
       lines: lines.filter((l) => l.account_id && (Number(l.debit) || Number(l.credit)))
         .map((l) => ({ account_id: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0, memo: l.memo || null })),
-    });
+    };
+    const res = editingId
+      ? await repostJournalEntry(editingId, payload)
+      : await createJournalEntry({ ...payload, source: 'adjustment' });
     setBusy(false);
     if (!res.ok) { alert(res.error); return; }
-    setOpen(false); setMemo(''); setLines([blankLine(), blankLine()]); setDate(today());
+    resetForm();
     router.refresh();
   }
 
@@ -58,13 +78,14 @@ export default function GeneralLedger({ entries, accounts }: { entries: JournalE
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="panel-label">General ledger · double-entry journal</p>
-        <button className="btn-primary px-3 py-1.5 text-sm" onClick={() => setOpen((o) => !o)}>
+        <button className="btn-primary px-3 py-1.5 text-sm" onClick={() => (open ? resetForm() : setOpen(true))}>
           {open ? 'Close' : '+ New journal entry'}
         </button>
       </div>
 
       {open && (
         <div className="card space-y-3">
+          {editingId && <p className="text-xs font-semibold" style={{ color: 'var(--brand-text)' }}>Editing entry — saving voids the original and posts a corrected copy (audit trail kept).</p>}
           <div className="flex flex-wrap items-center gap-2">
             <input className="input h-9 w-40" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             <input className="input h-9 flex-1" placeholder="Memo (e.g. owner draw, depreciation, correction)" value={memo} onChange={(e) => setMemo(e.target.value)} />
@@ -132,7 +153,10 @@ export default function GeneralLedger({ entries, accounts }: { entries: JournalE
                     </tbody>
                   </table>
                   {!voided && !e.is_closing && (
-                    <div className="mt-2 flex justify-end">
+                    <div className="mt-2 flex justify-end gap-2">
+                      {(e.source === 'manual' || e.source === 'adjustment') && !e.reconciled && (
+                        <button className="rounded-md px-2 py-1 text-xs" style={{ border: '1px solid var(--border-standard)', color: 'var(--brand-text)' }} onClick={() => startEdit(e)} disabled={busy}>Edit</button>
+                      )}
                       <button className="rounded-md px-2 py-1 text-xs hover:bg-red-50 hover:text-red-600" style={{ color: 'var(--text-muted)' }} onClick={() => doVoid(e.id)} disabled={busy}>Void entry</button>
                     </div>
                   )}
