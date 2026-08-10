@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import NewJobForm from './NewJobForm';
 import type { Job, Customer } from '@/lib/types';
 
@@ -46,6 +46,9 @@ export default function JobsDashboard({ jobs, customers }: {
   customers: Pick<Customer, 'id' | 'name'>[];
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const statusParam = searchParams.get('status');
+  const initialStatus: 'all' | Tone = statusParam === 'paid' || statusParam === 'active' || statusParam === 'lead' ? statusParam : 'all';
 
   const months = useMemo<MonthEntry[]>(() => {
     const map = new Map<string, Job[]>();
@@ -80,7 +83,7 @@ export default function JobsDashboard({ jobs, customers }: {
   }, [jobs]);
 
   const [selectedKey, setSelectedKey] = useState(() => months[months.length - 1]?.key ?? '');
-  const [statusFilter, setStatusFilter] = useState<'all' | Tone>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | Tone>(initialStatus);
   const [query, setQuery] = useState('');
 
   const selected = months.find((m) => m.key === selectedKey) ?? months[months.length - 1];

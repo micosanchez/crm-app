@@ -8,7 +8,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -17,10 +16,9 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     const supabase = createClient();
-    const { error } =
-      mode === 'signin'
-        ? await supabase.auth.signInWithPassword({ email, password })
-        : await supabase.auth.signUp({ email, password });
+    // Sign-in only. Self-serve account creation is disabled — new team members
+    // are added by an admin from the Team page (and Supabase signups are off).
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) return setError(error.message);
     router.push('/');
@@ -42,12 +40,11 @@ export default function LoginPage() {
           <input className="input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
           {error && <p className="text-sm text-[var(--status-danger)]">{error}</p>}
           <button className="btn-primary w-full py-2.5" disabled={busy}>
-            {busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+            {busy ? 'Working…' : 'Sign in'}
           </button>
-          <button type="button" className="w-full text-center text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
-            onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
-            {mode === 'signin' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
-          </button>
+          <p className="text-center text-xs text-[var(--text-muted)]">
+            Need access? Ask an admin to add you from the Team page.
+          </p>
         </form>
       </div>
     </div>

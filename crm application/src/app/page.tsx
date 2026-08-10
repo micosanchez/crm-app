@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { Label, Cluster, Cell, Gauge, FactorBar, Row, Stack } from '@/components/Hud';
 import { requireStaff } from '@/lib/auth';
-import type { Job, Expense, Lead, Invoice } from '@/lib/types';
+import type { Job, Expense, Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +23,8 @@ function jobTone(status: string): { tag: string; color: string } {
   return { tag, color: TITANIUM };
 }
 
+type EstRow = { id: string; estimate_number: number; status: string; total: number | string; created_at: string; customers: { name: string } | null };
+
 export default async function CommandCenter() {
   await requireStaff();
   const supabase = createClient();
@@ -35,7 +37,7 @@ export default async function CommandCenter() {
 
   const [
     { data: todayJobs }, { data: monthInvoices }, { data: monthCollected }, { data: monthExpenses },
-    { data: openInvoices }, { data: leads }, { data: activity }, { count: customerCount },
+    { data: openInvoices }, { data: estimates }, { data: activity }, { count: customerCount },
     { data: expiringDocs },
   ] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)')
@@ -44,8 +46,9 @@ export default async function CommandCenter() {
     // Cash basis: revenue is recognized when the invoice is PAID (paid_at), not when created.
     supabase.from('invoices').select('total').eq('status', 'paid').gte('paid_at', monthStart),
     supabase.from('expenses').select('amount,category').gte('incurred_on', monthStartDate),
-    supabase.from('invoices').select('id,invoice_number,total,due_at,status,customers(id,name)').in('status', ['sent', 'draft']).order('due_at'),
-    supabase.from('leads').select('status,created_at,est_value,source,follow_up_on,name'),
+    // Outstanding + overdue: only SENT invoices carry a real balance (matches the Money page).
+    supabase.from('invoices').select('id,invoice_number,total,amount_paid,due_at,status,customers(id,name)').eq('status', 'sent').order('due_at'),
+    supabase.from('estimates').select('id,estimate_number,status,total,created_at,customers(name)'),
     supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(8),
     supabase.from('customers').select('*', { count: 'exact', head: true }),
     supabase.from('documents').select('id,name,expires_on').eq('archived', false)
@@ -59,22 +62,24 @@ export default async function CommandCenter() {
 
   // ----- Month money -----
   const collected = (monthCollected ?? []).reduce((s, i) => s + Number(i.total), 0); // cash in this month (paid_at)
-  const booked = (monthInvoices ?? []).reduce((s, i) => s + Number(i.total), 0);
+  // "Booked" = invoices raised this month, excluding drafts (a draft isn't a real bill yet).
+  const booked = (monthInvoices ?? []).filter((i) => i.status !== 'draft').reduce((s, i) => s + Number(i.total), 0);
   const expenses = ((monthExpenses ?? []) as Expense[]).reduce((s, e) => s + Number(e.amount), 0);
   const profit = collected - expenses;
   const margin = collected > 0 ? profit / collected : 0;
 
-  // ----- Receivables & alerts -----
+  // ----- Receivables & alerts (sent invoices only) -----
   const open = (openInvoices ?? []) as unknown as (Invoice & { customers: { name: string } | null })[];
-  const arTotal = open.reduce((s, i) => s + Number(i.total), 0);
+  const arTotal = open.reduce((s, i) => s + (Number(i.total) - Number(i.amount_paid ?? 0)), 0);
   const overdue = open.filter((i) => i.due_at && new Date(i.due_at) < now);
-  const allLeads = (leads ?? []) as Lead[];
-  const wonLeads = allLeads.filter((l) => l.status === 'won').length;
-  const closedLeads = wonLeads + allLeads.filter((l) => l.status === 'lost').length;
-  const conversion = closedLeads > 0 ? wonLeads / closedLeads : null;
-  const staleLeads = allLeads.filter((l) => l.status === 'new' && (now.getTime() - new Date(l.created_at).getTime()) > 2 * 86400_000).length;
-  const today = now.toISOString().slice(0, 10);
-  const followUpsDue = allLeads.filter((l) => l.follow_up_on && l.follow_up_on <= today && !['won', 'lost'].includes(l.status));
+
+  // ----- Quotes (replaces the abandoned leads table as the pipeline signal) -----
+  const est = (estimates ?? []) as unknown as EstRow[];
+  const estActive = est.filter((e) => e.status !== 'draft');
+  const accepted = est.filter((e) => e.status === 'accepted').length;
+  const conversion = estActive.length ? accepted / estActive.length : null;
+  const staleQuotes = est.filter((e) => e.status === 'sent' && (now.getTime() - new Date(e.created_at).getTime()) > 14 * 86400_000);
+  const staleValue = staleQuotes.reduce((s, e) => s + Number(e.total), 0);
 
   // ----- Business Health Score (0-100) -----
   const factors = [
@@ -86,10 +91,10 @@ export default async function CommandCenter() {
       why: overdue.length === 0 ? 'No overdue invoices' : `${overdue.length} overdue` },
     { label: 'Conversion', max: 25,
       score: conversion === null ? 13 : Math.round(conversion * 25),
-      why: conversion === null ? 'No closed leads yet' : `${Math.round(conversion * 100)}% of closed leads won` },
+      why: conversion === null ? 'No quotes sent yet' : `${Math.round(conversion * 100)}% of quotes accepted` },
     { label: 'Pipeline', max: 20,
-      score: Math.max(0, 20 - staleLeads * 5),
-      why: staleLeads === 0 ? 'Leads contacted promptly' : `${staleLeads} waiting 2+ days` },
+      score: Math.max(0, 20 - staleQuotes.length * 2),
+      why: staleQuotes.length === 0 ? 'No quotes awaiting an answer' : `${staleQuotes.length} quote${staleQuotes.length > 1 ? 's' : ''} to follow up` },
   ];
   const health = factors.reduce((s, f) => s + f.score, 0);
   const status = health >= 75
@@ -100,7 +105,8 @@ export default async function CommandCenter() {
 
   const dateline = now.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
   const monthName = now.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
-  const hasAlerts = overdue.length > 0 || staleLeads > 0 || followUpsDue.length > 0 || (expiringDocs?.length ?? 0) > 0;
+  const signalCount = overdue.length + (staleQuotes.length ? 1 : 0) + (expiringDocs?.length ?? 0);
+  const hasAlerts = signalCount > 0;
 
   return (
     <div className="space-y-5">
@@ -110,7 +116,7 @@ export default async function CommandCenter() {
           <p className="panel-label">Command Center</p>
           <h1 className="mt-0.5 text-2xl">{dateline}</h1>
         </div>
-        <p className="panel-label" style={{ color: 'var(--text-muted)' }}>SJHC</p>
+        <Link href="/search" className="panel-label hover:text-brand-600" style={{ color: 'var(--text-muted)' }}>Search ⌕</Link>
       </header>
 
       {/* SYSTEM STATUS */}
@@ -129,24 +135,18 @@ export default async function CommandCenter() {
       {/* ATTENTION CHANNEL */}
       {hasAlerts && (
         <div className="card hud-rise" style={{ borderColor: 'var(--brand-accent)', boxShadow: '0 2px 12px rgba(141,29,57,0.12)' }}>
-          <Label right={`${overdue.length + (staleLeads ? 1 : 0) + (followUpsDue.length ? 1 : 0) + (expiringDocs?.length ?? 0)} signals`}>Attention required</Label>
+          <Label right={`${signalCount} signal${signalCount === 1 ? '' : 's'}`}>Attention required</Label>
           <ul className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
             {overdue.map((i) => (
               <li key={i.id} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: DANGER }} />
-                <span><Link className="font-medium text-gray-900 underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
+                <span><Link className="font-medium text-gray-900 underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total) - Number(i.amount_paid ?? 0))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
               </li>
             ))}
-            {staleLeads > 0 && (
+            {staleQuotes.length > 0 && (
               <li className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-gray-900 hover:underline" href="/leads">{staleLeads} new lead{staleLeads > 1 ? 's' : ''}</Link> waiting 2+ days without contact</span>
-              </li>
-            )}
-            {followUpsDue.length > 0 && (
-              <li className="flex items-start gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-gray-900 hover:underline" href="/leads">{followUpsDue.length} follow-up{followUpsDue.length > 1 ? 's' : ''} due</Link> · {followUpsDue.slice(0, 3).map((l) => l.name).join(', ')}{followUpsDue.length > 3 ? '…' : ''}</span>
+                <span><Link className="font-medium text-gray-900 hover:underline" href="/estimates">{staleQuotes.length} quote{staleQuotes.length > 1 ? 's' : ''} worth {money(staleValue)}</Link> awaiting an answer 14+ days — follow up</span>
               </li>
             )}
             {expiringDocs?.map((d) => (
@@ -164,8 +164,8 @@ export default async function CommandCenter() {
         <Label right="Live">Today</Label>
         <Cluster cols="grid-cols-2 sm:grid-cols-4">
           <Cell label="Scheduled" value={String(tJobs.length)} href="/schedule" />
-          <Cell label="Active" value={String(jobsActive)} href="/jobs" tone={jobsActive > 0 ? BRAND : undefined} />
-          <Cell label="Completed" value={String(jobsDone)} href="/jobs" />
+          <Cell label="Active" value={String(jobsActive)} href="/jobs?status=active" tone={jobsActive > 0 ? BRAND : undefined} />
+          <Cell label="Completed" value={String(jobsDone)} href="/jobs?status=paid" />
           <Cell label="Customers" value={String(customerCount ?? 0)} href="/customers" />
         </Cluster>
       </section>
@@ -175,11 +175,11 @@ export default async function CommandCenter() {
         <Label right={monthName}>Month to date</Label>
         <Cluster cols="grid-cols-2 sm:grid-cols-3">
           <Cell label="Collected" value={money(collected)} href="/money" tone={BRAND} />
-          <Cell label="Booked" value={money(booked)} href="/invoices" />
+          <Cell label="Booked" value={money(booked)} href="/invoices" sub="excl. drafts" />
           <Cell label="Expenses" value={money(expenses)} href="/expenses" />
           <Cell label="Profit" value={money(profit)} href="/money" tone={profit >= 0 ? SUCCESS : DANGER} sub={collected > 0 ? `${Math.round(margin * 100)}% margin` : undefined} />
           <Cell label="Outstanding" value={money(arTotal)} href="/invoices" tone={overdue.length > 0 ? DANGER : undefined} sub={overdue.length > 0 ? `${overdue.length} overdue` : undefined} />
-          <Cell label="Conversion" value={conversion === null ? '—' : `${Math.round(conversion * 100)}%`} href="/leads" />
+          <Cell label="Quote acceptance" value={conversion === null ? '—' : `${Math.round(conversion * 100)}%`} href="/reports" />
         </Cluster>
       </section>
 
