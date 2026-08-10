@@ -21,8 +21,10 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="no-print">
-        <Link href="/invoices" className="text-sm text-brand-600 hover:underline">← Invoices</Link>
+      <div className="no-print flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        <Link href="/invoices" className="text-brand-600 hover:underline">← Invoices</Link>
+        {inv.customer_id && <Link href={`/customers/${inv.customer_id}`} className="text-gray-500 hover:text-brand-600 hover:underline">Customer: {inv.customers?.name}</Link>}
+        {inv.job_id && <Link href={`/jobs/${inv.job_id}`} className="text-gray-500 hover:text-brand-600 hover:underline">View job →</Link>}
       </div>
 
       <div className="card p-8 print:border-0 print:shadow-none">

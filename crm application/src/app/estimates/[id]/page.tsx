@@ -24,7 +24,13 @@ export default async function EstimateDetail({ params }: { params: { id: string 
         <div className="mb-6 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-brand-700">ESTIMATE #{est.estimate_number}</h1>
-            <p className="text-sm text-gray-500">{est.customers?.name} · {new Date(est.created_at).toLocaleDateString()}</p>
+            <p className="text-sm text-gray-500">
+              {est.customer_id
+                ? <Link href={`/customers/${est.customer_id}`} className="text-brand-600 hover:underline">{est.customers?.name}</Link>
+                : est.customers?.name}
+              {' · '}{new Date(est.created_at).toLocaleDateString()}
+              {est.job_id && <> · <Link href={`/jobs/${est.job_id}`} className="text-brand-600 hover:underline">view job →</Link></>}
+            </p>
           </div>
           <span className="badge bg-gray-100 capitalize text-gray-700">{est.status}</span>
         </div>

@@ -1,5 +1,6 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
@@ -16,6 +17,22 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
   const [busy, setBusy] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY);
+  const [filterCat, setFilterCat] = useState<'all' | ExpenseCategory>('all');
+  const [q, setQ] = useState('');
+  const [linkedOnly, setLinkedOnly] = useState<'all' | 'linked' | 'overhead'>('all');
+
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return expenses.filter((x) => {
+      if (filterCat !== 'all' && x.category !== filterCat) return false;
+      if (linkedOnly === 'linked' && !x.job_id) return false;
+      if (linkedOnly === 'overhead' && x.job_id) return false;
+      if (!s) return true;
+      return [x.vendor, x.description, x.jobs?.title, x.category.replace(/_/g, ' '), x.incurred_on]
+        .filter(Boolean).some((v) => String(v).toLowerCase().includes(s));
+    });
+  }, [expenses, filterCat, q, linkedOnly]);
+  const filteredTotal = filtered.reduce((sum, x) => sum + Number(x.amount), 0);
 
   async function viewReceipt(path: string) {
     const supabase = createClient();
@@ -118,12 +135,37 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
         </div>
       </form>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input className="input max-w-[220px] flex-1" placeholder="Search vendor, note, job…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="input w-auto" value={filterCat} onChange={(e) => setFilterCat(e.target.value as 'all' | ExpenseCategory)}>
+          <option value="all">All categories</option>
+          {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+        </select>
+        <div className="flex gap-1">
+          {(['all', 'linked', 'overhead'] as const).map((f) => (
+            <button key={f} type="button" onClick={() => setLinkedOnly(f)}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors ${linkedOnly === f ? 'text-gray-900' : 'text-gray-500'}`}
+              style={{ background: linkedOnly === f ? 'var(--surface-elevated)' : 'transparent', border: `1px solid ${linkedOnly === f ? 'var(--border-strong)' : 'var(--border-subtle)'}` }}>
+              {f === 'all' ? 'All' : f === 'linked' ? 'On a job' : 'Overhead'}
+            </button>
+          ))}
+        </div>
+        <span className="badge bg-gray-100 text-gray-600">{filtered.length} · ${filteredTotal.toFixed(2)}</span>
+      </div>
+
       <div className="card divide-y divide-gray-100 p-0">
-        {expenses.map((x) => (
+        {filtered.map((x) => (
           <div key={x.id} className="flex items-center justify-between gap-2 px-4 py-2 text-sm">
             <div className="min-w-0">
               <p className="font-medium capitalize">{x.category.replace(/_/g, ' ')}{x.vendor && <span className="font-normal text-gray-500"> · {x.vendor}</span>}</p>
-              <p className="truncate text-xs text-gray-500">{x.incurred_on}{x.jobs?.title && ` · ${x.jobs.title}`}{x.description && ` · ${x.description}`}</p>
+              <p className="truncate text-xs text-gray-500">
+                {x.incurred_on}
+                {x.job_id && x.jobs?.title
+                  ? <> · <Link href={`/jobs/${x.job_id}`} className="text-brand-600 hover:underline">{x.jobs.title}</Link></>
+                  : <span className="text-gray-400"> · overhead</span>}
+                {x.description && ` · ${x.description}`}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <span className="font-semibold text-red-700">-${Number(x.amount).toFixed(2)}</span>
@@ -135,7 +177,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
             </div>
           </div>
         ))}
-        {!expenses.length && <p className="p-4 text-sm text-gray-500">No expenses logged yet.</p>}
+        {!filtered.length && <p className="p-4 text-sm text-gray-500">{expenses.length ? 'No expenses match these filters.' : 'No expenses logged yet.'}</p>}
       </div>
     </div>
   );

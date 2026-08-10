@@ -26,6 +26,8 @@ function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: strin
     more: <><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></>,
     pricebook: <><path d="M3 11l8.5-8 8.5 8.5-8 8z" /><circle cx="8" cy="8" r="1.3" fill="currentColor" stroke="none" /></>,
     recurring: <><path d="M4 11a8 8 0 0 1 13.5-4.5L20 9" /><path d="M20 13a8 8 0 0 1-13.5 4.5L4 15" /><path d="M20 4v5h-5M4 20v-5h5" /></>,
+    reports: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
+    search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -44,6 +46,8 @@ const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles
   { href: '/invoices', label: 'Invoices', icon: 'invoices', mobile: false, roles: STAFF },
   { href: '/expenses', label: 'Expenses', icon: 'expenses', mobile: false, roles: STAFF },
   { href: '/money', label: 'Money', icon: 'money', mobile: false, roles: STAFF },
+  { href: '/reports', label: 'Reports', icon: 'reports', mobile: false, roles: STAFF },
+  { href: '/search', label: 'Search', icon: 'search', mobile: false },
   { href: '/price-book', label: 'Price book', icon: 'pricebook', mobile: false, roles: STAFF, flag: 'priceBook' },
   { href: '/recurring', label: 'Recurring', icon: 'recurring', mobile: false, roles: STAFF, flag: 'recurring' },
   { href: '/field', label: 'Field', icon: 'field', mobile: true },
