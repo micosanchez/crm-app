@@ -1,16 +1,17 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
-import QuoteComposer, { type ComposerCustomer, type ComposerSettings } from '../QuoteComposer';
+import QuoteComposer, { type ComposerCustomer, type ComposerSettings, type ComposerPriceItem } from '../QuoteComposer';
 
 export const dynamic = 'force-dynamic';
 
 export default async function NewQuotePage() {
   await requireStaff();
   const supabase = createClient();
-  const [{ data: customers }, { data: settings }] = await Promise.all([
+  const [{ data: customers }, { data: settings }, { data: priceItems }] = await Promise.all([
     supabase.from('customers').select('id,name,phone,address').order('name'),
-    supabase.from('business_settings').select('default_valid_days,default_line_item,default_payment_terms,default_additional_terms').eq('id', true).maybeSingle(),
+    supabase.from('business_settings').select('*').eq('id', true).maybeSingle(),
+    supabase.from('service_items').select('id,name,default_price,description').eq('active', true).order('name'),
   ]);
 
   const s: ComposerSettings = {
@@ -18,6 +19,14 @@ export default async function NewQuotePage() {
     default_line_item: settings?.default_line_item ?? null,
     default_payment_terms: settings?.default_payment_terms ?? null,
     default_additional_terms: settings?.default_additional_terms ?? null,
+    business_name: settings?.business_name ?? null,
+    tagline: settings?.tagline ?? null,
+    phone: settings?.phone ?? null,
+    email: settings?.email ?? null,
+    website: settings?.website ?? null,
+    service_area: settings?.service_area ?? null,
+    licensed_insured: settings?.licensed_insured ?? null,
+    ein: settings?.ein ?? null,
   };
 
   return (
@@ -25,7 +34,7 @@ export default async function NewQuotePage() {
       <div className="no-print">
         <Link href="/estimates" className="text-sm text-brand-600 hover:underline">← Estimates</Link>
       </div>
-      <QuoteComposer customers={(customers ?? []) as ComposerCustomer[]} settings={s} />
+      <QuoteComposer customers={(customers ?? []) as ComposerCustomer[]} settings={s} priceItems={(priceItems ?? []) as ComposerPriceItem[]} />
     </div>
   );
 }
