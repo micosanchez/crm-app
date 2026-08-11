@@ -28,6 +28,7 @@ function Icon({ name, className = 'h-5 w-5' }: { name: string; className?: strin
     recurring: <><path d="M4 11a8 8 0 0 1 13.5-4.5L20 9" /><path d="M20 13a8 8 0 0 1-13.5 4.5L4 15" /><path d="M20 4v5h-5M4 20v-5h5" /></>,
     reports: <><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></>,
     search: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" /></>,
   };
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -54,6 +55,7 @@ const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles
   { href: '/documents', label: 'Documents', icon: 'documents', mobile: false },
   { href: '/signatures', label: 'Signatures', icon: 'estimates', mobile: false, roles: STAFF },
   { href: '/team', label: 'Team', icon: 'team', mobile: false, roles: ['admin'] },
+  { href: '/settings', label: 'Settings', icon: 'settings', mobile: false, roles: STAFF },
 ];
 
 export default function Nav() {

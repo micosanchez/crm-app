@@ -160,6 +160,11 @@ export interface Estimate {
   created_at: string;
   payment_instructions?: string | null;
   comments?: string | null;
+  line_item?: string | null;
+  description?: string | null;
+  payment_terms?: string | null;
+  additional_terms?: string | null;
+  internal_notes?: string | null;
   public_token?: string;
   signed_name?: string | null;
   signed_at?: string | null;
