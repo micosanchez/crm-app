@@ -85,7 +85,7 @@ export default function Nav() {
     router.refresh();
   }
 
-  if (pathname === '/login' || pathname?.startsWith('/sign') || pathname?.includes('/print')) return null;
+  if (pathname === '/login' || pathname?.startsWith('/sign/') || pathname?.includes('/print')) return null;
 
   const moreLinks = LINKS.filter((l) => !l.mobile && allowed(l));
   const moreActive = moreLinks.some((l) => pathname === l.href);
@@ -94,7 +94,7 @@ export default function Nav() {
     <>
       {/* Desktop command bar */}
       <nav className="no-print hidden border-b border-[var(--border-subtle)] bg-[var(--bg-secondary)] md:block">
-        <div className="mx-auto flex max-w-7xl items-center gap-1 px-4 py-2">
+        <div className="mx-auto flex flex-wrap max-w-7xl items-center gap-1 px-4 py-2">
           <Link href="/" className="mr-6"><BrandMark /></Link>
           {LINKS.filter(allowed).map((l) => (
             <Link key={l.href} href={l.href}
