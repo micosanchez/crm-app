@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import TeamList from './TeamList';
+import AddMemberForm from './AddMemberForm';
+import TeamAccessLink from './TeamAccessLink';
 import type { UserProfile } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -12,15 +14,18 @@ export default async function TeamPage() {
   ]);
 
   const me = (members as UserProfile[] | null)?.find((m) => m.id === user?.id);
+  const isAdmin = me?.role === 'admin';
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Team</h1>
       <p className="text-sm text-gray-500">
-        New signups start as <b>technician</b>. Admins can change roles and deactivate accounts here.
-        Dispatchers handle scheduling + invoicing; technicians work jobs in the field.
+        Admins add members here (no self-signup). Dispatchers handle scheduling + invoicing;
+        technicians work jobs in the field. New members get a technician role by default.
       </p>
-      <TeamList members={(members ?? []) as UserProfile[]} isAdmin={me?.role === 'admin'} myId={user?.id ?? ''} />
+      <TeamAccessLink />
+      {isAdmin && <AddMemberForm />}
+      <TeamList members={(members ?? []) as UserProfile[]} isAdmin={isAdmin} myId={user?.id ?? ''} />
     </div>
   );
 }
