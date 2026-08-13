@@ -1,4 +1,4 @@
-0032_schedule_to_job.sql-- 0032 Issue 6 (DB side): an estimate's scheduled_start must reach the job.
+-- 0032 Issue 6 (DB side): an estimate's scheduled_start must reach the job.
 -- Two paths create/own the job:
 --   (a) customer signs -> sign_estimate() [0008]  -> patched here to carry the
 --       schedule + a clean title (was using the raw "title || paragraph" item).
