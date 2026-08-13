@@ -28,6 +28,14 @@ const todayPlus = (days: number) => {
   return d.toISOString().slice(0, 10);
 };
 
+// ISO timestamp -> value for a <input type="datetime-local"> (local time), and back.
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
 /* Driveway screen. Type a name, describe the job in one line, set a price, save.
    Handles both CREATE (no estimate) and EDIT (existing draft/sent). Writes
    first-class estimate columns (one line item, never itemized). The live preview
@@ -52,6 +60,7 @@ export default function QuoteComposer({ customers, settings, estimate, priceItem
   const [description, setDescription] = useState(estimate?.description ?? '');
   const [price, setPrice] = useState(estimate ? String(estimate.total ?? '') : '');
   const [validUntil, setValidUntil] = useState(estimate?.valid_until ?? todayPlus(settings.default_valid_days ?? 14));
+  const [scheduledStart, setScheduledStart] = useState(toLocalInput(estimate?.scheduled_start));
   const [paymentTerms, setPaymentTerms] = useState(estimate?.payment_terms ?? estimate?.payment_instructions ?? settings.default_payment_terms ?? '');
   const [additionalTerms, setAdditionalTerms] = useState(estimate?.additional_terms ?? estimate?.comments ?? settings.default_additional_terms ?? '');
   const [internalNotes, setInternalNotes] = useState(estimate?.internal_notes ?? estimate?.notes ?? '');
@@ -155,6 +164,7 @@ export default function QuoteComposer({ customers, settings, estimate, priceItem
       total: priceNum,
       subtotal: priceNum,
       valid_until: validUntil || null,
+      scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
       payment_terms: paymentTerms.trim() || null,
       additional_terms: additionalTerms.trim() || null,
       internal_notes: internalNotes.trim() || null,
@@ -272,6 +282,12 @@ export default function QuoteComposer({ customers, settings, estimate, priceItem
               <label className="block text-xs font-bold uppercase tracking-wide text-gray-400">Valid until</label>
               <input className="input mt-1 w-full" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
             </div>
+          </div>
+          <div className="mt-3">
+            <label className="block text-xs font-bold uppercase tracking-wide text-gray-400">
+              Scheduled arrival <span className="font-normal normal-case text-gray-400">· sets the job's start time when this quote is accepted</span>
+            </label>
+            <input className="input mt-1 w-full" type="datetime-local" value={scheduledStart} onChange={(e) => setScheduledStart(e.target.value)} />
           </div>
         </div>
 
