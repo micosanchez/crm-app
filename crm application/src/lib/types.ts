@@ -23,6 +23,8 @@ export interface Customer {
   phone: string | null;
   address: string | null;
   city: string | null;
+  state: string | null;
+  postal_code: string | null;
   notes: string | null;
   tags: CustomerTag[];
   created_at: string;
@@ -162,6 +164,7 @@ export interface Estimate {
   comments?: string | null;
   line_item?: string | null;
   description?: string | null;
+  scheduled_start?: string | null;
   payment_terms?: string | null;
   additional_terms?: string | null;
   internal_notes?: string | null;
