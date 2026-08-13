@@ -17,6 +17,8 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
     email: customer.email ?? '',
     address: customer.address ?? '',
     city: customer.city ?? '',
+    state: customer.state ?? 'MI',
+    postal_code: customer.postal_code ?? '',
   });
   const [tags, setTags] = useState<CustomerTag[]>(customer.tags ?? []);
 
@@ -32,6 +34,8 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
         email: form.email || null,
         address: form.address || null,
         city: form.city || null,
+        state: form.state || null,
+        postal_code: form.postal_code || null,
         tags,
       },
     });
@@ -50,6 +54,8 @@ export default function CustomerEditForm({ customer }: { customer: Customer }) {
       <input className="input" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
       <input className="input" placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
       <input className="input md:col-span-2" placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+      <input className="input" placeholder="State" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+      <input className="input" placeholder="ZIP" value={form.postal_code} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} />
       <div className="flex flex-wrap gap-2 md:col-span-2">
         {TAGS.map((t) => (
           <button key={t} type="button"
