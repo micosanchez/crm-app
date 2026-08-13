@@ -148,12 +148,18 @@ main { position: relative; z-index: 1; }
 @keyframes hudRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .hud-rise { animation: hudRise var(--anim-normal) var(--ease-standard) both; }
 
-/* Documents must print paper-correct regardless of screen theme */
+/* Documents print/export with their full brand visual layer — gradient headers,
+   coloured table heads, gradient totals, status pills. print-color-adjust:exact
+   stops the browser from dropping backgrounds when saving to PDF, so the colour
+   comes through even without ticking "Background graphics". We deliberately do NOT
+   flatten text to black here — that was what made colour documents print black. */
 @media print {
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   body::before { display: none !important; }
   .no-print { display: none !important; }
-  body { background: #fff !important; color: #111 !important; }
-  .card { background: #fff !important; border-color: #ddd !important; box-shadow: none !important; }
-  .card *, h1, h2, h3, p, td, th, span { color: #111 !important; }
-  .card .text-brand-700, .card h1 { color: var(--brand-primary) !important; }
+  body { background: #fff !important; }
+  .card { background: #fff !important; border-color: #e5e5e5 !important; box-shadow: none !important; }
 }
