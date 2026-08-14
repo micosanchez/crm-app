@@ -34,13 +34,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ invoice: dupes[0], existing: true });
   }
 
+  // Seed invoice defaults from Settings (business_settings singleton). Falls back to
+  // the old hardcoded behaviour when unset. tax rate is stored as a percent (6 = 6%);
+  // invoices.tax_rate is a fraction, so divide by 100.
+  const { data: cfg } = await supabase
+    .from('business_settings')
+    .select('default_tax_rate, default_invoice_due_days, default_invoice_payment_instructions')
+    .eq('id', true)
+    .maybeSingle();
+  const dueDays = Number(cfg?.default_invoice_due_days ?? 14) || 14;
+
   const { data: invoice, error: invErr } = await supabase
     .from('invoices')
     .insert({
       job_id: job.id,
       customer_id: job.customer_id,
       status: 'draft',
-      due_at: new Date(Date.now() + 14 * 86400_000).toISOString(),
+      tax_rate: (Number(cfg?.default_tax_rate ?? 0) || 0) / 100,
+      payment_instructions: cfg?.default_invoice_payment_instructions ?? null,
+      due_at: new Date(Date.now() + dueDays * 86400_000).toISOString(),
       created_by: user.id,
     })
     .select()
