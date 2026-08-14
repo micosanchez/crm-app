@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { requireStaff } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import BusinessSettingsForm, { type BusinessSettings } from './BusinessSettingsForm';
 
 export const dynamic = 'force-dynamic';
@@ -19,10 +19,13 @@ const DEFAULTS: BusinessSettings = {
   default_line_item: null,
   default_payment_terms: null,
   default_additional_terms: null,
+  default_tax_rate: 0,
+  default_invoice_due_days: 14,
+  default_invoice_payment_instructions: null,
 };
 
 export default async function SettingsPage() {
-  await requireStaff();
+  await requireAdmin();
   const supabase = createClient();
   const { data } = await supabase.from('business_settings').select('*').eq('id', true).maybeSingle();
   const initial = { ...DEFAULTS, ...(data ?? {}) } as BusinessSettings;
