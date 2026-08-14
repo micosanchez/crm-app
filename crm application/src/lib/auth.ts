@@ -17,3 +17,11 @@ export async function requireStaff(): Promise<UserRole> {
   if (role !== 'admin' && role !== 'dispatcher') redirect('/field');
   return role;
 }
+
+/** Gate admin-only pages (Settings, Team). Non-admins bounce to the dashboard,
+ *  which itself sends technicians on to /field. */
+export async function requireAdmin(): Promise<UserRole> {
+  const role = await getRole();
+  if (role !== 'admin') redirect('/');
+  return role;
+}
