@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter, Playfair_Display } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/Nav';
+import BackButton from '@/components/BackButton';
 import SwRegister from '@/components/SwRegister';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.className} ${playfair.variable} min-h-screen antialiased`}>
         <SwRegister />
         <Nav />
-        <main className="mx-auto max-w-7xl p-4 pb-24 md:pb-8">{children}</main>
+        <main className="mx-auto max-w-7xl p-4 pb-24 md:pb-8">
+          <BackButton />
+          {children}
+        </main>
       </body>
     </html>
   );
