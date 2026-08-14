@@ -18,6 +18,9 @@ export interface BusinessSettings {
   default_line_item: string | null;
   default_payment_terms: string | null;
   default_additional_terms: string | null;
+  default_tax_rate: number | null;
+  default_invoice_due_days: number | null;
+  default_invoice_payment_instructions: string | null;
 }
 
 type Field = keyof BusinessSettings;
@@ -50,6 +53,9 @@ export default function BusinessSettingsForm({ initial }: { initial: BusinessSet
       default_line_item: s.default_line_item?.trim() || null,
       default_payment_terms: s.default_payment_terms?.trim() || null,
       default_additional_terms: s.default_additional_terms?.trim() || null,
+      default_tax_rate: Number(s.default_tax_rate) || 0,
+      default_invoice_due_days: Number(s.default_invoice_due_days) || 14,
+      default_invoice_payment_instructions: s.default_invoice_payment_instructions?.trim() || null,
       updated_at: new Date().toISOString(),
     }).eq('id', true);
     setBusy(false);
@@ -107,6 +113,26 @@ export default function BusinessSettingsForm({ initial }: { initial: BusinessSet
           <textarea className="input mt-1 w-full" rows={2} value={s.default_additional_terms ?? ''} onChange={(e) => set('default_additional_terms', e.target.value)} />
         </div>
         <p className="text-xs text-gray-400">These prefill every new quote. You can still edit them per quote.</p>
+      </div>
+
+      {/* Invoice defaults */}
+      <div className="card space-y-3">
+        <p className="text-xs font-bold uppercase tracking-wide text-gray-400">Invoice defaults</p>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className="block text-xs text-gray-500">Default tax rate (%)</label>
+            <input className="input mt-1 w-full" type="number" min={0} step={0.1} value={s.default_tax_rate ?? 0} onChange={(e) => set('default_tax_rate', Number(e.target.value))} />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500">Invoice due in (days)</label>
+            <input className="input mt-1 w-full" type="number" min={0} value={s.default_invoice_due_days ?? 14} onChange={(e) => set('default_invoice_due_days', Number(e.target.value))} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500">How customers pay (shown on every invoice)</label>
+          <textarea className="input mt-1 w-full" rows={2} value={s.default_invoice_payment_instructions ?? ''} onChange={(e) => set('default_invoice_payment_instructions', e.target.value)} placeholder="Venmo @sanchezhaul · Zelle 313-… · checks payable to Sanchez Junk & Haul Co." />
+        </div>
+        <p className="text-xs text-gray-400">Every invoice generated from a job starts with these. You can still change them per invoice.</p>
       </div>
 
       {error && <p className="text-sm text-red-600">Couldn’t save: {error}</p>}
