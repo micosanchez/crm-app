@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth';
 import TeamList from './TeamList';
 import AddMemberForm from './AddMemberForm';
 import TeamAccessLink from './TeamAccessLink';
@@ -7,6 +8,7 @@ import type { UserProfile } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 export default async function TeamPage() {
+  await requireAdmin();
   const supabase = createClient();
   const [{ data: { user } }, { data: members }] = await Promise.all([
     supabase.auth.getUser(),
