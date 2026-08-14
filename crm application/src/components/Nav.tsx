@@ -55,7 +55,7 @@ const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles
   { href: '/documents', label: 'Documents', icon: 'documents', mobile: false },
   { href: '/signatures', label: 'Signatures', icon: 'estimates', mobile: false, roles: STAFF },
   { href: '/team', label: 'Team', icon: 'team', mobile: false, roles: ['admin'] },
-  { href: '/settings', label: 'Settings', icon: 'settings', mobile: false, roles: STAFF },
+  { href: '/settings', label: 'Settings', icon: 'settings', mobile: false, roles: ['admin'] },
 ];
 
 export default function Nav() {
@@ -73,10 +73,11 @@ export default function Nav() {
     });
   }, []);
 
-  // Show a link if it has no role restriction, or while role is still loading
-  // (keeps the admin nav instant), or the loaded role is permitted.
+  // Show a link if it has no role restriction, or the loaded role is permitted.
+  // Role-restricted links stay hidden until the role is known, so admin-only tabs
+  // (Team, Settings) never flash to a dispatcher/technician on first paint.
   const allowed = (l: { roles?: UserRole[]; flag?: keyof typeof flags }) =>
-    (!l.flag || flags[l.flag]) && (!l.roles || !role || l.roles.includes(role));
+    (!l.flag || flags[l.flag]) && (!l.roles || (role != null && l.roles.includes(role)));
 
   async function handleSignOut() {
     const supabase = createClient();
