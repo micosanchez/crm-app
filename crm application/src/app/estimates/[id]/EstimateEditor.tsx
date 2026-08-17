@@ -79,6 +79,14 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
         {estimate.status === 'accepted' && estimate.job_id && (
           <a className="btn-ghost" href={`/jobs/${estimate.job_id}`}>View job →</a>
         )}
+        {(estimate.status === 'accepted' || estimate.status === 'declined' || estimate.status === 'expired') && (
+          <>
+            <button className="btn-ghost" disabled={busy} onClick={() => setStatus('sent')}>Reopen to edit</button>
+            {estimate.status !== 'declined' && (
+              <button className="btn-ghost" disabled={busy} onClick={() => setStatus('declined')}>Mark declined</button>
+            )}
+          </>
+        )}
         {estimate.status !== 'accepted' && (
           <DeleteRecordButton table="estimates" id={estimate.id} redirectTo="/estimates" label="quote"
             confirmMessage="Delete this quote for good? This can’t be undone." />
@@ -86,6 +94,9 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
       </div>
       {estimate.status === 'accepted' && (
         <p className="text-xs text-gray-400">Accepted quotes can’t be deleted — they’re tied to a job. Delete the job first if you need to remove it.</p>
+      )}
+      {(estimate.status === 'accepted' || estimate.status === 'declined' || estimate.status === 'expired') && (
+        <p className="text-xs text-gray-400">Use "Reopen to edit" to put this quote back to sent so you can change it or accept it again, or "Mark declined" if the customer canceled. Reopening an accepted quote leaves its job in place - cancel that from the Jobs tab if you no longer need it.</p>
       )}
       {error && <p className="text-sm text-red-600">Couldn&apos;t save: {error}</p>}
     </div>
