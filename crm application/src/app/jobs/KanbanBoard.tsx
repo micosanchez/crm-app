@@ -47,7 +47,7 @@ export default function KanbanBoard({ jobs: initial }: { jobs: Job[] }) {
                   className="cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm active:cursor-grabbing">
                   <Link href={`/jobs/${j.id}`} className="font-medium hover:text-brand-700">{j.title}</Link>
                   <p className="text-xs text-gray-500">{j.customers?.name}</p>
-                  {j.estimated_value != null && <p className="text-xs font-semibold text-brand-700">${Number(j.estimated_value).toFixed(0)}</p>}
+                  {(j.billed_value ?? j.estimated_value) != null && <p className="text-xs font-semibold text-brand-700">${Number(j.billed_value ?? j.estimated_value).toFixed(0)}</p>}
                   {/* Mobile-friendly advance button (drag/drop is desktop) */}
                   {status !== 'paid' && (
                     <button
