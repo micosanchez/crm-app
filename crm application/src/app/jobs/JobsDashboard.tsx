@@ -37,7 +37,9 @@ const fmtK = (n: number) => {
   return `$${k.toFixed(dp)}K`;
 };
 const fmtFull = (n: number) => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-const val = (j: Job) => Number(j.estimated_value ?? 0);
+// Real revenue once invoiced (billed_value), else the estimate. Keeps paid totals
+// accurate when the final invoice differs from the original quote.
+const val = (j: Job) => Number(j.billed_value ?? j.estimated_value ?? 0);
 
 interface MonthEntry { key: string; label: string; list: Job[]; total: number; pct: number | null }
 
@@ -242,7 +244,7 @@ export default function JobsDashboard({ jobs, customers }: {
                   <p className="panel-label mt-0.5">{j.customers?.name ?? 'No customer'} · {new Date(j.scheduled_start ?? j.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="metric font-semibold text-gray-900">{j.estimated_value != null ? fmtFull(val(j)) : '—'}</p>
+                  <p className="metric font-semibold text-gray-900">{j.billed_value != null || j.estimated_value != null ? fmtFull(val(j)) : '—'}</p>
                   <p className={`mt-0.5 text-[11px] font-semibold uppercase tracking-wider ${TONE_TEXT[c.tone]}`}>{c.label}</p>
                 </div>
               </button>
