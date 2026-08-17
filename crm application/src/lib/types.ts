@@ -42,6 +42,10 @@ export interface Job {
   scheduled_end: string | null;
   address: string | null;
   estimated_value: number | null;
+  /** Computed (not a DB column): sum of this job's non-draft invoice totals, or
+   *  null when it hasn't been invoiced. Lets views show the real billed amount
+   *  once a job is invoiced instead of the original estimate. */
+  billed_value?: number | null;
   lead_source?: string | null;
   photos: { url: string; caption?: string; uploaded_by?: string; uploaded_at?: string }[];
   created_at: string;
