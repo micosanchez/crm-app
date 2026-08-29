@@ -17,7 +17,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
     await Promise.all([
       supabase.from('customers').select('*').eq('id', params.id).single(),
       supabase.from('jobs').select('*').eq('customer_id', params.id).order('created_at', { ascending: false }),
-      supabase.from('invoices').select('id,invoice_number,status,total,amount_paid,paid_at,created_at,due_at').eq('customer_id', params.id).order('created_at', { ascending: false }),
+      supabase.from('invoices').select('id,invoice_number,status,total,amount_paid,paid_at,created_at,due_at,voided_at').eq('customer_id', params.id).order('created_at', { ascending: false }),
       supabase.from('estimates').select('id,estimate_number,status,total,created_at').eq('customer_id', params.id).order('created_at', { ascending: false }),
       supabase.from('notes').select('*').eq('entity_type', 'customer').eq('entity_id', params.id).order('created_at', { ascending: false }),
       supabase.from('activity_log').select('*').eq('entity_id', params.id).order('created_at', { ascending: false }).limit(50),
@@ -30,11 +30,11 @@ export default async function CustomerDetail({ params }: { params: { id: string 
   const estList = (estimates as Estimate[] | null) ?? [];
 
   // ----- Customer 360 rollups -----
-  const paidInvoices = invList.filter((i) => i.status === 'paid');
+  const paidInvoices = invList.filter((i) => i.status === 'paid' && !i.voided_at);
   const lifetimeRevenue = paidInvoices.reduce((s, i) => s + Number(i.total), 0);
   const balanceOwed = invList
     .filter((i) => i.status === 'sent')
-    .reduce((s, i) => s + (Number(i.total) - Number(i.amount_paid ?? 0)), 0);
+    .reduce((s, i) => s + (i.voided_at ? 0 : Number(i.total) - Number(i.amount_paid ?? 0)), 0);
   const paidJobsCount = jobList.filter((j) => j.status === 'paid').length;
   const avgTicket = paidInvoices.length ? lifetimeRevenue / paidInvoices.length : 0;
   // Most recent lead source recorded on any of this customer's jobs.
