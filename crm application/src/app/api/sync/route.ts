@@ -40,6 +40,8 @@ export async function POST(req: NextRequest) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const { data: me } = await supabase.from('users').select('role').eq('id', user.id).single();
+  const isTech = me?.role !== 'admin' && me?.role !== 'dispatcher';
 
   let actions: QueuedAction[];
   try {
@@ -112,8 +114,21 @@ export async function POST(req: NextRequest) {
           continue;
         }
       }
-      const { error: e } = await supabase.from(table).update(payload).eq('id', id);
-      error = e?.message ?? null;
+      if (isTech && table === 'jobs') {
+        // Technicians have no direct UPDATE path on jobs (RLS): status and
+        // photos go through the assigned-only SECURITY DEFINER RPC; anything
+        // else is rejected loudly instead of silently updating zero rows.
+        const keys = Object.keys(payload);
+        if (keys.some((k) => k !== 'status' && k !== 'photos')) {
+          results.push({ idempotency_key, status: 'rejected', error: 'Technicians can only update job status and photos.' });
+          continue;
+        }
+        const { data: okRpc, error: e } = await supabase.rpc('tech_update_job', { p_job_id: id, p_patch: payload });
+        error = e?.message ?? (okRpc ? null : 'Job not found or not assigned to you.');
+      } else {
+        const { error: e } = await supabase.from(table).update(payload).eq('id', id);
+        error = e?.message ?? null;
+      }
       if (!error) touchedInBatch.add(`${table}:${id}`);
     } else if (op === 'delete' && id) {
       const { error: e } = await supabase.from(table).delete().eq('id', id);
