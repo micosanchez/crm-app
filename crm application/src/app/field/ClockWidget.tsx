@@ -11,14 +11,30 @@ function fmtDur(ms: number) {
   return `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
-/** Clock in/out for the logged-in worker. Labor is attributed to today's job. */
+/** Fire-and-forget clock notification to the owner (logged server-side). */
+function notifyClock(event: 'clock_in' | 'clock_out', entryId: string) {
+  fetch('/api/notify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event, entry_id: entryId }),
+  }).catch(() => {});
+}
+
+/** Clock in/out for the logged-in worker. Labor is attributed to today's job.
+ *  When jobs are assigned for the day the FIRST one is preselected — "General /
+ *  no job" is a deliberate choice, so hours land against the right job by default. */
 export default function ClockWidget({ userId, openEntry, jobs }: {
   userId: string; openEntry: TimeEntry | null; jobs: Pick<Job, 'id' | 'title'>[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const [jobId, setJobId] = useState('');
+  const [jobId, setJobId] = useState(jobs.length > 0 ? jobs[0].id : '');
   const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    // If the day's jobs load after first render, adopt the first as the default.
+    setJobId((cur) => cur || (jobs.length > 0 ? jobs[0].id : ''));
+  }, [jobs]);
 
   useEffect(() => {
     if (!openEntry) return;
@@ -28,9 +44,11 @@ export default function ClockWidget({ userId, openEntry, jobs }: {
 
   async function clockIn() {
     setBusy(true);
-    const { error } = await createClient().from('time_entries').insert({ user_id: userId, job_id: jobId || null });
+    const { data, error } = await createClient().from('time_entries')
+      .insert({ user_id: userId, job_id: jobId || null }).select('id').single();
     setBusy(false);
     if (error) { alert(`Couldn't clock in: ${error.message}`); return; }
+    if (data?.id) notifyClock('clock_in', data.id);
     router.refresh();
   }
   async function clockOut() {
@@ -39,6 +57,7 @@ export default function ClockWidget({ userId, openEntry, jobs }: {
     const { error } = await createClient().from('time_entries').update({ ended_at: new Date().toISOString() }).eq('id', openEntry.id);
     setBusy(false);
     if (error) { alert(`Couldn't clock out: ${error.message}`); return; }
+    notifyClock('clock_out', openEntry.id);
     router.refresh();
   }
 
@@ -60,8 +79,8 @@ export default function ClockWidget({ userId, openEntry, jobs }: {
       <p className="panel-label">Time clock</p>
       <div className="flex gap-2">
         <select className="input" value={jobId} onChange={(e) => setJobId(e.target.value)}>
-          <option value="">General / no job</option>
           {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
+          <option value="">General / no job</option>
         </select>
         <button className="btn-primary px-6" disabled={busy} onClick={clockIn}>{busy ? '…' : 'Clock in'}</button>
       </div>

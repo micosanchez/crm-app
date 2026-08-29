@@ -32,7 +32,7 @@ export default function PhotoSection({ job, big = false }: { job: Job; big?: boo
       }
     }
     if (added.length) {
-      const { error: saveErr } = await supabase.from('jobs').update({ photos: [...photos, ...added] }).eq('id', job.id);
+      const { error: saveErr } = await supabase.rpc('tech_update_job', { p_job_id: job.id, p_patch: { photos: [...photos, ...added] } });
       if (saveErr) alert(`Photos uploaded but couldn't be attached to the job: ${saveErr.message}`);
     }
     setBusy(false);

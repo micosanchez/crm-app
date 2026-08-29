@@ -18,6 +18,9 @@ export const viewport: Viewport = {
   themeColor: '#f7f6f4',
   width: 'device-width',
   initialScale: 1,
+  // Without viewport-fit=cover every env(safe-area-inset-*) is 0 and the tab
+  // bar's outer items get clipped by the display's rounded corners.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

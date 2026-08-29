@@ -20,10 +20,60 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ skipped: 'notifications not configured' });
   }
 
-  let body: { event?: string; kind?: string; token?: string; job_id?: string; user_id?: string };
+  let body: { event?: string; kind?: string; token?: string; job_id?: string; user_id?: string; entry_id?: string };
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'bad body' }, { status: 400 }); }
 
   const supabase = createClient();
+
+  // ---- Time clock: email the owner the moment anyone clocks in or out ----
+  if (body.event === 'clock_in' || body.event === 'clock_out') {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+    if (!body.entry_id) return NextResponse.json({ error: 'missing entry_id' }, { status: 400 });
+
+    const { data: entry } = await supabase.from('time_entries')
+      .select('id,user_id,job_id,started_at,ended_at,users(full_name,email),jobs(title)')
+      .eq('id', body.entry_id).maybeSingle();
+    if (!entry) return NextResponse.json({ error: 'not found' }, { status: 404 });
+    // Only the worker themselves (or staff) can trigger the notification for an entry.
+    const { data: me } = await supabase.from('users').select('role,full_name').eq('id', user.id).single();
+    const staff = me?.role === 'admin' || me?.role === 'dispatcher';
+    if (entry.user_id !== user.id && !staff) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
+
+    // Technician sessions can't read jobs directly — fall back to the assigned-only RPC for the title.
+    let jobTitle = (entry.jobs as { title?: string } | null)?.title ?? null;
+    if (!jobTitle && entry.job_id) {
+      const { data: tj } = await supabase.rpc('tech_job', { p_id: entry.job_id });
+      jobTitle = (tj as { title?: string }[] | null)?.[0]?.title ?? null;
+    }
+
+    const who = (entry.users as { full_name?: string } | null)?.full_name ?? me?.full_name ?? 'A crew member';
+    const fmt = (iso: string) => new Date(iso).toLocaleString('en-US', {
+      timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+    });
+    const onWhat = jobTitle ?? 'General / no job';
+    let subject: string;
+    let text: string;
+    if (body.event === 'clock_in') {
+      subject = `⏱ ${who} clocked IN — ${onWhat}`;
+      text = `${who} clocked in at ${fmt(entry.started_at)}.\nJob: ${onWhat}\n\nTime log: ${APP_URL}/time`;
+    } else {
+      const ended = entry.ended_at ?? new Date().toISOString();
+      const mins = Math.max(0, Math.round((new Date(ended).getTime() - new Date(entry.started_at).getTime()) / 60000));
+      const dur = `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+      subject = `⏱ ${who} clocked OUT — ${dur} on ${onWhat}`;
+      text = `${who} clocked out at ${fmt(ended)}.\nJob: ${onWhat}\nIn at: ${fmt(entry.started_at)}\nWorked: ${dur}\n\nTime log: ${APP_URL}/time`;
+    }
+    const result = await sendNotification({
+      event: body.event, to: owner, entityKind: 'job',
+      entityId: entry.job_id ?? undefined, subject, text,
+    });
+    return result.ok
+      ? NextResponse.json({ sent: true })
+      : NextResponse.json({ error: result.error ?? 'send failed' }, { status: 502 });
+  }
 
   // ---- Crew assignment: authenticated staff only; everything derived server-side ----
   if (body.event === 'assigned') {

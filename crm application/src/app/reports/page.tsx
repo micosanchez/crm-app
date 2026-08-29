@@ -34,7 +34,7 @@ export default async function ReportsPage() {
   const supabase = createClient();
 
   const [{ data: paid }, { data: jobs }, { data: expenses }, { data: estimates }, { data: profit }] = await Promise.all([
-    supabase.from('invoices').select('total,customer_id,job_id,customers(id,name)').eq('status', 'paid'),
+    supabase.from('invoices').select('total,customer_id,job_id,customers(id,name)').eq('status', 'paid').is('voided_at', null),
     supabase.from('jobs').select('id,lead_source,service,status'),
     supabase.from('expenses').select('category,amount,vendor,incurred_on'),
     supabase.from('estimates').select('status,total'),

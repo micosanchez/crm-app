@@ -5,11 +5,13 @@ import { mutate } from '@/lib/offline/sync';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
 import { JOB_PIPELINE, type Job, type JobStatus } from '@/lib/types';
 
-export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: boolean }) {
+export default function JobActions({ job, hasInvoice, isStaff = true }: { job: Job; hasInvoice: boolean; isStaff?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const idx = JOB_PIPELINE.indexOf(job.status);
-  const next: JobStatus | undefined = job.status === 'cancelled' ? undefined : JOB_PIPELINE[idx + 1];
+  let next: JobStatus | undefined = job.status === 'cancelled' ? undefined : JOB_PIPELINE[idx + 1];
+  // Technicians move a job through the field stages only — invoicing is back office.
+  if (!isStaff && next && !['in_progress', 'completed'].includes(next)) next = undefined;
 
   async function advance() {
     if (!next) return;
@@ -47,7 +49,7 @@ export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: 
         </button>
       )}
       {/* Couldn't do the job (no access, customer bailed, etc.) — keep the record, drop it from the pipeline */}
-      {job.status !== 'cancelled' && job.status !== 'paid' && (
+      {isStaff && job.status !== 'cancelled' && job.status !== 'paid' && (
         <button
           className="btn-ghost"
           style={{ color: 'var(--status-danger)' }}
@@ -56,12 +58,18 @@ export default function JobActions({ job, hasInvoice }: { job: Job; hasInvoice: 
           Cancel job
         </button>
       )}
-      {job.status === 'cancelled' && (
+      {isStaff && job.status === 'cancelled' && (
         <button className="btn-ghost" disabled={busy} onClick={() => setStatus('scheduled')}>
           Reopen job
         </button>
       )}
-      {!hasInvoice && job.status !== 'paid' && (
+      {isStaff && job.status === 'paid' && (
+        <button className="btn-ghost" disabled={busy}
+          onClick={() => setStatus('in_progress', 'Reopen this closed job for correction? Its invoice and payments stay as they are.')}>
+          Reopen for correction
+        </button>
+      )}
+      {isStaff && !hasInvoice && job.status !== 'paid' && (
         <DeleteRecordButton table="jobs" id={job.id} redirectTo="/jobs" label="job"
           confirmMessage="Delete this job for good? This can’t be undone. (To just drop it from the pipeline, use Cancel job instead.)"
           linkedHint="If it has an invoice, delete that first." />

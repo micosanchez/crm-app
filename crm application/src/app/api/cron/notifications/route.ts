@@ -97,7 +97,8 @@ export async function POST(req: NextRequest) {
 
   // ---------- 2) Owner digest ----------
   const in3days = new Date(now.getTime() + 3 * 86400_000).toISOString();
-  const [{ data: overdue }, { data: expiring }, { data: followUps }] = await Promise.all([
+  const twelveHoursAgo = new Date(now.getTime() - 12 * 3600_000).toISOString();
+  const [{ data: overdue }, { data: expiring }, { data: followUps }, { data: forgotten }] = await Promise.all([
     admin.from('invoices')
       .select('invoice_number, total, due_at, customers(name)')
       .not('status', 'eq', 'paid').not('due_at', 'is', null).lt('due_at', now.toISOString())
@@ -112,6 +113,12 @@ export async function POST(req: NextRequest) {
       .not('follow_up_on', 'is', null).lte('follow_up_on', today)
       .not('status', 'in', '("won","lost")')
       .order('follow_up_on').limit(20),
+    // Forgotten clock-outs: still running after 12h — silently accruing hours.
+    admin.from('time_entries')
+      .select('id, started_at, users(full_name), jobs(title)')
+      .is('ended_at', null).is('deleted_at', null)
+      .lt('started_at', twelveHoursAgo)
+      .order('started_at').limit(20),
   ]);
 
   const sections: string[] = [];
@@ -126,13 +133,17 @@ export async function POST(req: NextRequest) {
   if (followUps?.length) {
     sections.push(`FOLLOW-UPS DUE (${followUps.length})\n` + followUps.map((l) => `• ${l.name}`).join('\n'));
   }
+  if (forgotten?.length) {
+    sections.push(`⚠️ STILL ON THE CLOCK 12h+ — LIKELY FORGOT TO CLOCK OUT (${forgotten.length})\n` + forgotten.map((t) =>
+      `• ${(t.users as { full_name?: string } | null)?.full_name ?? 'Unknown'} — in since ${new Date(t.started_at as string).toLocaleString('en-US', { timeZone: 'America/Detroit' })}${(t.jobs as { title?: string } | null)?.title ? ` on ${(t.jobs as { title?: string }).title}` : ''}\n   Fix it: ${APP_URL}/time`).join('\n'));
+  }
 
   if (sections.length) {
     const result = await sendNotification({
       event: 'owner_digest',
       to: owner,
       dedupeKey: `owner_digest:${today}`,
-      subject: `☀️ SJHC morning digest — ${overdue?.length ?? 0} overdue, ${expiring?.length ?? 0} expiring, ${followUps?.length ?? 0} follow-ups`,
+      subject: `☀️ SJHC morning digest — ${overdue?.length ?? 0} overdue, ${expiring?.length ?? 0} expiring, ${followUps?.length ?? 0} follow-ups${forgotten?.length ? `, ${forgotten.length} forgot to clock out` : ''}`,
       text: `${sections.join('\n\n')}\n\n${APP_URL}\n\n— SJHC Command Center`,
     });
     summary.digest = result.ok ? (result.skipped ?? 'sent') : `failed: ${result.error}`;

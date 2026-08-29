@@ -19,11 +19,72 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
   const role = await getRole();
   const isStaff = role === 'admin' || role === 'dispatcher';
 
+  // Technicians: redacted, assigned-only view via the RPC (no money anywhere).
+  if (!isStaff) {
+    const [{ data: tj }, { data: notes }] = await Promise.all([
+      supabase.rpc('tech_job', { p_id: params.id }),
+      supabase.from('notes').select('*').eq('entity_type', 'job').eq('entity_id', params.id).order('created_at', { ascending: false }),
+    ]);
+    const t = ((tj ?? []) as {
+      id: string; title: string; description: string | null; status: Job['status'];
+      service: Job['service']; scheduled_start: string | null; scheduled_end: string | null;
+      address: string | null; photos: Job['photos']; customer_id: string | null;
+      customer_name: string | null; customer_phone: string | null;
+    }[])[0];
+    if (!t) return <p>Job not found (or not assigned to you).</p>;
+    const tJob = {
+      id: t.id, customer_id: t.customer_id ?? '', title: t.title, description: t.description,
+      service: t.service, status: t.status, scheduled_start: t.scheduled_start,
+      scheduled_end: t.scheduled_end, address: t.address, estimated_value: null,
+      photos: t.photos ?? [], created_at: '', updated_at: '',
+      customers: t.customer_id ? { id: t.customer_id, name: t.customer_name ?? '', phone: t.customer_phone, address: t.address } : undefined,
+    } as Job;
+    return (
+      <div className="space-y-6">
+        <div>
+          <Link href="/jobs" className="text-sm text-brand-600 hover:underline">← My jobs</Link>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{t.title}</h1>
+            <StatusBadge status={t.status} />
+          </div>
+          <p className="text-sm text-gray-500">
+            {t.customer_name}{' · '}{t.service.replace('_', ' ')} · {t.address ?? 'no address'}
+            {t.scheduled_start && <> · {new Date(t.scheduled_start).toLocaleString()}</>}
+          </p>
+          {t.description && <p className="mt-2 text-sm">{t.description}</p>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {t.address && (
+            <a className="btn-ghost" href={`https://maps.apple.com/?q=${encodeURIComponent(t.address)}`} target="_blank" rel="noreferrer">Directions</a>
+          )}
+          {t.customer_phone && <a className="btn-ghost" href={`tel:${t.customer_phone}`}>Call {t.customer_name}</a>}
+          <JobActions job={tJob} hasInvoice={false} isStaff={false} />
+        </div>
+        <section>
+          <h2 className="mb-2 font-semibold">Photos ({tJob.photos?.length ?? 0})</h2>
+          <PhotoSection job={tJob} />
+        </section>
+        <section>
+          <h2 className="mb-2 font-semibold">Notes</h2>
+          <NoteForm entityType="job" entityId={t.id} />
+          <div className="mt-2 space-y-2">
+            {(notes as Note[] | null)?.map((n) => (
+              <div key={n.id} className="card py-2 text-sm">
+                <p>{n.body}</p>
+                <p className="mt-1 text-xs text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   const [{ data: job }, { data: history }, { data: notes }, { data: invoice }, { data: team }, { data: assignments }, { data: expenses }] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)').eq('id', params.id).single(),
     supabase.from('job_status_history').select('*').eq('job_id', params.id).order('changed_at', { ascending: false }),
     supabase.from('notes').select('*').eq('entity_type', 'job').eq('entity_id', params.id).order('created_at', { ascending: false }),
-    supabase.from('invoices').select('id,invoice_number,status,total,amount_paid').eq('job_id', params.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('invoices').select('id,invoice_number,status,total,amount_paid').eq('job_id', params.id).is('voided_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('users').select('id,full_name,email').eq('is_active', true).order('full_name'),
     supabase.from('job_assignments').select('user_id').eq('job_id', params.id),
     supabase.from('expenses').select('id,category,amount,vendor,description,incurred_on,receipt_url').eq('job_id', params.id).order('incurred_on', { ascending: false }),
@@ -60,7 +121,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <JobActions job={j} hasInvoice={!!inv} />
+        <JobActions job={j} hasInvoice={!!inv} isStaff />
         <JobEditForm job={j} />
       </div>
 
