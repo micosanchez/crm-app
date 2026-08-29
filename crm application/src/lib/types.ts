@@ -67,6 +67,9 @@ export interface Invoice {
   total: number;
   amount_paid?: number;
   tip?: number;
+  voided_at?: string | null;
+  void_reason?: string | null;
+  deleted_at?: string | null;
   payment_method?: PaymentMethod | null;
   payment_instructions?: string | null;
   comments?: string | null;
@@ -124,7 +127,7 @@ export interface Note {
 
 export type LeadStatus = 'new' | 'contacted' | 'estimate_sent' | 'accepted' | 'scheduled' | 'won' | 'lost';
 export type LeadSource = 'google' | 'facebook' | 'referral' | 'yard_sign' | 'website' | 'repeat_customer' | 'other';
-export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired';
+export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'cancelled';
 export type ExpenseCategory = 'dump_fees' | 'fuel' | 'payroll' | 'equipment_purchase' | 'equipment_repair' | 'vehicle_repair' | 'insurance' | 'marketing' | 'office' | 'software' | 'utilities' | 'permits' | 'misc';
 
 export const LEAD_PIPELINE: LeadStatus[] = ['new', 'contacted', 'estimate_sent', 'accepted', 'scheduled', 'won', 'lost'];
