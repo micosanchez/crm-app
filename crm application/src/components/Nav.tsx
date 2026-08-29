@@ -48,11 +48,12 @@ const LINKS: { href: string; label: string; icon: string; mobile: boolean; roles
   { href: '/expenses', label: 'Expenses', icon: 'expenses', mobile: false, roles: STAFF },
   { href: '/money', label: 'Money', icon: 'money', mobile: false, roles: STAFF },
   { href: '/reports', label: 'Reports', icon: 'reports', mobile: false, roles: STAFF },
-  { href: '/search', label: 'Search', icon: 'search', mobile: false },
+  { href: '/search', label: 'Search', icon: 'search', mobile: false, roles: STAFF },
   { href: '/price-book', label: 'Price book', icon: 'pricebook', mobile: false, roles: STAFF, flag: 'priceBook' },
   { href: '/recurring', label: 'Recurring', icon: 'recurring', mobile: false, roles: STAFF, flag: 'recurring' },
   { href: '/field', label: 'Field', icon: 'field', mobile: true },
-  { href: '/documents', label: 'Documents', icon: 'documents', mobile: false },
+  { href: '/documents', label: 'Documents', icon: 'documents', mobile: false, roles: STAFF },
+  { href: '/time', label: 'Time Log', icon: 'schedule', mobile: false, roles: STAFF },
   { href: '/signatures', label: 'Signatures', icon: 'estimates', mobile: false, roles: STAFF },
   { href: '/team', label: 'Team', icon: 'team', mobile: false, roles: ['admin'] },
   { href: '/settings', label: 'Settings', icon: 'settings', mobile: false, roles: ['admin'] },
@@ -158,6 +159,9 @@ export default function Nav() {
           WebkitBackdropFilter: 'blur(16px)',
           borderTop: '1px solid var(--border-standard)',
           paddingBottom: 'env(safe-area-inset-bottom)',
+          // Rounded display corners eat the first/last tabs without these.
+          paddingLeft: 'max(0px, env(safe-area-inset-left))',
+          paddingRight: 'max(0px, env(safe-area-inset-right))',
         }}
       >
         {LINKS.filter((l) => l.mobile && allowed(l)).map((l) => {
