@@ -74,14 +74,14 @@ export default async function MoneyPage({ searchParams }: { searchParams: { year
 
   const [{ data: paidPeriod }, { data: expPeriod }, { data: paidTrailing }, { data: profitRows }, { data: openInvoices }] =
     await Promise.all([
-      supabase.from('invoices').select('total,paid_at,customers(id,name)').eq('status', 'paid')
+      supabase.from('invoices').select('total,paid_at,customers(id,name)').eq('status', 'paid').is('voided_at', null)
         .gte('paid_at', start.toISOString()).lt('paid_at', end.toISOString()),
       supabase.from('expenses').select('amount,category,incurred_on,vendor,description')
         .gte('incurred_on', ymd(start)).lt('incurred_on', ymd(end)),
-      supabase.from('invoices').select('total,paid_at').eq('status', 'paid')
+      supabase.from('invoices').select('total,paid_at').eq('status', 'paid').is('voided_at', null)
         .gte('paid_at', trailingStart.toISOString()).lt('paid_at', end.toISOString()),
       supabase.from('job_profitability').select('*').order('profit', { ascending: false }).limit(200),
-      supabase.from('invoices').select('total,amount_paid,customers(id,name)').eq('status', 'sent'),
+      supabase.from('invoices').select('total,amount_paid,customers(id,name)').eq('status', 'sent').is('voided_at', null),
     ]);
 
   const paidRows = (paidPeriod ?? []) as unknown as PaidRow[];
