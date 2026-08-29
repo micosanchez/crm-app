@@ -42,12 +42,12 @@ export default async function CommandCenter() {
   ] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)')
       .gte('scheduled_start', dayStart).lte('scheduled_start', dayEnd).order('scheduled_start'),
-    supabase.from('invoices').select('total,status,paid_at,issued_at,due_at,created_at').gte('created_at', monthStart),
+    supabase.from('invoices').select('total,status,paid_at,issued_at,due_at,created_at').is('voided_at', null).gte('created_at', monthStart),
     // Cash basis: revenue is recognized when the invoice is PAID (paid_at), not when created.
-    supabase.from('invoices').select('total').eq('status', 'paid').gte('paid_at', monthStart),
+    supabase.from('invoices').select('total').eq('status', 'paid').is('voided_at', null).gte('paid_at', monthStart),
     supabase.from('expenses').select('amount,category').gte('incurred_on', monthStartDate),
     // Outstanding + overdue: only SENT invoices carry a real balance (matches the Money page).
-    supabase.from('invoices').select('id,invoice_number,total,amount_paid,due_at,status,customers(id,name)').eq('status', 'sent').order('due_at'),
+    supabase.from('invoices').select('id,invoice_number,total,amount_paid,due_at,status,customers(id,name)').eq('status', 'sent').is('voided_at', null).order('due_at'),
     supabase.from('estimates').select('id,estimate_number,status,total,created_at,customers(name)'),
     supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(8),
     supabase.from('customers').select('*', { count: 'exact', head: true }),
