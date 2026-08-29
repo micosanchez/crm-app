@@ -14,7 +14,7 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
   const [error, setError] = useState<string | null>(null);
   const expired = !!estimate.valid_until && estimate.valid_until < new Date().toISOString().slice(0, 10) && estimate.status !== 'accepted';
 
-  async function setStatus(status: 'sent' | 'accepted' | 'declined') {
+  async function setStatus(status: 'sent' | 'accepted' | 'declined' | 'cancelled') {
     setBusy(true);
     setError(null);
     const patch: Record<string, unknown> = { status };
@@ -74,7 +74,14 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
           <>
             <button className="btn-primary" disabled={busy} onClick={() => setStatus('accepted')}>Accept → create job</button>
             <button className="btn-ghost" disabled={busy} onClick={() => setStatus('declined')}>Declined</button>
+            <button className="btn-ghost" disabled={busy}
+              onClick={() => confirm('Cancel this quote? Unlike a decline, a cancelled quote never counts against your close rate.') && setStatus('cancelled')}>
+              Cancel quote
+            </button>
           </>
+        )}
+        {(estimate.status as string) === 'cancelled' && (
+          <button className="btn-ghost" disabled={busy} onClick={() => setStatus('sent')}>Reopen to sent</button>
         )}
         {estimate.status === 'accepted' && estimate.job_id && (
           <a className="btn-ghost" href={`/jobs/${estimate.job_id}`}>View job →</a>
