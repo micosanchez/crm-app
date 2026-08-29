@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import ScheduleWeek, { type ScheduleDay } from './ScheduleWeek';
+import { getRole } from '@/lib/auth';
 import type { Customer, Job } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -14,20 +15,30 @@ function startOfWeek(d: Date) {
 
 export default async function SchedulePage({ searchParams }: { searchParams: { week?: string } }) {
   const supabase = createClient();
+  const role = await getRole();
+  const isTech = role === 'technician';
   // Parse the chosen week at local noon so it never lands on the wrong day across time zones.
   const base = searchParams.week ? new Date(searchParams.week + 'T12:00:00') : new Date();
   const weekStart = startOfWeek(base);
   const weekEnd = new Date(weekStart.getTime() + 7 * 86400_000);
 
-  const [{ data: jobs }, { data: customers }] = await Promise.all([
-    supabase
-      .from('jobs')
-      .select('*, customers(id,name,phone,address)')
-      .gte('scheduled_start', weekStart.toISOString())
-      .lt('scheduled_start', weekEnd.toISOString())
-      .order('scheduled_start'),
-    supabase.from('customers').select('id,name').order('name'),
-  ]);
+  // Technicians see only their assigned jobs (redacted RPC — no money fields);
+  // staff see the whole board.
+  const [{ data: jobs }, { data: customers }] = isTech
+    ? await Promise.all([
+        supabase.rpc('tech_my_jobs', { p_from: weekStart.toISOString(), p_to: weekEnd.toISOString() })
+          .then((r) => ({ data: ((r.data ?? []) as { id: string; title: string; status: string; scheduled_start: string | null; scheduled_end: string | null; address: string | null; customer_name: string | null }[]).map((t) => ({ ...t, customers: { name: t.customer_name } })) })),
+        Promise.resolve({ data: [] }),
+      ])
+    : await Promise.all([
+        supabase
+          .from('jobs')
+          .select('*, customers(id,name,phone,address)')
+          .gte('scheduled_start', weekStart.toISOString())
+          .lt('scheduled_start', weekEnd.toISOString())
+          .order('scheduled_start'),
+        supabase.from('customers').select('id,name').order('name'),
+      ]);
 
   const prev = new Date(weekStart.getTime() - 7 * 86400_000).toISOString().slice(0, 10);
   const next = new Date(weekStart.getTime() + 7 * 86400_000).toISOString().slice(0, 10);
