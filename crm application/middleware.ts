@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 type CookieToSet = { name: string; value: string; options?: CookieOptions };
 
-const PUBLIC_PATHS = ['/login', '/offline', '/manifest.json', '/sw.js'];
+const PUBLIC_PATHS = ['/login', '/offline', '/manifest.json', '/sw.js', '/request'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

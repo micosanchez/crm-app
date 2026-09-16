@@ -4,11 +4,18 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
+import TextButton from '@/components/TextButton';
+import { flags } from '@/lib/flags';
 import type { Estimate } from '@/lib/types';
 
 /* Status + actions bar for a quote. All FIELD editing now lives in QuoteComposer;
    this only drives the lifecycle: copy link, mark sent, accept → job, decline. */
-export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
+export default function EstimateEditor({ estimate, customerPhone, customerFirstName }: {
+  estimate: Estimate;
+  /** Lets the quote go out over the business line instead of copy-paste. */
+  customerPhone?: string | null;
+  customerFirstName?: string | null;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +66,21 @@ export default function EstimateEditor({ estimate }: { estimate: Estimate }) {
             navigator.clipboard.writeText(`${window.location.origin}/sign/estimate/${estimate.public_token}`);
             alert('Customer link copied! Text or email it — they can view and sign without logging in.');
           }}>Copy customer link</button>
+        )}
+        {estimate.public_token && flags.sms && (
+          <TextButton
+            to={customerPhone}
+            template="quote_link"
+            label="Text quote"
+            entityKind="estimate"
+            entityId={estimate.id}
+            vars={{
+              first_name: customerFirstName ?? undefined,
+              quote_number: estimate.estimate_number,
+              total: `$${Number(estimate.total ?? 0).toFixed(2)}`,
+              link: typeof window === 'undefined' ? '' : `${window.location.origin}/sign/estimate/${estimate.public_token}`,
+            }}
+          />
         )}
         {estimate.viewed_at ? (
           <span className="badge self-center bg-blue-50 text-blue-700">

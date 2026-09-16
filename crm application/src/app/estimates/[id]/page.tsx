@@ -18,6 +18,7 @@ export default async function EstimateDetail({ params }: { params: { id: string 
   if (!estimate) return <p>Estimate not found.</p>;
   const est = estimate as Estimate;
   const editable = est.status === 'draft' || est.status === 'sent';
+  const custRecord = (customers ?? []).find((c) => c.id === est.customer_id);
 
   const s: ComposerSettings = {
     default_valid_days: settings?.default_valid_days ?? 14,
@@ -102,7 +103,11 @@ export default async function EstimateDetail({ params }: { params: { id: string 
         </div>
       )}
 
-      <EstimateEditor estimate={est} />
+      <EstimateEditor
+        estimate={est}
+        customerPhone={custRecord?.phone ?? null}
+        customerFirstName={(custRecord?.name ?? est.customers?.name ?? '').trim().split(' ')[0] || null}
+      />
     </div>
   );
 }

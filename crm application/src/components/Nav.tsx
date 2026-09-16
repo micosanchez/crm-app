@@ -87,9 +87,10 @@ export default function Nav() {
     router.refresh();
   }
 
-  // Hide chrome only on the public customer signing pages (/sign/estimate/…, /sign/invoice/…)
-  // and print views. NOT on the internal /signatures tab, which needs the nav.
-  if (pathname === '/login' || pathname?.startsWith('/sign/') || pathname?.includes('/print')) return null;
+  // Hide chrome on the public customer pages (the signing pages /sign/estimate/…,
+  // /sign/invoice/…, and the estimate request form) and on print views. NOT on the
+  // internal /signatures tab, which needs the nav.
+  if (pathname === '/login' || pathname?.startsWith('/sign/') || pathname?.startsWith('/request') || pathname?.includes('/print')) return null;
 
   const moreLinks = LINKS.filter((l) => !l.mobile && allowed(l));
   const moreActive = moreLinks.some((l) => pathname === l.href);
