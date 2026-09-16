@@ -16,12 +16,12 @@ const FROM = process.env.NOTIFY_FROM ?? 'SJHC Command Center <onboarding@resend.
 export const APP_URL = 'https://crmsjh.netlify.app';
 
 export interface SendArgs {
-  event: string;               // 'viewed' | 'signed' | 'assigned' | 'crew_daily' | 'owner_digest'
+  event: string;               // 'viewed' | 'signed' | 'assigned' | 'crew_daily' | 'owner_digest' | 'estimate_request'
   to: string;
   subject: string;
   text: string;
   dedupeKey?: string;          // set for scheduled reminders — one send per key, ever
-  entityKind?: 'job' | 'invoice' | 'estimate';
+  entityKind?: 'job' | 'invoice' | 'estimate' | 'estimate_request';
   entityId?: string;
 }
 
