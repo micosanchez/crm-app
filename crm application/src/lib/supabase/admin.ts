@@ -15,5 +15,14 @@ export function createAdminClient(): SupabaseClient | null {
   if (!url || !key) return null;
   return createSupabaseClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Next patches global fetch and caches server-side GETs by default. This
+    // client sends no cookies, so nothing marks its requests dynamic and Next
+    // will happily serve a stale row forever — that is how /request kept
+    // rendering the old business phone after the row had been updated. The
+    // session client is exempt because reading cookies opts its route out.
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, { ...init, cache: 'no-store' }),
+    },
   });
 }

@@ -93,7 +93,9 @@ export default function RequestsList({ requests, initialStatus }: {
             return (
               <li key={r.id}>
                 <Link
-                  href={`/estimates/requests/${r.id}`}
+                  // Carry the filter through, so "← Requests" on the detail
+                  // screen comes back to the same list the user left.
+                  href={`/estimates/requests/${r.id}?status=${status}`}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
                 >
                   <div className="min-w-0 flex-1">
