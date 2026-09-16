@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import NewCustomerForm from './NewCustomerForm';
+import IntakeLink from '../estimates/requests/IntakeLink';
+import { flags } from '@/lib/flags';
 import type { Customer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +25,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: { 
         <input className="input max-w-xs" name="q" placeholder="Search name, phone, or email…" defaultValue={searchParams.q ?? ''} />
         <button className="btn-ghost">Search</button>
       </form>
+      {flags.requests && <IntakeLink />}
       <NewCustomerForm />
       <div className="grid gap-2 md:grid-cols-2">
         {(customers as Customer[] | null)?.map((c) => (
