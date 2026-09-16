@@ -21,7 +21,7 @@ export interface Doc {
 export const BIZ = {
   name: 'Sanchez Junk & Haul Co.',
   tagline: 'Remove · Refresh · Reclaim',
-  phone: '313-348-3325',
+  phone: '(734) 537-8061',
   email: 'sanchezhaulco@gmail.com',
   website: 'sanchezhaulco.com',
   area: 'Lincoln Park · Taylor · Allen Park & surrounding Downriver MI',
