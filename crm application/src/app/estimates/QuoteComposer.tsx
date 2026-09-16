@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import EstimateDocument, { DOC_CSS, type Doc, type Biz } from '@/components/EstimateDocument';
 import type { Estimate } from '@/lib/types';
+import { linkRequestQuote } from './requests/actions';
 
 export interface ComposerCustomer { id: string; name: string; phone?: string | null; address?: string | null }
 export interface ComposerPriceItem { id: string; name: string; default_price: number; description: string | null }
@@ -41,23 +42,38 @@ const toLocalInput = (iso?: string | null) => {
    first-class estimate columns (one line item, never itemized). The live preview
    is the SAME component the customer signs on. Internal notes are visually
    locked and never leave this screen. */
-export default function QuoteComposer({ customers, settings, estimate, priceItems = [] }: {
+export interface ComposerPrefill {
+  customerId?: string;
+  lineItem?: string;
+  description?: string;
+}
+
+export default function QuoteComposer({
+  customers, settings, estimate, priceItems = [], prefill, requestId, requestPhotos = [],
+}: {
   customers: ComposerCustomer[];
   settings: ComposerSettings;
   estimate?: Estimate;
   priceItems?: ComposerPriceItem[];
+  /** Starting values when the quote is being built from an accepted request. */
+  prefill?: ComposerPrefill;
+  /** Set alongside `prefill` so the saved quote links back to its request. */
+  requestId?: string;
+  /** Signed photo URLs from the request, shown beside the pricing fields. */
+  requestPhotos?: string[];
 }) {
   const router = useRouter();
   const editing = !!estimate;
 
   // Customer: either an existing id, or a new one being typed inline.
-  const initialCustomer = estimate?.customer_id ? customers.find((c) => c.id === estimate.customer_id) : null;
+  const startCustomerId = estimate?.customer_id ?? prefill?.customerId ?? '';
+  const initialCustomer = startCustomerId ? customers.find((c) => c.id === startCustomerId) : null;
   const [query, setQuery] = useState(initialCustomer?.name ?? '');
-  const [customerId, setCustomerId] = useState(estimate?.customer_id ?? '');
+  const [customerId, setCustomerId] = useState(startCustomerId);
   const [newCustomer, setNewCustomer] = useState<{ name: string; phone: string; address: string } | null>(null);
 
-  const [lineItem, setLineItem] = useState(estimate?.line_item ?? settings.default_line_item ?? '');
-  const [description, setDescription] = useState(estimate?.description ?? '');
+  const [lineItem, setLineItem] = useState(estimate?.line_item ?? prefill?.lineItem ?? settings.default_line_item ?? '');
+  const [description, setDescription] = useState(estimate?.description ?? prefill?.description ?? '');
   const [price, setPrice] = useState(estimate ? String(estimate.total ?? '') : '');
   const [validUntil, setValidUntil] = useState(estimate?.valid_until ?? todayPlus(settings.default_valid_days ?? 14));
   const [scheduledStart, setScheduledStart] = useState(toLocalInput(estimate?.scheduled_start));
@@ -186,6 +202,9 @@ export default function QuoteComposer({ customers, settings, estimate, priceItem
       .single();
     setBusy(false);
     if (eErr || !est) { setError(`Couldn't create the quote: ${eErr?.message ?? 'unknown error'}`); return; }
+    // Built from a request: link the two so each screen points at the other.
+    // A failure here must not lose the quote that was just saved.
+    if (requestId) { try { await linkRequestQuote(requestId, est.id); } catch { /* quote is saved regardless */ } }
     router.push(`/estimates/${est.id}`);
     router.refresh();
   }
@@ -249,6 +268,24 @@ export default function QuoteComposer({ customers, settings, estimate, priceItem
             </div>
           )}
         </div>
+
+        {/* Photos from the request — kept in view while pricing. */}
+        {requestPhotos.length > 0 && (
+          <div className="card space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wide text-gray-400">
+              From their request ({requestPhotos.length})
+            </label>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {requestPhotos.map((src, i) => (
+                <a key={src} href={src} target="_blank" rel="noopener noreferrer"
+                  className="h-24 w-24 flex-none overflow-hidden rounded-lg border border-line-subtle bg-gray-100">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`Request photo ${i + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* The job */}
         <div className="card space-y-3">
