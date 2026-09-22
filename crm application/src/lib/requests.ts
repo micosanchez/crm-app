@@ -4,6 +4,8 @@
  * nothing here touches the browser bundle's Supabase keys.
  */
 
+import { LEAD_SOURCES as ENUM_LEAD_SOURCES } from './types';
+
 export const MAX_PHOTOS = 8;
 export const RATE_LIMIT_PER_HOUR = 5;
 export const REQUEST_PHOTOS_BUCKET = 'request-photos';
@@ -23,11 +25,8 @@ export const LEAD_SOURCES = [
   { ref: 'website', label: 'Website', maps: 'website' },
 ] as const;
 
-/** Valid values of the customers.lead_source enum (0002, extended in 0033). */
-const LEAD_SOURCE_ENUM = new Set([
-  'google', 'facebook', 'referral', 'yard_sign', 'website',
-  'repeat_customer', 'other', 'instagram', 'google_ads',
-]);
+/** Valid values of the customers.lead_source enum — one list, in types.ts. */
+const LEAD_SOURCE_ENUM = new Set<string>(ENUM_LEAD_SOURCES);
 
 /**
  * Raw ?ref= → a value customers.lead_source will actually accept. Anything we

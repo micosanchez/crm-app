@@ -20,7 +20,6 @@ export const flags = {
 /** Server-only gates (never exposed to the client bundle). */
 export const serverFlags = {
   stripe: !!process.env.STRIPE_SECRET_KEY,
-  twilio: !!(process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID),
   recurring: on(process.env.FF_RECURRING),
 } as const;
 

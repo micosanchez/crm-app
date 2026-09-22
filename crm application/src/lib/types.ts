@@ -126,12 +126,13 @@ export interface Note {
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'estimate_sent' | 'accepted' | 'scheduled' | 'won' | 'lost';
-export type LeadSource = 'google' | 'facebook' | 'referral' | 'yard_sign' | 'website' | 'repeat_customer' | 'other';
+export type LeadSource = 'google' | 'google_ads' | 'facebook' | 'instagram' | 'referral' | 'yard_sign' | 'website' | 'repeat_customer' | 'other';
 export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'cancelled';
 export type ExpenseCategory = 'dump_fees' | 'fuel' | 'payroll' | 'equipment_purchase' | 'equipment_repair' | 'vehicle_repair' | 'insurance' | 'marketing' | 'office' | 'software' | 'utilities' | 'permits' | 'misc';
 
 export const LEAD_PIPELINE: LeadStatus[] = ['new', 'contacted', 'estimate_sent', 'accepted', 'scheduled', 'won', 'lost'];
-export const LEAD_SOURCES: LeadSource[] = ['google', 'facebook', 'referral', 'yard_sign', 'website', 'repeat_customer', 'other'];
+/** Every value of the customers.lead_source / jobs.lead_source enum (0002 + 0033). */
+export const LEAD_SOURCES: LeadSource[] = ['google', 'google_ads', 'facebook', 'instagram', 'referral', 'yard_sign', 'website', 'repeat_customer', 'other'];
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['dump_fees', 'fuel', 'payroll', 'equipment_purchase', 'equipment_repair', 'vehicle_repair', 'insurance', 'marketing', 'office', 'software', 'utilities', 'permits', 'misc'];
 
 export interface Lead {
