@@ -42,4 +42,14 @@ assert.equal(bare.lead_source, 'website');
 assert.deepEqual(bare.photoUrls, ['https://x/y.jpg']);
 assert.equal(mapWebsiteSubmission({ data: {} }), null, 'no submission id');
 
+const split = mapWebsiteSubmission({ id: 'sub3', data: {
+  first_name: 'Ana', last_name: 'Lopez', name: 'ignored', address: '123 Main St', city: 'Taylor', state: 'mi', postal_code: '48180',
+} });
+assert.equal(split.first_name, 'Ana');
+assert.equal(split.last_name, 'Lopez');
+assert.equal(split.city, 'Taylor');
+assert.equal(split.state, 'MI');
+assert.equal(split.postal_code, '48180');
+assert.equal(bare.state, 'MI', 'state defaults to MI');
+
 console.log('website lead checks passed');
