@@ -4,6 +4,7 @@ import JobsDashboard from './JobsDashboard';
 import KanbanBoard from './KanbanBoard';
 import StatusBadge from '@/components/StatusBadge';
 import { getRole } from '@/lib/auth';
+import { fmtDateTime } from '@/lib/dates';
 import type { Job, Customer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +30,7 @@ export default async function JobsPage() {
               </div>
               <p className="text-sm text-gray-500">
                 {j.customer_name}
-                {j.scheduled_start && <> · {new Date(j.scheduled_start).toLocaleString()}</>}
+                {j.scheduled_start && <> · {fmtDateTime(j.scheduled_start)}</>}
               </p>
               {j.address && <p className="text-sm text-gray-500">{j.address}</p>}
             </Link>
@@ -42,16 +43,19 @@ export default async function JobsPage() {
   const [{ data: jobs }, { data: customers }, { data: invoices }] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)').order('updated_at', { ascending: false }),
     supabase.from('customers').select('id,name').order('name'),
-    // Actual billed amounts per job (drafts excluded - a draft isn't a real bill).
-    supabase.from('invoices').select('job_id,total').in('status', ['sent', 'paid']).is('voided_at', null),
+    // Live invoices per job. Billed value counts sent/paid only (a draft isn't a real bill);
+    // the id map lets the board route "invoiced"/"paid" moves through the invoice.
+    supabase.from('invoices').select('id,job_id,total,status').is('voided_at', null),
   ]);
 
   // A job's real revenue is what it was invoiced, not the original estimate. Sum the
   // job's sent/paid invoices; jobs never invoiced keep null and fall back to the estimate.
   const billed = new Map<string, number>();
-  for (const inv of (invoices ?? []) as { job_id: string | null; total: number | string }[]) {
+  const invoiceByJob: Record<string, string> = {};
+  for (const inv of (invoices ?? []) as { id: string; job_id: string | null; total: number | string; status: string }[]) {
     if (!inv.job_id) continue;
-    billed.set(inv.job_id, (billed.get(inv.job_id) ?? 0) + Number(inv.total));
+    invoiceByJob[inv.job_id] = inv.id;
+    if (inv.status === 'sent' || inv.status === 'paid') billed.set(inv.job_id, (billed.get(inv.job_id) ?? 0) + Number(inv.total));
   }
   const allJobs = ((jobs ?? []) as Job[]).map((j) => ({
     ...j,
@@ -63,7 +67,7 @@ export default async function JobsPage() {
       <JobsDashboard jobs={allJobs} customers={(customers ?? []) as Pick<Customer, 'id' | 'name'>[]} />
       <section className="space-y-3">
         <h2 className="panel-label">Pipeline board</h2>
-        <KanbanBoard jobs={allJobs} />
+        <KanbanBoard jobs={allJobs} invoiceByJob={invoiceByJob} />
       </section>
     </div>
   );

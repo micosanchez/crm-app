@@ -92,17 +92,17 @@ export default function JobsDashboard({ jobs, customers }: {
 
   const stats = useMemo(() => {
     const list = selected?.list ?? [];
-    let pV = 0, pN = 0, aV = 0, aN = 0, lV = 0, lN = 0;
+    let pV = 0, pN = 0, aV = 0, aN = 0, lV = 0, lN = 0, count = 0;
     for (const j of list) {
       if (j.status === 'cancelled') continue; // out of the numbers, still in the list below
       const { tone } = classify(j.status);
       const v = val(j);
+      count += 1;
       if (tone === 'paid') { pV += v; pN += 1; }
       else if (tone === 'active') { aV += v; aN += 1; }
       else { lV += v; lN += 1; }
     }
     const total = pV + aV + lV;
-    const count = list.length;
     return {
       total, count,
       paid: { v: pV, n: pN },
