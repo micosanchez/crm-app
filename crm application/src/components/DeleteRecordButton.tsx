@@ -29,13 +29,20 @@ export default function DeleteRecordButton({
     }
     setBusy(true);
     const supabase = createClient();
-    const { error } = await supabase.from(table).delete().eq('id', id);
+    // Ask for the deleted row back: with RLS a delete you're not allowed to make
+    // affects zero rows and returns NO error, which used to look like success.
+    const { data, error } = await supabase.from(table).delete().eq('id', id).select('id');
     setBusy(false);
     if (error) {
       const linked = /foreign key|violates|referenced|constraint/i.test(error.message);
       alert(linked
         ? `This ${label} is linked to other records, so it can’t be deleted.${linkedHint ? ` ${linkedHint}` : ' Remove or reassign those first.'}`
         : `Couldn’t delete: ${error.message}`);
+      return;
+    }
+    if (!data?.length) {
+      alert(`Nothing was deleted — this ${label} may already be gone, or your role isn’t allowed to delete it.`);
+      router.refresh();
       return;
     }
     router.push(redirectTo);
