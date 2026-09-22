@@ -2,25 +2,29 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import ScheduleWeek, { type ScheduleDay } from './ScheduleWeek';
 import { getRole } from '@/lib/auth';
+import { detroitDateTime, detroitParts, ymd } from '@/lib/dates';
 import type { Customer, Job } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+/** Monday 00:00 Detroit of the week containing `d`. */
 function startOfWeek(d: Date) {
-  const x = new Date(d);
-  x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); // Monday
-  x.setHours(0, 0, 0, 0);
-  return x;
+  const p = detroitParts(d);
+  const noon = new Date(Date.UTC(p.y, p.m - 1, p.d, 12));
+  const back = (noon.getUTCDay() + 6) % 7; // days since Monday
+  return detroitDateTime(p.y, p.m, p.d - back);
 }
 
 export default async function SchedulePage({ searchParams }: { searchParams: { week?: string } }) {
   const supabase = createClient();
   const role = await getRole();
   const isTech = role === 'technician';
-  // Parse the chosen week at local noon so it never lands on the wrong day across time zones.
-  const base = searchParams.week ? new Date(searchParams.week + 'T12:00:00') : new Date();
+  // The chosen week is a Detroit date; pick its noon so no zone can shift the day.
+  const picked = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.week ?? '') ? searchParams.week!.split('-').map(Number) : null;
+  const base = picked ? detroitDateTime(picked[0]!, picked[1]!, picked[2]!, 12) : new Date();
   const weekStart = startOfWeek(base);
-  const weekEnd = new Date(weekStart.getTime() + 7 * 86400_000);
+  const ws = detroitParts(weekStart);
+  const weekEnd = detroitDateTime(ws.y, ws.m, ws.d + 7);
 
   // Technicians see only their assigned jobs (redacted RPC — no money fields);
   // staff see the whole board.
@@ -40,20 +44,22 @@ export default async function SchedulePage({ searchParams }: { searchParams: { w
         supabase.from('customers').select('id,name').order('name'),
       ]);
 
-  const prev = new Date(weekStart.getTime() - 7 * 86400_000).toISOString().slice(0, 10);
-  const next = new Date(weekStart.getTime() + 7 * 86400_000).toISOString().slice(0, 10);
+  const prev = ymd(detroitDateTime(ws.y, ws.m, ws.d - 7));
+  const next = ymd(weekEnd);
 
-  // Bucket jobs into days server-side so day assignment doesn't shift by browser timezone.
-  const todayStr = new Date().toDateString();
+  // Bucket jobs into Detroit calendar days server-side so the day never shifts
+  // with the server's or the browser's zone.
+  const todayStr = ymd();
   const days: ScheduleDay[] = Array.from({ length: 7 }, (_, i) => {
-    const day = new Date(weekStart.getTime() + i * 86400_000);
+    const day = detroitDateTime(ws.y, ws.m, ws.d + i);
+    const dayKey = ymd(day);
     return {
       key: day.toISOString(),
-      addDate: day.toISOString().slice(0, 10),
-      label: day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }),
-      isToday: day.toDateString() === todayStr,
+      addDate: dayKey,
+      label: day.toLocaleDateString('en-US', { timeZone: 'America/Detroit', weekday: 'short', day: 'numeric' }),
+      isToday: dayKey === todayStr,
       jobs: (jobs as (Job & { customers?: { name?: string } | null })[] | null)?.filter((j) =>
-        new Date(j.scheduled_start!).toDateString() === day.toDateString()) ?? [],
+        ymd(new Date(j.scheduled_start!)) === dayKey) ?? [],
     };
   });
 
@@ -67,13 +73,13 @@ export default async function SchedulePage({ searchParams }: { searchParams: { w
           <Link href={`/schedule?week=${next}`} className="btn-ghost">Next →</Link>
           {/* Jump to any week — native GET form, works without client JS */}
           <form action="/schedule" className="flex items-center gap-1">
-            <input type="date" name="week" defaultValue={weekStart.toISOString().slice(0, 10)} className="input w-auto py-1" />
+            <input type="date" name="week" defaultValue={ymd(weekStart)} className="input w-auto py-1" />
             <button className="btn-ghost" type="submit">Go</button>
           </form>
         </div>
       </div>
       <p className="text-sm text-gray-500">
-        Week of {weekStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+        Week of {weekStart.toLocaleDateString('en-US', { timeZone: 'America/Detroit', month: 'long', day: 'numeric', year: 'numeric' })}
       </p>
 
       <ScheduleWeek days={days} customers={(customers ?? []) as Pick<Customer, 'id' | 'name'>[]} />
