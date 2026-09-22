@@ -7,12 +7,11 @@ import JobActions from './JobActions';
 import JobEditForm from './JobEditForm';
 import CrewAssign from './CrewAssign';
 import { getRole } from '@/lib/auth';
+import { fmtDateTime } from '@/lib/dates';
+import { money, money2, collectedOn } from '@/lib/money';
 import type { Job, Note, UserProfile, Invoice, Expense } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
-const money2 = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default async function JobDetail({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -49,7 +48,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
           </div>
           <p className="text-sm text-gray-500">
             {t.customer_name}{' · '}{t.service.replace('_', ' ')} · {t.address ?? 'no address'}
-            {t.scheduled_start && <> · {new Date(t.scheduled_start).toLocaleString()}</>}
+            {t.scheduled_start && <> · {fmtDateTime(t.scheduled_start)}</>}
           </p>
           {t.description && <p className="mt-2 text-sm">{t.description}</p>}
         </div>
@@ -71,7 +70,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
             {(notes as Note[] | null)?.map((n) => (
               <div key={n.id} className="card py-2 text-sm">
                 <p>{n.body}</p>
-                <p className="mt-1 text-xs text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+                <p className="mt-1 text-xs text-gray-400">{fmtDateTime(n.created_at)}</p>
               </div>
             ))}
           </div>
@@ -84,7 +83,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
     supabase.from('jobs').select('*, customers(id,name,phone,address)').eq('id', params.id).single(),
     supabase.from('job_status_history').select('*').eq('job_id', params.id).order('changed_at', { ascending: false }),
     supabase.from('notes').select('*').eq('entity_type', 'job').eq('entity_id', params.id).order('created_at', { ascending: false }),
-    supabase.from('invoices').select('id,invoice_number,status,total,amount_paid').eq('job_id', params.id).is('voided_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('invoices').select('id,invoice_number,status,total,amount_paid,voided_at').eq('job_id', params.id).is('voided_at', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('users').select('id,full_name,email').eq('is_active', true).order('full_name'),
     supabase.from('job_assignments').select('user_id').eq('job_id', params.id),
     supabase.from('expenses').select('id,category,amount,vendor,description,incurred_on,receipt_url').eq('job_id', params.id).order('incurred_on', { ascending: false }),
@@ -92,11 +91,11 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
 
   if (!job) return <p>Job not found.</p>;
   const j = job as Job;
-  const inv = invoice as Pick<Invoice, 'id' | 'invoice_number' | 'status' | 'total' | 'amount_paid'> | null;
+  const inv = invoice as Pick<Invoice, 'id' | 'invoice_number' | 'status' | 'total' | 'amount_paid' | 'voided_at'> | null;
   const jobExpenses = (expenses as Pick<Expense, 'id' | 'category' | 'amount' | 'vendor' | 'description' | 'incurred_on' | 'receipt_url'>[] | null) ?? [];
 
   // ----- Job P&L -----
-  const collected = inv?.status === 'paid' ? Number(inv.total) : Number(inv?.amount_paid ?? 0);
+  const collected = inv ? collectedOn(inv) : 0;
   const billed = inv ? Number(inv.total) : 0;
   const costs = jobExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const profit = collected - costs;
@@ -113,7 +112,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
         <p className="text-sm text-gray-500">
           <Link href={`/customers/${j.customer_id}`} className="text-brand-600 hover:underline">{j.customers?.name}</Link>
           {' · '}{j.service.replace('_', ' ')} · {j.address ?? 'no address'}
-          {j.scheduled_start && <> · {new Date(j.scheduled_start).toLocaleString()}</>}
+          {j.scheduled_start && <> · {fmtDateTime(j.scheduled_start)}</>}
           {j.lead_source && <> · source: {j.lead_source.replace(/_/g, ' ')}</>}
         </p>
         {j.description && <p className="mt-2 text-sm">{j.description}</p>}
@@ -121,7 +120,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <JobActions job={j} hasInvoice={!!inv} isStaff />
+        <JobActions job={j} hasInvoice={!!inv} invoiceId={inv?.id} isStaff />
         <JobEditForm job={j} />
       </div>
 
@@ -198,7 +197,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
           {(notes as Note[] | null)?.map((n) => (
             <div key={n.id} className="card py-2 text-sm">
               <p>{n.body}</p>
-              <p className="mt-1 text-xs text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-gray-400">{fmtDateTime(n.created_at)}</p>
             </div>
           ))}
         </div>
@@ -210,7 +209,7 @@ export default async function JobDetail({ params }: { params: { id: string } }) 
           {history?.map((h) => (
             <div key={h.id} className="flex justify-between px-4 py-2 text-sm">
               <span>{h.from_status ? `${h.from_status} → ` : ''}<b>{h.to_status}</b></span>
-              <span className="text-xs text-gray-400">{new Date(h.changed_at).toLocaleString()}</span>
+              <span className="text-xs text-gray-400">{fmtDateTime(h.changed_at)}</span>
             </div>
           ))}
           {!history?.length && <p className="px-4 py-3 text-sm text-gray-400">No status changes yet — the trail starts when this job moves through its stages.</p>}

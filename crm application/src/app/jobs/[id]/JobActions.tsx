@@ -5,16 +5,21 @@ import { mutate } from '@/lib/offline/sync';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
 import { JOB_PIPELINE, type Job, type JobStatus } from '@/lib/types';
 
-export default function JobActions({ job, hasInvoice, isStaff = true }: { job: Job; hasInvoice: boolean; isStaff?: boolean }) {
+export default function JobActions({ job, hasInvoice, invoiceId, isStaff = true }: {
+  job: Job; hasInvoice: boolean; invoiceId?: string | null; isStaff?: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const idx = JOB_PIPELINE.indexOf(job.status);
   let next: JobStatus | undefined = job.status === 'cancelled' ? undefined : JOB_PIPELINE[idx + 1];
   // Technicians move a job through the field stages only — invoicing is back office.
   if (!isStaff && next && !['in_progress', 'completed'].includes(next)) next = undefined;
+  // The invoice is the record of money: mark it paid there so the payment is written down.
+  const paidViaInvoice = next === 'paid' && hasInvoice && !!invoiceId;
 
   async function advance() {
     if (!next) return;
+    if (paidViaInvoice) { router.push(`/invoices/${invoiceId}`); return; }
     setBusy(true);
     if (next === 'invoiced' && !hasInvoice) {
       // Generate invoice server-side (requires connectivity; invoicing is a back-office step)
@@ -45,7 +50,7 @@ export default function JobActions({ job, hasInvoice, isStaff = true }: { job: J
     <div className="flex flex-wrap gap-2">
       {next && (
         <button className="btn-primary" onClick={advance} disabled={busy}>
-          {busy ? 'Working…' : next === 'invoiced' && !hasInvoice ? 'Generate invoice' : `Mark ${next.replace('_', ' ')}`}
+          {busy ? 'Working…' : next === 'invoiced' && !hasInvoice ? 'Generate invoice' : paidViaInvoice ? 'Mark paid on invoice →' : `Mark ${next.replace('_', ' ')}`}
         </button>
       )}
       {/* Couldn't do the job (no access, customer bailed, etc.) — keep the record, drop it from the pipeline */}
