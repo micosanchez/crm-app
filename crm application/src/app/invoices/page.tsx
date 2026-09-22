@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
 import { requireStaff } from '@/lib/auth';
+import { sumCollected, sumOutstanding } from '@/lib/money';
+import { fmtDate } from '@/lib/dates';
 import type { Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -14,9 +16,11 @@ export default async function InvoicesPage() {
     .select('*, customers(id,name,email,address)')
     .order('created_at', { ascending: false });
 
-  const rows = (invoices as (Invoice & { voided_at?: string | null })[] | null) ?? [];
-  const outstanding = rows.filter((i) => i.status !== 'paid' && !i.voided_at).reduce((s, i) => s + Number(i.total), 0);
-  const collected = rows.filter((i) => i.status === 'paid' && !i.voided_at).reduce((s, i) => s + Number(i.total), 0);
+  const rows = (invoices as Invoice[] | null) ?? [];
+  // Same definitions as the Dashboard and Money page (src/lib/money.ts):
+  // outstanding = sent invoices' remaining balance; collected = paid, not voided.
+  const outstanding = sumOutstanding(rows);
+  const collected = sumCollected(rows);
 
   return (
     <div className="space-y-4">
@@ -36,7 +40,7 @@ export default async function InvoicesPage() {
           <Link key={inv.id} href={`/invoices/${inv.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
             <div>
               <p className="font-medium">#{inv.invoice_number} · {inv.customers?.name}{inv.voided_at && <span className="badge ml-2 bg-gray-200 text-gray-600">VOID</span>}</p>
-              <p className="text-xs text-gray-500">{new Date(inv.created_at).toLocaleDateString()}{inv.due_at && ` · due ${new Date(inv.due_at).toLocaleDateString()}`}</p>
+              <p className="text-xs text-gray-500">{fmtDate(inv.created_at)}{inv.due_at && ` · due ${fmtDate(inv.due_at)}`}</p>
             </div>
             <div className="flex items-center gap-3">
               <StatusBadge status={inv.status} />
