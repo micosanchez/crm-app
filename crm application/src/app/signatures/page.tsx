@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
+import { fmtDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ export default async function SignaturesPage() {
                 {s.customer_name ? ` — ${s.customer_name}` : ''}
               </p>
               <p className="panel-label mt-0.5 normal-case" style={{ letterSpacing: 0 }}>
-                Signed by {s.signed_name} · {new Date(s.signed_at).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                Signed by {s.signed_name} · {fmtDateTime(s.signed_at)}
               </p>
             </div>
             <div className="shrink-0 text-right">
