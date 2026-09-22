@@ -2,15 +2,15 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import { Label, Cluster, Cell, Stack, Row } from '@/components/Hud';
-import type { Expense } from '@/lib/types';
+import { detroitParts, monthRange, ymd, monthKey } from '@/lib/dates';
+import { balanceDue, money, money2 } from '@/lib/money';
+import type { Expense, Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 type PaidRow = { total: number | string; paid_at: string; customers: { name: string } | null };
 type ProfitRow = { job_id: string; title: string; service: string; status: string; revenue: number; costs: number; profit: number };
 
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
-const money2 = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 /**
@@ -48,29 +48,28 @@ function Bar({ label, value, max, display, tone }: { label: string; value: numbe
   );
 }
 
-/** Local (Detroit) YYYY-MM-DD for a Date — the server runs with TZ=America/Detroit. */
-const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
 export default async function MoneyPage({ searchParams }: { searchParams: { year?: string; month?: string } }) {
   await requireStaff();
   const supabase = createClient();
 
   /* ---------- period ---------- */
   const now = new Date();
+  const today = detroitParts(now);
   const yearMode = !!searchParams.year && !searchParams.month;
-  const year = Number(searchParams.year ?? now.getFullYear());
-  const monthKey = searchParams.month ?? `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const [mY, mM] = monthKey.split('-').map(Number);
+  const year = Number(searchParams.year ?? today.y);
+  const selectedMonth = searchParams.month ?? monthKey(now);
+  const [mY, mM] = selectedMonth.split('-').map(Number);
 
-  const start = yearMode ? new Date(year, 0, 1) : new Date(mY, mM - 1, 1);
-  const end = yearMode ? new Date(year + 1, 0, 1) : new Date(mY, mM, 1);
+  // Period boundaries are Detroit calendar boundaries (DST-aware), not server-local.
+  const { start, end } = yearMode
+    ? { start: monthRange(year, 1).start, end: monthRange(year + 1, 1).start }
+    : monthRange(mY, mM);
   const periodLabel = yearMode
     ? String(year)
-    : start.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    : new Date(mY, mM - 1, 15).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   /* ---------- data (cash basis: money in when paid, money out when incurred) ---------- */
-  const trailingStart = new Date(start);
-  trailingStart.setMonth(trailingStart.getMonth() - (yearMode ? 0 : 11));
+  const trailingStart = yearMode ? start : monthRange(mY, mM - 11).start;
 
   const [{ data: paidPeriod }, { data: expPeriod }, { data: paidTrailing }, { data: profitRows }, { data: openInvoices }] =
     await Promise.all([
@@ -92,22 +91,18 @@ export default async function MoneyPage({ searchParams }: { searchParams: { year
   const profit = revenue - spend;
   const margin = revenue > 0 ? Math.round((profit / revenue) * 100) : 0;
 
-  const outstanding = ((openInvoices ?? []) as any[])
-    .reduce((s, i) => s + (Number(i.total) - Number(i.amount_paid)), 0);
+  const outstanding = ((openInvoices ?? []) as unknown as Pick<Invoice, 'status' | 'total' | 'amount_paid' | 'voided_at'>[])
+    .reduce((s, i) => s + balanceDue(i), 0);
 
   /* ---------- revenue trend ---------- */
   const byMonth = new Map<string, number>();
   ((paidTrailing ?? []) as { total: number | string; paid_at: string }[]).forEach((i) => {
-    const d = new Date(i.paid_at);
-    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const k = monthKey(i.paid_at);
     byMonth.set(k, (byMonth.get(k) ?? 0) + Number(i.total));
   });
   const trendKeys = yearMode
     ? Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
-    : Array.from({ length: 12 }, (_, i) => {
-        const d = new Date(trailingStart); d.setMonth(trailingStart.getMonth() + i);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      });
+    : Array.from({ length: 12 }, (_, i) => monthKey(monthRange(mY, mM - 11 + i).start));
   const trend = trendKeys.map((k) => {
     const [y, m] = k.split('-').map(Number);
     return { k, v: byMonth.get(k) ?? 0, label: new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short' }) };
@@ -137,10 +132,10 @@ export default async function MoneyPage({ searchParams }: { searchParams: { year
 
   /* ---------- period switcher ---------- */
   const months = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
-    return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }) };
+    const d = new Date(today.y, today.m - 1 - (11 - i), 15);
+    return { key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, label: d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) };
   });
-  const years = Array.from(new Set([now.getFullYear(), now.getFullYear() - 1]));
+  const years = Array.from(new Set([today.y, today.y - 1]));
 
   const chip = (active: boolean) =>
     `whitespace-nowrap rounded-xl px-3 py-1.5 text-sm transition ${
@@ -170,7 +165,7 @@ export default async function MoneyPage({ searchParams }: { searchParams: { year
         ))}
         <span className="self-center px-1" style={{ color: 'var(--border-subtle)' }}>|</span>
         {months.map((m) => (
-          <Link key={m.key} href={`/money?month=${m.key}`} className={chip(!yearMode && monthKey === m.key)} style={chipStyle(!yearMode && monthKey === m.key)}>
+          <Link key={m.key} href={`/money?month=${m.key}`} className={chip(!yearMode && selectedMonth === m.key)} style={chipStyle(!yearMode && selectedMonth === m.key)}>
             {m.label}
           </Link>
         ))}
