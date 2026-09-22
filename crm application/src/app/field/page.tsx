@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getRole } from '@/lib/auth';
 import FieldJobList from './FieldJobList';
 import ClockWidget from './ClockWidget';
+import { dayRange } from '@/lib/dates';
 import type { Job, TimeEntry } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -31,14 +32,15 @@ export default async function FieldPage() {
   const supabase = createClient();
   const role = await getRole();
   const isStaff = role === 'admin' || role === 'dispatcher';
-  const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-  const dayEnd = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
+  const today = dayRange();
+  const dayStart = today.start.toISOString();
+  const dayEnd = today.end.toISOString();
   const { data: { user } } = await supabase.auth.getUser();
 
   let todayJobs: Job[] = [];
   if (isStaff) {
     const { data: jobs } = await supabase.from('jobs').select('*, customers(id,name,phone,address)')
-      .gte('scheduled_start', dayStart).lte('scheduled_start', dayEnd)
+      .gte('scheduled_start', dayStart).lt('scheduled_start', dayEnd)
       .in('status', ['scheduled', 'in_progress']).order('scheduled_start');
     todayJobs = (jobs ?? []) as Job[];
   } else {
