@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import NewEstimateForm from './NewEstimateForm';
+import { classifyQuote } from '@/lib/money';
 import type { Estimate, Customer } from '@/lib/types';
 
 /* ------------------------------------------------------------------ *
@@ -10,23 +11,20 @@ import type { Estimate, Customer } from '@/lib/types';
  * Status is editorial (burgundy / titanium / graphite), never badges.
  * ------------------------------------------------------------------ */
 
-type Tone = 'accepted' | 'pending' | 'declined';
-function classify(status: string): { label: string; tone: Tone } {
-  if (status === 'accepted') return { label: 'Accepted', tone: 'accepted' };
-  if (status === 'declined') return { label: 'Declined', tone: 'declined' };
-  if (status === 'expired') return { label: 'Expired', tone: 'declined' };
-  return { label: status === 'sent' ? 'Pending' : 'Draft', tone: 'pending' };
-}
+type Tone = 'accepted' | 'pending' | 'declined' | 'cancelled';
+const classify = classifyQuote;
 
 const TONE_TEXT: Record<Tone, string> = {
   accepted: 'text-brand-700',
   pending: 'text-metal-titanium',
   declined: 'text-gray-500',
+  cancelled: 'text-gray-400',
 };
 const TONE_BAR: Record<Tone, string> = {
   accepted: 'var(--brand-accent)',
   pending: 'var(--metal-titanium)',
   declined: 'var(--metal-graphite)',
+  cancelled: 'transparent',
 };
 
 const fmtK = (n: number) => {
@@ -64,7 +62,8 @@ export default function EstimatesDashboard({ estimates, customers }: {
         key,
         label: new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }),
         list,
-        total: list.reduce((s, e) => s + Number(e.total), 0),
+        // Cancelled quotes were never offered — they stay in the list but out of the value.
+        total: list.reduce((s, e) => s + (classify(e.status).tone === 'cancelled' ? 0 : Number(e.total)), 0),
         pct: null as number | null,
       };
     });
@@ -83,16 +82,17 @@ export default function EstimatesDashboard({ estimates, customers }: {
 
   const stats = useMemo(() => {
     const list = selected?.list ?? [];
-    let aV = 0, aN = 0, pV = 0, pN = 0, dV = 0, dN = 0;
+    let aV = 0, aN = 0, pV = 0, pN = 0, dV = 0, dN = 0, count = 0;
     for (const e of list) {
       const { tone } = classify(e.status);
+      if (tone === 'cancelled') continue; // never counts toward value or close rate
       const v = Number(e.total);
+      count += 1;
       if (tone === 'accepted') { aV += v; aN += 1; }
       else if (tone === 'pending') { pV += v; pN += 1; }
       else { dV += v; dN += 1; }
     }
     const total = aV + pV + dV;
-    const count = list.length;
     const decided = aN + dN;
     return {
       total, count,
@@ -207,7 +207,7 @@ export default function EstimatesDashboard({ estimates, customers }: {
           <input className="input max-w-[220px] flex-1" placeholder="Search name or #number" value={query}
             onChange={(e) => setQuery(e.target.value)} />
           <div className="flex gap-1">
-            {(['all', 'accepted', 'pending', 'declined'] as const).map((f) => (
+            {(['all', 'accepted', 'pending', 'declined', 'cancelled'] as const).map((f) => (
               <button key={f} onClick={() => setStatusFilter(f)}
                 className={`rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition-colors duration-fast ${statusFilter === f ? 'text-gray-900' : 'text-gray-500'}`}
                 style={{

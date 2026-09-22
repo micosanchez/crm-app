@@ -358,7 +358,7 @@ export default function QuoteComposer({
 
         {error && <p className="text-sm text-red-600">{error}</p>}
         {saved && <p className="text-sm text-green-600">Saved ✓</p>}
-        <div className="sticky bottom-0 -mx-1 flex gap-3 bg-gradient-to-t from-white via-white/95 to-transparent py-3">
+        <div className="sticky bottom-20 z-30 -mx-1 flex gap-3 bg-gradient-to-t from-white via-white/95 to-transparent py-3 md:bottom-0">
           <button className="btn-primary flex-1 justify-center py-3 text-base" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Save quote'}</button>
         </div>
       </form>
