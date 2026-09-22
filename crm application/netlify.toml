@@ -28,3 +28,5 @@
 #   RESEND_API_KEY, NOTIFY_EMAIL (email sending)
 #   CRON_SECRET                (any random string — protects /api/cron/notifications)
 #   NOTIFY_FROM                (optional — set after verifying a domain in Resend)
+#   NETLIFY_FORM_WEBHOOK_SECRET (random string — must match the "JWS secret token" on the website's
+#                              quote-request outgoing webhook; see src/app/api/webhooks/netlify-form)
