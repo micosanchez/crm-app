@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   // Idempotency — if an invoice already exists for this job, return it
   // instead of creating a duplicate (double-tap / retry safety).
   const { data: dupes } = await supabase
-    .from('invoices').select('id, invoice_number, status').eq('job_id', job_id).limit(1);
+    .from('invoices').select('id, invoice_number, status').eq('job_id', job_id).is('voided_at', null).limit(1);
   if (dupes && dupes.length > 0) {
     return NextResponse.json({ invoice: dupes[0], existing: true });
   }
