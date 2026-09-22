@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import { Label, Cluster, Cell, Stack, Row } from '@/components/Hud';
+import { classifyQuote, money } from '@/lib/money';
+import { detroitParts } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 function Bar({ label, value, max, display, href, tone }: { label: string; value: number; max: number; display: string; href?: string; tone?: string }) {
@@ -80,11 +80,12 @@ export default async function ReportsPage() {
   const marketingMax = Math.max(1, ...marketingRows.map((r) => r[1]));
   const roas = marketingTotal > 0 ? totalRevenue / marketingTotal : null;
 
-  // ---- Quote → cash funnel ----
-  const estSent = estRows.length;
-  const estAccepted = estRows.filter((e) => e.status === 'accepted').length;
+  // ---- Quote → cash funnel: offered quotes only (drafts + cancelled aren't offers) ----
+  const offered = estRows.filter((e) => classifyQuote(e.status).offered);
+  const estSent = offered.length;
+  const estAccepted = offered.filter((e) => e.status === 'accepted').length;
   const paidJobs = jobRows.filter((j) => j.status === 'paid').length;
-  const quotedValue = estRows.reduce((s, e) => s + Number(e.total), 0);
+  const quotedValue = offered.reduce((s, e) => s + Number(e.total), 0);
 
   // ---- Dump-fee trend (last 12 months) ----
   const dumpByMonth = new Map<string, number>();
@@ -92,11 +93,11 @@ export default async function ReportsPage() {
     const k = e.incurred_on.slice(0, 7);
     dumpByMonth.set(k, (dumpByMonth.get(k) ?? 0) + Number(e.amount));
   });
-  const now = new Date();
+  const today = detroitParts();
   const dumpTrend = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+    const d = new Date(today.y, today.m - 1 - (11 - i), 15);
     const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    return { k, label: d.toLocaleDateString(undefined, { month: 'short' }), v: dumpByMonth.get(k) ?? 0 };
+    return { k, label: d.toLocaleDateString('en-US', { month: 'short' }), v: dumpByMonth.get(k) ?? 0 };
   });
   const dumpMax = Math.max(1, ...dumpTrend.map((t) => t.v));
 
@@ -161,7 +162,7 @@ export default async function ReportsPage() {
       <section>
         <Label right="all time">Quote → cash funnel</Label>
         <Cluster cols="grid-cols-2 sm:grid-cols-4">
-          <Cell label="Estimates" value={String(estSent)} href="/estimates" sub={money(quotedValue) + ' quoted'} />
+          <Cell label="Quotes sent" value={String(estSent)} href="/estimates" sub={money(quotedValue) + ' quoted'} />
           <Cell label="Accepted" value={String(estAccepted)} />
           <Cell label="Paid jobs" value={String(paidJobs)} href="/jobs" />
           <Cell label="Collected" value={money(totalRevenue)} href="/money" tone="var(--brand-text)" />
