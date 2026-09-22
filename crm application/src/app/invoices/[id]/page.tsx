@@ -3,11 +3,14 @@ import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
 import InvoiceEditor from './InvoiceEditor';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
+import { requireStaff } from '@/lib/auth';
+import { fmtDate } from '@/lib/dates';
 import type { Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function InvoiceDetail({ params }: { params: { id: string } }) {
+  await requireStaff(); // invoices are staff-only (RLS agrees); technicians land on /field
   const supabase = createClient();
   const [{ data: invoice }, { data: { user } }] = await Promise.all([
     supabase.from('invoices').select('*, customers(id,name,email,address), invoice_items(*)').eq('id', params.id).single(),
@@ -32,7 +35,7 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-brand-700">INVOICE #{inv.invoice_number}</h1>
-            <p className="text-sm text-gray-500">Issued {inv.issued_at ? new Date(inv.issued_at).toLocaleDateString() : '(draft)'}{inv.due_at && ` · Due ${new Date(inv.due_at).toLocaleDateString()}`}</p>
+            <p className="text-sm text-gray-500">Issued {inv.issued_at ? fmtDate(inv.issued_at) : '(draft)'}{inv.due_at && ` · Due ${fmtDate(inv.due_at)}`}</p>
           </div>
           <StatusBadge status={inv.status} />
         </div>
@@ -44,7 +47,8 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
           <p className="text-sm text-gray-500">{inv.customers?.email}</p>
         </div>
 
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px] text-sm">
           <thead>
             <tr className="border-b text-left text-xs uppercase text-gray-400">
               <th className="py-2">Type</th><th>Description</th>
@@ -66,6 +70,7 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
             ))}
           </tbody>
         </table>
+        </div>
 
         <div className="mt-4 ml-auto w-48 space-y-1 text-sm">
           <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>${Number(inv.subtotal).toFixed(2)}</span></div>
