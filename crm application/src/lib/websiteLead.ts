@@ -49,6 +49,9 @@ export interface WebsiteLead {
   email: string;
   phone: string;          // raw — the route normalises it with toE164
   address: string | null;
+  city: string | null;
+  state: string;
+  postal_code: string | null;
   description: string;
   lead_source: string;
   internal_notes: string;
@@ -84,6 +87,7 @@ export function mapWebsiteSubmission(p: NetlifyFormPayload): WebsiteLead | null 
   const submissionId = str(p.id);
   if (!submissionId) return null;
 
+  // Current form sends first/last separately; older submissions sent one "name".
   const [first = '', ...rest] = str(d.name).split(/\s+/).filter(Boolean);
   const attribution = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'landing_page', 'referrer']
     .map((k) => [k, str(d[k]).slice(0, 300)] as const)
@@ -92,11 +96,14 @@ export function mapWebsiteSubmission(p: NetlifyFormPayload): WebsiteLead | null 
 
   return {
     submissionId,
-    first_name: first,
-    last_name: rest.join(' '),
+    first_name: str(d.first_name) || first,
+    last_name: str(d.last_name) || rest.join(' '),
     email: str(d.email).toLowerCase(),
     phone: str(d.phone),
     address: str(d.address) || null,
+    city: str(d.city) || null,
+    state: str(d.state).toUpperCase().slice(0, 2) || 'MI',
+    postal_code: str(d.postal_code) || null,
     description: str(d.details),
     lead_source: leadSourceFrom(d),
     internal_notes: [`Website quote form · ${submissionTag(submissionId)}`, ...attribution].join('\n'),
