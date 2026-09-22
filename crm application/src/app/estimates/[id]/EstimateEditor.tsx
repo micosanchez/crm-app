@@ -10,11 +10,12 @@ import type { Estimate } from '@/lib/types';
 
 /* Status + actions bar for a quote. All FIELD editing now lives in QuoteComposer;
    this only drives the lifecycle: copy link, mark sent, accept → job, decline. */
-export default function EstimateEditor({ estimate, customerPhone, customerFirstName }: {
+export default function EstimateEditor({ estimate, customerPhone, customerFirstName, customerAddress }: {
   estimate: Estimate;
   /** Lets the quote go out over the business line instead of copy-paste. */
   customerPhone?: string | null;
   customerFirstName?: string | null;
+  customerAddress?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -38,11 +39,15 @@ export default function EstimateEditor({ estimate, customerPhone, customerFirstN
       const supabase = createClient();
       const { error: upErr } = await supabase.from('estimates').update(patch).eq('id', estimate.id);
       if (upErr) { setBusy(false); setError(upErr.message); return; }
+      // Same shape the customer-signing path (sign_estimate) creates: the quote's
+      // one-line title, the service address, the quoted value. If the quote carries
+      // an arrival time, the estimates_sync_schedule trigger books it on the job.
       const { data: job, error: jobErr } = await supabase.from('jobs').insert({
         customer_id: estimate.customer_id,
-        title: `Estimate #${estimate.estimate_number} job`,
+        title: estimate.line_item?.trim() || estimate.estimate_items?.[0]?.description || `Estimate #${estimate.estimate_number} job`,
         status: 'lead',
         estimated_value: estimate.total,
+        address: customerAddress ?? null,
       }).select().single();
       if (jobErr) { setBusy(false); setError(`Estimate accepted, but job creation failed: ${jobErr.message}`); return; }
       if (job) await supabase.from('estimates').update({ job_id: job.id }).eq('id', estimate.id);
