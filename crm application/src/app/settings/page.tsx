@@ -1,16 +1,18 @@
 import { createClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
 import BusinessSettingsForm, { type BusinessSettings } from './BusinessSettingsForm';
+import { BIZ } from '@/components/EstimateDocument';
 
 export const dynamic = 'force-dynamic';
 
+// Only used when the business_settings row is missing; identity defaults live in one place.
 const DEFAULTS: BusinessSettings = {
-  business_name: 'Sanchez Junk & Haul Co.',
-  tagline: 'Remove · Refresh · Reclaim',
-  phone: '313-348-3325',
-  email: 'sanchezhaulco@gmail.com',
-  website: 'sanchezhaulco.com',
-  service_area: 'Lincoln Park · Taylor · Allen Park & surrounding Downriver MI',
+  business_name: BIZ.name,
+  tagline: BIZ.tagline,
+  phone: BIZ.phone,
+  email: BIZ.email,
+  website: BIZ.website,
+  service_area: BIZ.area,
   mailing_address: null,
   ein: null,
   licensed_insured: true,
