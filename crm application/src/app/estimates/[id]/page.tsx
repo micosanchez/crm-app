@@ -2,11 +2,14 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import EstimateEditor from './EstimateEditor';
 import QuoteComposer, { type ComposerCustomer, type ComposerSettings, type ComposerPriceItem } from '../QuoteComposer';
+import { requireStaff } from '@/lib/auth';
+import { fmtDate } from '@/lib/dates';
 import type { Estimate } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 export default async function EstimateDetail({ params }: { params: { id: string } }) {
+  await requireStaff();
   const supabase = createClient();
   const [{ data: estimate }, { data: customers }, { data: settings }, { data: priceItems }] = await Promise.all([
     supabase.from('estimates').select('*, customers(id,name), estimate_items(*)').eq('id', params.id).single(),
@@ -54,7 +57,7 @@ export default async function EstimateDetail({ params }: { params: { id: string 
               {est.customer_id
                 ? <Link href={`/customers/${est.customer_id}`} className="text-brand-600 hover:underline">{est.customers?.name}</Link>
                 : est.customers?.name}
-              {' · '}{new Date(est.created_at).toLocaleDateString()}
+              {' · '}{fmtDate(est.created_at)}
               {est.job_id && <> · <Link href={`/jobs/${est.job_id}`} className="text-brand-600 hover:underline">view job →</Link></>}
             </p>
           </div>
@@ -106,6 +109,7 @@ export default async function EstimateDetail({ params }: { params: { id: string 
       <EstimateEditor
         estimate={est}
         customerPhone={custRecord?.phone ?? null}
+        customerAddress={custRecord?.address ?? null}
         customerFirstName={(custRecord?.name ?? est.customers?.name ?? '').trim().split(' ')[0] || null}
       />
     </div>

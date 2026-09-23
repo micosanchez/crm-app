@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { Label, Cluster, Cell, Gauge, FactorBar, Row, Stack } from '@/components/Hud';
 import { requireStaff } from '@/lib/auth';
+import { dayRange, thisMonthRange, ymd, fmtTime, fmtDate, fmtDateTime, fmtYmd } from '@/lib/dates';
+import { balanceDue, classifyQuote, quoteConversion, money } from '@/lib/money';
 import type { Job, Expense, Invoice } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -14,7 +16,6 @@ const TITANIUM = 'var(--metal-titanium)';
 
 /** Muted instrument color by fill ratio. */
 const ratioColor = (r: number) => (r >= 0.75 ? SUCCESS : r >= 0.5 ? WARNING : DANGER);
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 function jobTone(status: string): { tag: string; color: string } {
   if (status === 'paid') return { tag: 'Paid', color: BRAND };
@@ -29,11 +30,13 @@ export default async function CommandCenter() {
   await requireStaff();
   const supabase = createClient();
   const now = new Date();
-  const dayStart = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-  const dayEnd = new Date(new Date().setHours(23, 59, 59, 999)).toISOString();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthStartDate = monthStart.slice(0, 10);
-  const soonDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+  // "Today" and "this month" are Detroit calendar days, whatever clock the server runs on.
+  const day = dayRange(now);
+  const dayStart = day.start.toISOString();
+  const dayEnd = day.end.toISOString();
+  const monthStart = thisMonthRange(now).start.toISOString();
+  const monthStartDate = ymd(thisMonthRange(now).start);
+  const soonDate = ymd(new Date(Date.now() + 30 * 86400_000));
 
   const [
     { data: todayJobs }, { data: monthInvoices }, { data: monthCollected }, { data: monthExpenses },
@@ -41,7 +44,7 @@ export default async function CommandCenter() {
     { data: expiringDocs },
   ] = await Promise.all([
     supabase.from('jobs').select('*, customers(id,name,phone,address)')
-      .gte('scheduled_start', dayStart).lte('scheduled_start', dayEnd).order('scheduled_start'),
+      .gte('scheduled_start', dayStart).lt('scheduled_start', dayEnd).order('scheduled_start'),
     supabase.from('invoices').select('total,status,paid_at,issued_at,due_at,created_at').is('voided_at', null).gte('created_at', monthStart),
     // Cash basis: revenue is recognized when the invoice is PAID (paid_at), not when created.
     supabase.from('invoices').select('total').eq('status', 'paid').is('voided_at', null).gte('paid_at', monthStart),
@@ -70,15 +73,14 @@ export default async function CommandCenter() {
 
   // ----- Receivables & alerts (sent invoices only) -----
   const open = (openInvoices ?? []) as unknown as (Invoice & { customers: { name: string } | null })[];
-  const arTotal = open.reduce((s, i) => s + (Number(i.total) - Number(i.amount_paid ?? 0)), 0);
+  const arTotal = open.reduce((s, i) => s + balanceDue(i), 0);
   const overdue = open.filter((i) => i.due_at && new Date(i.due_at) < now);
 
   // ----- Quotes (replaces the abandoned leads table as the pipeline signal) -----
   const est = (estimates ?? []) as unknown as EstRow[];
-  const estActive = est.filter((e) => e.status !== 'draft');
-  const accepted = est.filter((e) => e.status === 'accepted').length;
-  const conversion = estActive.length ? accepted / estActive.length : null;
-  const staleQuotes = est.filter((e) => e.status === 'sent' && (now.getTime() - new Date(e.created_at).getTime()) > 14 * 86400_000);
+  const conversion = quoteConversion(est); // accepted ÷ offered; drafts + cancelled don't count
+  const staleQuotes = est.filter((e) => classifyQuote(e.status).tone === 'pending' && e.status === 'sent'
+    && (now.getTime() - new Date(e.created_at).getTime()) > 14 * 86400_000);
   const staleValue = staleQuotes.reduce((s, e) => s + Number(e.total), 0);
 
   // ----- Business Health Score (0-100) -----
@@ -103,8 +105,8 @@ export default async function CommandCenter() {
       ? { word: 'Elevated', color: WARNING }
       : { word: 'Critical', color: DANGER };
 
-  const dateline = now.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
-  const monthName = now.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+  const dateline = now.toLocaleDateString('en-US', { timeZone: 'America/Detroit', weekday: 'long', month: 'short', day: 'numeric' });
+  const monthName = now.toLocaleDateString('en-US', { timeZone: 'America/Detroit', month: 'short', year: 'numeric' });
   const signalCount = overdue.length + (staleQuotes.length ? 1 : 0) + (expiringDocs?.length ?? 0);
   const hasAlerts = signalCount > 0;
 
@@ -140,7 +142,7 @@ export default async function CommandCenter() {
             {overdue.map((i) => (
               <li key={i.id} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: DANGER }} />
-                <span><Link className="font-medium text-gray-900 underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(Number(i.total) - Number(i.amount_paid ?? 0))} overdue {new Date(i.due_at!).toLocaleDateString()}</span>
+                <span><Link className="font-medium text-gray-900 underline-offset-2 hover:underline" href={`/invoices/${i.id}`}>Invoice #{i.invoice_number}</Link> · {i.customers?.name} — {money(balanceDue(i))} overdue {fmtDate(i.due_at!)}</span>
               </li>
             ))}
             {staleQuotes.length > 0 && (
@@ -152,7 +154,7 @@ export default async function CommandCenter() {
             {expiringDocs?.map((d) => (
               <li key={d.id} className="flex items-start gap-2">
                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: WARNING }} />
-                <span><Link className="font-medium text-gray-900 hover:underline" href="/documents">{d.name}</Link> expires {new Date(d.expires_on + 'T12:00:00').toLocaleDateString()}</span>
+                <span><Link className="font-medium text-gray-900 hover:underline" href="/documents">{d.name}</Link> expires {fmtYmd(d.expires_on)}</span>
               </li>
             ))}
           </ul>
@@ -192,7 +194,7 @@ export default async function CommandCenter() {
               const t = jobTone(j.status);
               return (
                 <Row key={j.id} href={`/jobs/${j.id}`}
-                  lead={j.scheduled_start ? new Date(j.scheduled_start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—'}
+                  lead={j.scheduled_start ? fmtTime(j.scheduled_start) : '—'}
                   title={j.title} meta={j.customers?.name ?? 'No customer'} tag={t.tag} tagColor={t.color} />
               );
             })}
@@ -212,7 +214,7 @@ export default async function CommandCenter() {
             {activity.map((a) => (
               <Row key={a.id}
                 title={<span><span className="capitalize">{a.entity_type}</span> <span style={{ color: 'var(--text-tertiary)' }}>{a.action_type.replace(/_/g, ' ')}</span></span>}
-                tag={new Date(a.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                tag={fmtDateTime(a.created_at)}
                 tagColor="var(--text-muted)" />
             ))}
           </Stack>

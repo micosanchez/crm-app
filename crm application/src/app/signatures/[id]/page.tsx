@@ -3,6 +3,8 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import PrintButton from '../PrintButton';
+import { resolveBiz } from '@/components/EstimateDocument';
+import { fmtLong, fmtDateTime } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,19 +15,19 @@ interface SnapPayload {
   items?: SnapItem[];
 }
 
-const BIZ = { name: 'Sanchez Junk & Haul Co.', phone: '313-348-3325', email: 'sanchezhaulco@gmail.com', tagline: 'Remove · Refresh · Reclaim' };
 const money = (n: number) => `$${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** The permanent, print-ready copy of a signed document. Server-rendered from the frozen snapshot. */
 export default async function SignatureDetailPage({ params }: { params: { id: string } }) {
   await requireStaff();
   const supabase = createClient();
-  const { data: snap } = await supabase
-    .from('document_snapshots')
-    .select('*')
-    .eq('id', params.id)
-    .maybeSingle();
+  const [{ data: snap }, { data: settings }] = await Promise.all([
+    supabase.from('document_snapshots').select('*').eq('id', params.id).maybeSingle(),
+    supabase.from('business_settings').select('business_name,tagline,phone,email').eq('id', true).maybeSingle(),
+  ]);
   if (!snap) notFound();
+  // Letterhead comes from Settings, same as every other customer document.
+  const BIZ = resolveBiz(settings ? { name: settings.business_name, tagline: settings.tagline, phone: settings.phone, email: settings.email } : null);
 
   const payload = (snap.payload ?? {}) as SnapPayload;
   const items = payload.items ?? [];
@@ -52,13 +54,13 @@ export default async function SignatureDetailPage({ params }: { params: { id: st
           <div className="leading-tight text-white">
             <p className="text-lg font-extrabold tracking-wide">SANCHEZ</p>
             <p className="text-[11px] font-semibold tracking-[0.12em]" style={{ color: '#e6c2cf' }}>JUNK &amp; HAUL CO.</p>
-            <p className="mt-0.5 text-[9px] tracking-[0.18em]" style={{ color: '#c98aa3' }}>{BIZ.tagline.toUpperCase()}</p>
+            <p className="mt-0.5 text-[9px] tracking-[0.18em]" style={{ color: '#c98aa3' }}>{(BIZ.tagline ?? '').toUpperCase()}</p>
           </div>
           <div className="text-right text-white">
             <p className="text-2xl font-extrabold tracking-wide">{label}</p>
             <p className="text-[11px] opacity-90">Number: #{prefix}{snap.doc_number}</p>
             {payload.created_at && (
-              <p className="text-[11px] opacity-90">Date: {new Date(payload.created_at).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+              <p className="text-[11px] opacity-90">Date: {fmtLong(payload.created_at)}</p>
             )}
           </div>
         </div>
@@ -146,7 +148,7 @@ export default async function SignatureDetailPage({ params }: { params: { id: st
               <div className="text-right text-sm">
                 <p className="font-semibold">{snap.signed_name}</p>
                 <p style={{ color: '#6b7280' }}>
-                  {new Date(snap.signed_at).toLocaleString(undefined, { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {fmtDateTime(snap.signed_at)}
                 </p>
               </div>
             </div>

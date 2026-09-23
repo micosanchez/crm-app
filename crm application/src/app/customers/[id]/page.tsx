@@ -5,11 +5,11 @@ import NoteForm from '@/components/NoteForm';
 import CustomerEditForm from './CustomerEditForm';
 import BookAgainButton from './BookAgainButton';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
+import { fmtDate, fmtDateTime } from '@/lib/dates';
+import { money, sumCollected, sumOutstanding } from '@/lib/money';
 import type { Customer, Job, ActivityEntry, Note, Invoice, Estimate } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 
 export default async function CustomerDetail({ params }: { params: { id: string } }) {
   const supabase = createClient();
@@ -31,10 +31,8 @@ export default async function CustomerDetail({ params }: { params: { id: string 
 
   // ----- Customer 360 rollups -----
   const paidInvoices = invList.filter((i) => i.status === 'paid' && !i.voided_at);
-  const lifetimeRevenue = paidInvoices.reduce((s, i) => s + Number(i.total), 0);
-  const balanceOwed = invList
-    .filter((i) => i.status === 'sent')
-    .reduce((s, i) => s + (i.voided_at ? 0 : Number(i.total) - Number(i.amount_paid ?? 0)), 0);
+  const lifetimeRevenue = sumCollected(invList);
+  const balanceOwed = sumOutstanding(invList);
   const paidJobsCount = jobList.filter((j) => j.status === 'paid').length;
   const avgTicket = paidInvoices.length ? lifetimeRevenue / paidInvoices.length : 0;
   // Most recent lead source recorded on any of this customer's jobs.
@@ -88,7 +86,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
         {(lastActivity || paidJobsCount > 0) && (
           <p className="border-t px-4 py-2 text-xs text-gray-500" style={{ borderColor: 'var(--border-subtle)' }}>
             {paidJobsCount} paid job{paidJobsCount === 1 ? '' : 's'}
-            {lastActivity && <> · last activity {new Date(lastActivity).toLocaleDateString()}</>}
+            {lastActivity && <> · last activity {fmtDate(lastActivity)}</>}
           </p>
         )}
       </div>
@@ -100,7 +98,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
             <Link key={j.id} href={`/jobs/${j.id}`} className="card flex items-center justify-between hover:border-brand-500">
               <div>
                 <p className="font-medium">{j.title}</p>
-                <p className="text-xs text-gray-500">{new Date(j.created_at).toLocaleDateString()} · {j.service.replace('_', ' ')}</p>
+                <p className="text-xs text-gray-500">{fmtDate(j.created_at)} · {j.service.replace('_', ' ')}</p>
               </div>
               <StatusBadge status={j.status} />
             </Link>
@@ -116,7 +114,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
             <Link key={e.id} href={`/estimates/${e.id}`} className="card flex items-center justify-between hover:border-brand-500">
               <div>
                 <p className="font-medium">Estimate #{e.estimate_number}</p>
-                <p className="text-xs text-gray-500">{new Date(e.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-500">{fmtDate(e.created_at)}</p>
               </div>
               <span className="flex items-center gap-2 text-sm"><span className="badge bg-gray-100 capitalize text-gray-700">{e.status}</span> {money(Number(e.total))}</span>
             </Link>
@@ -132,7 +130,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
             <Link key={i.id} href={`/invoices/${i.id}`} className="card flex items-center justify-between hover:border-brand-500">
               <div>
                 <p className="font-medium">Invoice #{i.invoice_number}</p>
-                <p className="text-xs text-gray-500">{new Date(i.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-500">{fmtDate(i.created_at)}</p>
               </div>
               <span className="flex items-center gap-2 text-sm"><StatusBadge status={i.status} /> {money(Number(i.total))}</span>
             </Link>
@@ -148,7 +146,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
           {(notes as Note[] | null)?.map((n) => (
             <div key={n.id} className="card py-2 text-sm">
               <p>{n.body}</p>
-              <p className="mt-1 text-xs text-gray-400">{new Date(n.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-gray-400">{fmtDateTime(n.created_at)}</p>
             </div>
           ))}
         </div>
@@ -160,7 +158,7 @@ export default async function CustomerDetail({ params }: { params: { id: string 
           {(activity as ActivityEntry[] | null)?.map((a) => (
             <div key={a.id} className="flex justify-between px-4 py-2 text-sm">
               <span className="capitalize">{a.entity_type} {a.action_type.replace('_', ' ')}</span>
-              <span className="text-xs text-gray-400">{new Date(a.created_at).toLocaleString()}</span>
+              <span className="text-xs text-gray-400">{fmtDateTime(a.created_at)}</span>
             </div>
           ))}
           {!activity?.length && <p className="p-4 text-sm text-gray-500">No recorded activity.</p>}

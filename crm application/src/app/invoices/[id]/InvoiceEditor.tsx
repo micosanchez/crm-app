@@ -2,13 +2,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
+import { createClient } from '@/lib/supabase/client';
+import { ymd } from '@/lib/dates';
+import { balanceDue } from '@/lib/money';
 import PaymentPanel from './PaymentPanel';
 import type { Invoice, InvoiceItem, PaymentMethod } from '@/lib/types';
 
 const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
 
+/** Detroit calendar date of a timestamp — a 9pm payment must not show as tomorrow. */
 function toDateInput(iso: string | null | undefined): string {
-  return iso ? new Date(iso).toISOString().slice(0, 10) : '';
+  return iso ? ymd(new Date(iso)) : '';
 }
 
 /**
@@ -123,17 +127,44 @@ export default function InvoiceEditor({ invoice, canEdit = true }: { invoice: In
   }
 
   async function setStatus(status: 'draft' | 'sent' | 'paid') {
+    const wasPaid = invoice.status === 'paid';
+    if (status === 'paid' || wasPaid) {
+      // Paid ↔ unpaid touches the payments ledger — needs a connection.
+      if (typeof navigator !== 'undefined' && !navigator.onLine) { setError('Marking paid or unpaid needs a connection.'); return; }
+      setBusy(true); setError(null);
+      const supabase = createClient();
+      if (status === 'paid') {
+        // Record the money as a payment for the remaining balance. The payments trigger
+        // then sets amount_paid, flips status → paid and stamps paid_at; the invoice→job
+        // trigger marks the job paid. One ledger, every screen agrees.
+        const due = balanceDue(invoice);
+        if (due > 0) {
+          const { error } = await supabase.from('payments').insert({ invoice_id: invoice.id, amount: due, method, kind: 'payment' });
+          if (error) { setBusy(false); setError(error.message); return; }
+        }
+        // $0 invoices never trip the trigger (total must be > 0) — set the status explicitly.
+        // amount_paid stays the trigger's sum so an existing overpayment stays visible.
+        const { error } = await supabase.from('invoices')
+          .update({ status: 'paid', paid_at: invoice.paid_at ?? new Date().toISOString(), payment_method: method })
+          .eq('id', invoice.id);
+        if (error) { setBusy(false); setError(error.message); return; }
+      } else {
+        // Reverting to unpaid: the payments recorded on this invoice are removed (the audit
+        // log keeps their before-images), the trigger zeroes amount_paid, the balance reopens,
+        // and the invoice→job trigger pulls the job back to invoiced.
+        const { error: pErr } = await supabase.from('payments').delete().eq('invoice_id', invoice.id);
+        if (pErr) { setBusy(false); setError(pErr.message); return; }
+        const { error } = await supabase.from('invoices').update({ status, paid_at: null, amount_paid: 0 }).eq('id', invoice.id);
+        if (error) { setBusy(false); setError(error.message); return; }
+      }
+      setBusy(false);
+      router.refresh();
+      return;
+    }
+
     const patch: Record<string, unknown> = { status };
     if (status === 'sent' && !invoice.issued_at) patch.issued_at = new Date().toISOString();
-    // Mark paid = paid in full: settle amount_paid so the balance-due panel agrees with the "paid" badge.
-    if (status === 'paid') { patch.paid_at = new Date().toISOString(); patch.payment_method = method; patch.amount_paid = Number(invoice.total); }
-    if (status !== 'paid' && invoice.status === 'paid') patch.paid_at = null;
-    const ok = await run(() => mutate({ table: 'invoices', op: 'update', id: invoice.id, label: 'invoice', payload: patch }));
-    if (ok && invoice.job_id) {
-      if (status === 'paid') await mutate({ table: 'jobs', op: 'update', id: invoice.job_id, label: 'job', payload: { status: 'paid' } });
-      if (status !== 'paid' && invoice.status === 'paid') await mutate({ table: 'jobs', op: 'update', id: invoice.job_id, label: 'job', payload: { status: 'invoiced' } });
-      router.refresh();
-    }
+    await run(() => mutate({ table: 'invoices', op: 'update', id: invoice.id, label: 'invoice', payload: patch }));
   }
 
   async function voidInvoice() {
@@ -296,7 +327,7 @@ export default function InvoiceEditor({ invoice, canEdit = true }: { invoice: In
             <span className="text-sm font-semibold">Status</span>
             {invoice.status === 'paid' && (
               <button className="btn-ghost" disabled={busy}
-                onClick={() => confirm('Revert this invoice to unpaid? Its payments stay on record; the balance reopens and the job drops back to invoiced.') && setStatus('sent')}>
+                onClick={() => confirm('Revert this invoice to unpaid? The payments recorded on it are removed (they stay in the audit log), the balance reopens, and the job drops back to invoiced.') && setStatus('sent')}>
                 Revert to sent (unpaid)
               </button>
             )}

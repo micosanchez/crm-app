@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import ExpenseManager from './ExpenseManager';
 import { requireStaff } from '@/lib/auth';
+import { thisMonthRange, ymd } from '@/lib/dates';
 import type { Expense, Job } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function ExpensesPage() {
   await requireStaff();
   const supabase = createClient();
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+  const monthStart = ymd(thisMonthRange().start);
 
   const [{ data: expenses }, { data: jobs }] = await Promise.all([
     supabase.from('expenses').select('*, jobs(id,title)').order('incurred_on', { ascending: false }).limit(300),

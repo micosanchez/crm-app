@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-
-const APP_URL = 'https://crmsjh.netlify.app';
+import { APP_URL } from '@/lib/notify';
 
 /**
  * POST /api/stripe/checkout  { token }

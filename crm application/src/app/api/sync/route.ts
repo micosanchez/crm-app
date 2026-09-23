@@ -19,6 +19,10 @@ import type { QueuedAction } from '@/lib/types';
  * device's ordered edits — applying the first bumps updated_at, which must
  * not fail the second). Tables without an updated_at column skip the check.
  */
+/** Server row may be newer than the client's stamp by this much before it's a conflict —
+ *  covers a phone whose clock runs slightly behind the server between two quick edits. */
+const CLOCK_SKEW_MS = 60_000;
+
 const ALLOWED_TABLES = new Set([
   'customers', 'jobs', 'notes', 'schedule_events', 'job_assignments',
   'invoices', 'invoice_items', 'estimates', 'estimate_items', 'expenses', 'leads',
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest) {
         const { data: row, error: selErr } = await supabase
           .from(table).select('updated_at').eq('id', id).maybeSingle();
         const serverTs = !selErr && row && (row as { updated_at?: string }).updated_at;
-        if (serverTs && new Date(serverTs).getTime() > new Date(action.client_ts).getTime()) {
+        if (serverTs && new Date(serverTs).getTime() > new Date(action.client_ts).getTime() + CLOCK_SKEW_MS) {
           // Record the key so retries of this exact action are skipped as duplicates.
           await supabase.from('idempotency_keys').insert({
             key: idempotency_key,
@@ -126,21 +130,25 @@ export async function POST(req: NextRequest) {
         const { data: okRpc, error: e } = await supabase.rpc('tech_update_job', { p_job_id: id, p_patch: payload });
         error = e?.message ?? (okRpc ? null : 'Job not found or not assigned to you.');
       } else {
-        const { error: e } = await supabase.from(table).update(payload).eq('id', id);
-        error = e?.message ?? null;
+        // `.select('id')` so an update RLS filters to zero rows is reported, not
+        // recorded as applied (PostgREST returns no error for zero-row updates).
+        const { data: rows, error: e } = await supabase.from(table).update(payload).eq('id', id).select('id');
+        error = e?.message ?? (rows?.length ? null : 'Record not found, or your role cannot change it.');
       }
       if (!error) touchedInBatch.add(`${table}:${id}`);
     } else if (op === 'delete' && id) {
-      const { error: e } = await supabase.from(table).delete().eq('id', id);
-      error = e?.message ?? null;
+      const { data: rows, error: e } = await supabase.from(table).delete().eq('id', id).select('id');
+      error = e?.message ?? (rows?.length ? null : 'Record not found, or your role cannot delete it.');
     } else {
       results.push({ idempotency_key, status: 'rejected', error: 'unsupported op' });
       continue;
     }
 
     if (error) {
-      // Transient/validation failure — client retries, then dead-letters.
-      results.push({ idempotency_key, status: 'error', error });
+      // Permission/not-found is permanent → 'rejected' (client surfaces it at once).
+      // Anything else is treated as transient — client retries, then dead-letters.
+      const permanent = /your role cannot|not found/i.test(error);
+      results.push({ idempotency_key, status: permanent ? 'rejected' : 'error', error });
       continue;
     }
 

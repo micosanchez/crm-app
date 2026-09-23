@@ -10,12 +10,31 @@ const LABELS: Record<JobStatus, string> = {
   completed: 'Completed', invoiced: 'Invoiced', paid: 'Paid', cancelled: 'Cancelled',
 };
 
-export default function KanbanBoard({ jobs: initial }: { jobs: Job[] }) {
+export default function KanbanBoard({ jobs: initial, invoiceByJob = {} }: {
+  jobs: Job[];
+  /** job id → its live invoice id, so money moves go through the invoice. */
+  invoiceByJob?: Record<string, string>;
+}) {
   const router = useRouter();
   const [jobs, setJobs] = useState(initial);
   const [dragId, setDragId] = useState<string | null>(null);
 
   async function moveJob(id: string, status: JobStatus) {
+    const invoiceId = invoiceByJob[id];
+    // Same rules as the job page: invoicing creates the invoice; paying happens on it.
+    if (status === 'invoiced' && !invoiceId) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) { alert('Generating an invoice needs a connection.'); return; }
+      const res = await fetch('/api/invoices', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_id: id }),
+      });
+      if (!res.ok) { alert('Could not generate the invoice.'); return; }
+      router.refresh();
+      return;
+    }
+    if (status === 'paid' && invoiceId) {
+      router.push(`/invoices/${invoiceId}`);
+      return;
+    }
     const prev = jobs.find((j) => j.id === id)?.status;
     setJobs((js) => js.map((j) => (j.id === id ? { ...j, status } : j))); // optimistic
     const res = await mutate({ table: 'jobs', op: 'update', id, label: 'job', payload: { status } });
@@ -53,7 +72,11 @@ export default function KanbanBoard({ jobs: initial }: { jobs: Job[] }) {
                     <button
                       className="mt-2 w-full rounded-md bg-gray-100 py-1 text-xs font-medium text-gray-600 hover:bg-brand-50 hover:text-brand-700"
                       onClick={() => moveJob(j.id, JOB_PIPELINE[JOB_PIPELINE.indexOf(status) + 1])}>
-                      → {LABELS[JOB_PIPELINE[JOB_PIPELINE.indexOf(status) + 1]]}
+                      → {JOB_PIPELINE[JOB_PIPELINE.indexOf(status) + 1] === 'invoiced' && !invoiceByJob[j.id]
+                        ? 'Generate invoice'
+                        : JOB_PIPELINE[JOB_PIPELINE.indexOf(status) + 1] === 'paid' && invoiceByJob[j.id]
+                          ? 'Mark paid on invoice'
+                          : LABELS[JOB_PIPELINE[JOB_PIPELINE.indexOf(status) + 1]]}
                     </button>
                   )}
                 </div>

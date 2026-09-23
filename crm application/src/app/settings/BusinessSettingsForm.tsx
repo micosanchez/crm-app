@@ -137,7 +137,7 @@ export default function BusinessSettingsForm({ initial }: { initial: BusinessSet
 
       {error && <p className="text-sm text-red-600">Couldn’t save: {error}</p>}
       {saved && <p className="text-sm text-green-600">Saved ✓</p>}
-      <div className="sticky bottom-0 flex gap-3 bg-gradient-to-t from-white via-white/95 to-transparent py-3">
+      <div className="sticky bottom-20 z-30 flex gap-3 bg-gradient-to-t from-white via-white/95 to-transparent py-3 md:bottom-0">
         <button className="btn-primary py-3" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
       </div>
     </form>

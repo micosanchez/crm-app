@@ -1,9 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import DocumentManager, { type Doc } from './DocumentManager';
+import { requireStaff } from '@/lib/auth';
+import { fmtYmd, ymd } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DocumentsPage() {
+  await requireStaff(); // documents are staff-only (RLS agrees)
   const supabase = createClient();
   const { data: documents } = await supabase
     .from('documents')
@@ -12,7 +15,7 @@ export default async function DocumentsPage() {
     .order('created_at', { ascending: false });
 
   const docs = (documents ?? []) as Doc[];
-  const soon = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10);
+  const soon = ymd(new Date(Date.now() + 30 * 86400_000));
   const expiring = docs.filter((d) => d.expires_on && d.expires_on <= soon);
 
   return (
@@ -23,7 +26,7 @@ export default async function DocumentsPage() {
           <p className="panel-label mb-2 !text-red-800">Expiring within 30 days</p>
           <ul className="space-y-0.5 text-sm text-red-800">
             {expiring.map((d) => (
-              <li key={d.id}>{d.name} — {new Date(d.expires_on! + 'T12:00:00').toLocaleDateString()}</li>
+              <li key={d.id}>{d.name} — {fmtYmd(d.expires_on!)}</li>
             ))}
           </ul>
         </div>
