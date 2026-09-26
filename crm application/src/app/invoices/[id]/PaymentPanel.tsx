@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { flags } from '@/lib/flags';
-import type { Invoice, PaymentMethod } from '@/lib/types';
+import { PAYMENT_METHODS, type Invoice, type PaymentMethod } from '@/lib/types';
 
-const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
+const METHODS: PaymentMethod[] = PAYMENT_METHODS;
 
 /**
  * Record deposits / partial payments and show balance due. Flagged behind
