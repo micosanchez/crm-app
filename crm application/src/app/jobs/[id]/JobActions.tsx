@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
-import { JOB_PIPELINE, type Job, type JobStatus } from '@/lib/types';
+import { CANCEL_REASONS, JOB_PIPELINE, type Job, type JobStatus } from '@/lib/types';
 
 export default function JobActions({ job, hasInvoice, invoiceId, isStaff = true }: {
   job: Job; hasInvoice: boolean; invoiceId?: string | null; isStaff?: boolean;
@@ -39,8 +39,14 @@ export default function JobActions({ job, hasInvoice, invoiceId, isStaff = true 
 
   async function setStatus(status: JobStatus, confirmMsg?: string) {
     if (confirmMsg && !window.confirm(confirmMsg)) return;
+    const payload: Record<string, unknown> = { status };
+    if (status === 'cancelled') {
+      const reason = window.prompt(`Why? One of: ${CANCEL_REASONS.join(', ')}`, 'customer_cancelled')?.trim();
+      if (!reason || !(CANCEL_REASONS as readonly string[]).includes(reason)) { alert('Pick one of the listed reasons.'); return; }
+      payload.cancel_reason = reason;
+    }
     setBusy(true);
-    const res = await mutate({ table: 'jobs', op: 'update', id: job.id, label: 'job', payload: { status } });
+    const res = await mutate({ table: 'jobs', op: 'update', id: job.id, label: 'job', payload });
     setBusy(false);
     if (res.status === 'failed') { alert(`Couldn't update job: ${res.error}`); return; }
     router.refresh();
