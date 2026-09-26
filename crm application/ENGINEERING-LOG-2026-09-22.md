@@ -115,3 +115,27 @@ P3
 
 ## OWNER DECISIONS
 See report §12.
+
+---
+
+# Addendum — Data Integrity & Business-Metrics Upgrade (2026-09-26)
+
+Staged, not applied. Full write-up: `docs/METRICS-UPGRADE-2026-09-26.md`.
+
+## DISCOVERED
+- Helper pay was double-counted where a payroll expense and a labor entry both existed (e.g. job 1bd613e1).
+- Owner draws and personal spend sat in `misc`/`equipment_purchase` and pulled profit down; a $927 trailer was a monthly cost.
+- 19 legacy paid invoices with `amount_paid = 0`; two jobs `paid` with nothing collected; a $112.50 tip booked as a job; a $1 test invoice; an internal customer counted as revenue.
+- No service taxonomy (`service` = junk/landscaping/other), 29 jobs without a lead source, no owner hours anywhere, no dump-ticket allocation across jobs, `leads` table unused, no quote loss reasons, `payload.notes` (internal) rendered on the signature page.
+
+## CHANGED
+- Migrations 0041–0048 (additive, nullable, RLS on every new table, validation in triggers/CHECKs); 12 report functions; `job_close_out`.
+- App: required service type on job creation paths, loss/cancel reasons, payment methods, expense class, field close-out, reports sections, request-form attribution, Stripe fee + method, signature page fix.
+- Connector v2.1.0 (`connector/`), auto-reply Worker lead hooks.
+
+## VERIFIED
+- `tsc --noEmit` clean; `next build` clean; bundle `node --check` clean; patch script `fails: 0`.
+- NOT verified at runtime: migrations against production (blocked pending owner approval) — see go-live order in the docs.
+
+## OWNER DECISIONS
+- Six confirmations in `docs/METRICS-UPGRADE-2026-09-26.md` §6; integration pricing in §7. `0040_OWNER_DECISION_labor_in_job_profit.sql` is superseded by 0042/0043 (labor entries are the source of helper pay and already flow into `job_profitability`).

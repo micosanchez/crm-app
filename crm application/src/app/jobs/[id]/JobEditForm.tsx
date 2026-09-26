@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
-import type { Job, ServiceType } from '@/lib/types';
+import { LEAD_SOURCES, SERVICE_TYPES, type Job, type JobServiceType, type ServiceType } from '@/lib/types';
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
@@ -26,6 +26,9 @@ export default function JobEditForm({ job }: { job: Job }) {
     estimated_value: job.estimated_value != null ? String(job.estimated_value) : '',
     scheduled_start: toLocalInput(job.scheduled_start),
     scheduled_end: toLocalInput(job.scheduled_end ?? null),
+    service_type: (job.service_type ?? '') as JobServiceType | '',
+    lead_source: job.lead_source ?? '',
+    internal_notes: job.internal_notes ?? '',
   });
 
   async function submit(e: React.FormEvent) {
@@ -67,6 +70,9 @@ export default function JobEditForm({ job }: { job: Job }) {
         estimated_value: form.estimated_value ? Number(form.estimated_value) : null,
         scheduled_start: start ? start.toISOString() : null,
         scheduled_end: form.scheduled_end ? new Date(form.scheduled_end).toISOString() : null,
+        service_type: form.service_type || null,
+        lead_source: form.lead_source || null,
+        internal_notes: form.internal_notes || null,
       },
     });
     setBusy(false);
@@ -85,6 +91,15 @@ export default function JobEditForm({ job }: { job: Job }) {
         <option value="landscaping">Landscaping</option>
         <option value="other">Other</option>
       </select>
+      <select className="input" required value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value as JobServiceType })}>
+        <option value="">What kind of job? *</option>
+        {SERVICE_TYPES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+      </select>
+      <select className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })}>
+        <option value="">Lead source…</option>
+        {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        {form.lead_source && !LEAD_SOURCES.includes(form.lead_source as never) && <option value={form.lead_source}>{form.lead_source} (legacy)</option>}
+      </select>
       <input className="input" placeholder="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
       <input className="input" type="number" step="0.01" placeholder="Estimated value $" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
       <div>
@@ -96,6 +111,7 @@ export default function JobEditForm({ job }: { job: Job }) {
         <input className="input" type="datetime-local" value={form.scheduled_end} onChange={(e) => setForm({ ...form, scheduled_end: e.target.value })} />
       </div>
       <textarea className="input md:col-span-2" rows={2} placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+      <textarea className="input md:col-span-2" rows={2} placeholder="Internal notes (never shown to the customer)" value={form.internal_notes} onChange={(e) => setForm({ ...form, internal_notes: e.target.value })} />
       {error && <p className="text-sm text-red-600 md:col-span-2">Couldn&apos;t save: {error}</p>}
       <div className="flex gap-2">
         <button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button>

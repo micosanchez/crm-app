@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { DOC_CSS, resolveBiz, type Biz } from '@/components/EstimateDocument';
-import {
+import { HEARD_ABOUT_US,
   MAX_PHOTOS, REQUEST_PHOTOS_BUCKET, formatPhone, formatPhoneInput, validateRequest,
   type RequestInput, type RequestPhoto,
 } from '@/lib/requests';
@@ -82,6 +82,16 @@ const FORM_CSS = `
 @media (max-width:360px){.sjhc-request .grid2{grid-template-columns:1fr}.sjhc-request .grid2 .f+.f{margin-top:9px}}
 `;
 
+
+/** First-touch attribution from the URL (Meta/Google append these). Sent, never shown. */
+function utmFromLocation(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const q = new URLSearchParams(window.location.search);
+  const out: Record<string, string> = {};
+  for (const k of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid']) { const v = q.get(k); if (v) out[k] = v.slice(0, 200); }
+  if (document.referrer) out.referrer = document.referrer.slice(0, 300);
+  return out;
+}
 
 const EMPTY: RequestInput = {
   first_name: '', last_name: '', email: '', phone: '',
@@ -301,6 +311,7 @@ export default function RequestForm({ biz, leadRef, turnstileSiteKey }: {
           ...v,
           website: honeypot,
           ref: leadRef,
+          ...utmFromLocation(),
           turnstile_token: token,
           photo_count: shots.length,
         }),
@@ -511,6 +522,13 @@ export default function RequestForm({ biz, leadRef, turnstileSiteKey }: {
                 placeholder="What needs to go? Where is it (garage, basement, curb)? Any stairs or tight spots?"
                 onChange={(e) => set('description', e.target.value)} onBlur={() => blur('description')} />
               {show('description') && <span className="err">{show('description')}</span>}
+            </label>
+            <label className="f" htmlFor="req-heard">
+              <span className="flabel">How did you hear about us?</span>
+              <select id="req-heard" className="in" value={v.heard_about_us ?? ''} onChange={(e) => set('heard_about_us', e.target.value)}>
+                <option value="">Pick one (optional)</option>
+                {HEARD_ABOUT_US.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
             </label>
           </section>
 

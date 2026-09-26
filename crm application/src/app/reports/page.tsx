@@ -4,6 +4,7 @@ import { requireStaff } from '@/lib/auth';
 import { Label, Cluster, Cell, Stack, Row } from '@/components/Hud';
 import { classifyQuote, money } from '@/lib/money';
 import { detroitParts } from '@/lib/dates';
+import Metrics from './Metrics';
 
 export const dynamic = 'force-dynamic';
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -116,6 +117,8 @@ export default async function ReportsPage() {
         <p className="panel-label">Reports</p>
         <h1 className="text-2xl">Business intelligence</h1>
       </div>
+
+      <Metrics />
 
       <Cluster cols="grid-cols-2 sm:grid-cols-4">
         <Cell label="Lifetime revenue" value={money(totalRevenue)} tone="var(--brand-text)" sub={`${paidRows.length} paid invoices`} />

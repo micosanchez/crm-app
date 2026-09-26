@@ -121,7 +121,10 @@ export interface RequestInput {
   state: string;
   postal_code: string;
   description: string;
+  heard_about_us?: string;
 }
+
+export const HEARD_ABOUT_US = ['Google', 'Facebook', 'Nextdoor', 'Referral / word of mouth', 'Saw the truck or trailer', 'Yard sign / flyer', 'Repeat customer', 'Other'] as const;
 
 /** Field name → plain-language problem. Empty object means the form is good. */
 export function validateRequest(v: Partial<RequestInput>): Record<string, string> {

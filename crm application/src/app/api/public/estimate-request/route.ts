@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     turnstile_token?: string;
     photo_count?: number;
     ref?: string;
+    utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; fbclid?: string; gclid?: string; referrer?: string;
   };
   try {
     body = await req.json();
@@ -94,6 +95,11 @@ export async function POST(req: NextRequest) {
       postal_code: t(body.postal_code) || null,
       description: t(body.description),
       lead_source: t(body.ref).slice(0, 40).toLowerCase() || null,
+      heard_about_us: t(body.heard_about_us).slice(0, 80) || null,
+      utm_source: t(body.utm_source).slice(0, 200) || (t(body.fbclid) ? 'facebook' : t(body.gclid) ? 'google' : null),
+      utm_medium: t(body.utm_medium).slice(0, 200) || null,
+      utm_campaign: t(body.utm_campaign).slice(0, 200) || null,
+      internal_notes: [body.utm_content && `utm_content: ${t(body.utm_content)}`, body.utm_term && `utm_term: ${t(body.utm_term)}`, body.fbclid && 'fbclid present', body.gclid && 'gclid present', body.referrer && `referrer: ${t(body.referrer)}`].filter(Boolean).join('\n') || null,
       ip,
       user_agent: (req.headers.get('user-agent') ?? '').slice(0, 500) || null,
       turnstile_verified: turnstile.configured && turnstile.ok,

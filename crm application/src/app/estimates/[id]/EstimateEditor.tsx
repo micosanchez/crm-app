@@ -6,7 +6,7 @@ import { mutate } from '@/lib/offline/sync';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
 import TextButton from '@/components/TextButton';
 import { flags } from '@/lib/flags';
-import type { Estimate } from '@/lib/types';
+import { QUOTE_LOSS_REASONS, type Estimate } from '@/lib/types';
 
 /* Status + actions bar for a quote. All FIELD editing now lives in QuoteComposer;
    this only drives the lifecycle: copy link, mark sent, accept → job, decline. */
@@ -22,12 +22,18 @@ export default function EstimateEditor({ estimate, customerPhone, customerFirstN
   const [error, setError] = useState<string | null>(null);
   const expired = !!estimate.valid_until && estimate.valid_until < new Date().toISOString().slice(0, 10) && estimate.status !== 'accepted';
 
+  const [lossReason, setLossReason] = useState('');
+  const [declining, setDeclining] = useState(false);
+
   async function setStatus(status: 'sent' | 'accepted' | 'declined' | 'cancelled') {
+    // Why a quote was lost is the one number that improves pricing; the DB refuses a decline without it.
+    if (status === 'declined' && !lossReason) { setDeclining(true); return; }
     setBusy(true);
     setError(null);
     const patch: Record<string, unknown> = { status };
     if (status === 'accepted') patch.accepted_at = new Date().toISOString();
-    if (status === 'declined') patch.declined_at = new Date().toISOString();
+    if (status === 'declined') { patch.declined_at = new Date().toISOString(); patch.loss_reason = lossReason; }
+    if (status === 'sent' && estimate.status === 'draft') patch.sent_at = new Date().toISOString();
 
     // Accepting spawns a job and links it back — multi-step, needs connectivity.
     if (status === 'accepted' && !estimate.job_id && estimate.customer_id) {
@@ -47,6 +53,10 @@ export default function EstimateEditor({ estimate, customerPhone, customerFirstN
         title: estimate.line_item?.trim() || estimate.estimate_items?.[0]?.description || `Estimate #${estimate.estimate_number} job`,
         status: 'lead',
         estimated_value: estimate.total,
+        quoted_price: estimate.total,
+        service_type: estimate.service_type ?? 'other',
+        is_test: estimate.is_test ?? false,
+        account_id: estimate.account_id ?? null,
         address: customerAddress ?? null,
       }).select().single();
       if (jobErr) { setBusy(false); setError(`Estimate accepted, but job creation failed: ${jobErr.message}`); return; }
@@ -59,11 +69,23 @@ export default function EstimateEditor({ estimate, customerPhone, customerFirstN
     const res = await mutate({ table: 'estimates', op: 'update', id: estimate.id, label: 'estimate', payload: patch });
     setBusy(false);
     if (res.status === 'failed') { setError(res.error); return; }
+    setDeclining(false);
     router.refresh();
   }
 
   return (
     <div className="no-print space-y-4">
+      {declining && (
+        <div className="card flex flex-wrap items-center gap-2 ring-2 ring-brand-500">
+          <span className="text-sm font-medium">Why was it lost?</span>
+          <select className="input w-auto" autoFocus value={lossReason} onChange={(e) => setLossReason(e.target.value)}>
+            <option value="">Pick a reason…</option>
+            {QUOTE_LOSS_REASONS.map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+          </select>
+          <button className="btn-primary" disabled={busy || !lossReason} onClick={() => setStatus('declined')}>Mark declined</button>
+          <button className="btn-ghost" onClick={() => setDeclining(false)}>Back</button>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <button className="btn-ghost" onClick={() => window.print()}>Export PDF</button>
         {estimate.public_token && (
