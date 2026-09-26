@@ -36,7 +36,7 @@ create index if not exists idx_jobs_kind_test on public.jobs (job_kind, is_test)
 -- Guess the service line from a title (used for the legacy backfill review CSV and as a hint)
 create or replace function public.suggest_service_type(p_title text) returns public.job_service_type
 language sql immutable as $$
-  select case
+  select (case
     when p_title ~* 'hot ?tub' then 'hot_tub'
     when p_title ~* 'mattress' then 'mattress'
     when p_title ~* '(fridge|freezer|washer|dryer|appliance|stove)' then 'appliance'
@@ -51,7 +51,7 @@ language sql immutable as $$
     when p_title ~* '(turnover|tenant)' then 'property_turnover'
     when p_title ~* '(couch|sofa|sectional|furniture|dresser|recliner|table)' then 'furniture'
     when p_title ~* '(grill|smoker|single|one item|tv|bike)' then 'single_item'
-    else null end
+    else null end)::public.job_service_type
 $$;
 
 -- ============ Required-on-new-jobs rules ============

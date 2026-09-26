@@ -78,15 +78,15 @@ create index if not exists idx_expenses_class on public.expenses (expense_class)
 
 create or replace function public.default_expense_class(p_category public.expense_category, p_amount numeric)
 returns public.expense_class language sql immutable as $$
-  select case p_category::text
-    when 'owner_draw' then 'owner_draw'::public.expense_class
+  select (case p_category::text
+    when 'owner_draw' then 'owner_draw'
     when 'personal'   then 'personal'
     when 'equipment_purchase' then case when p_amount >= 250 then 'capital' else 'overhead' end
     when 'dump_fees' then 'direct_job_cost' when 'dumpster_rental' then 'direct_job_cost'
     when 'fuel' then 'direct_job_cost' when 'payroll' then 'direct_job_cost'
     when 'job_supplies' then 'direct_job_cost' when 'crew_meals' then 'direct_job_cost'
     when 'payment_processing' then 'direct_job_cost' when 'vehicle_mileage' then 'direct_job_cost'
-    else 'overhead' end
+    else 'overhead' end)::public.expense_class
 $$;
 
 -- Fill the class from the category when the writer didn't say; keep the ledger honest on deductibility.

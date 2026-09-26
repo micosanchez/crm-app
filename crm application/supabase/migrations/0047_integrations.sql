@@ -53,7 +53,7 @@ begin
   end if;
   insert into public.leads (name, phone, source, status, channel_in, notes, customer_id, external_source, external_id, last_contact_at)
   values (coalesce(p_name, (select name from public.customers where id = v_cust), 'Unknown (' || coalesce(v_phone, p_phone) || ')'), coalesce(v_phone, p_phone),
-          case when v_cust is not null then 'repeat_customer' else 'unknown' end, 'new', p_channel, left(p_body, 4000), v_cust, p_external_source, p_external_id, now())
+          (case when v_cust is not null then 'repeat_customer' else 'unknown' end)::public.lead_source, 'new', p_channel, left(p_body, 4000), v_cust, p_external_source, p_external_id, now())
   on conflict (external_source, external_id) where external_id is not null do update set inbound_count = public.leads.inbound_count
   returning id into v_lead;
   return jsonb_build_object('lead_id', v_lead, 'created', true, 'customer_id', v_cust);

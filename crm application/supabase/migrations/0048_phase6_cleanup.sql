@@ -77,7 +77,7 @@ update public.expenses set category = 'job_supplies',    expense_class = 'direct
 update public.expenses set category = 'crew_meals',      expense_class = 'direct_job_cost' where left(id::text, 8) in ('fc6817bb','bffd56ff');
 
 -- Capital: one asset row per thing, expenses point at it.
-insert into public.assets (name, kind, acquired_on, cost, notes)
+insert into public.assets (name, category, purchased_on, cost, notes)
 select v.name, v.kind, min(e.incurred_on), sum(e.amount), 'Created by 0048 cleanup'
 from (values ('Trailer 6x12', 'trailer', array['74158331','fa8c3d37','aea5b286']), ('Sawzall', 'tool', array['e77fe757']), ('Hand tools', 'tool', array['4ac098e9','75f8d415'])) v(name, kind, ids)
 join public.expenses e on left(e.id::text, 8) = any(v.ids)
@@ -137,15 +137,42 @@ update public.jobs j set status = 'paid' from public.invoices i
 commit;
 
 -- ===================================================================
--- OWNER CONFIRM — run individually once Mico answers.
+-- PART C — OWNER CONFIRMED 2026-09-26 (run right after PART B)
+--   Michael Little paid by Venmo, Lynn Steffensky by check; Justin Mayes' $40 payroll is right;
+--   the Goldobin Home Depot runs ($361.98 5/3, $12.70 4/19) were job supplies.
 -- ===================================================================
--- Michael Little (08896d67) and Lynn Steffensky (dae0faeb): paid with $0 collected.
---   Option 1 (they did pay, cash, amount unknown → record it):
---     insert into public.payments (invoice_id, amount, method, kind, paid_at, reference) select id, total, 'cash', 'payment', paid_at, 'owner confirmed 2026-09' from public.invoices where left(job_id::text,8) in ('08896d67','dae0faeb');
---   Option 2 (never paid): update public.invoices set status = 'sent', paid_at = null where left(job_id::text,8) in ('08896d67','dae0faeb'); update public.jobs set status = 'completed' where left(id::text,8) in ('08896d67','dae0faeb');
--- Cervelli dump ticket (7bde0f0a, $60 "NOT YET PAID"):
+begin;
+-- PART B gave these two invoices an unknown_legacy payment; set the real method.
+update public.payments p set method = case when left(i.job_id::text,8) = '08896d67' then 'venmo' else 'check' end,
+       reference = 'owner confirmed 2026-09-26'
+  from public.invoices i where i.id = p.invoice_id and left(i.job_id::text,8) in ('08896d67','dae0faeb') and p.method = 'unknown_legacy';
+update public.invoices set date_precision = 'exact' where left(job_id::text,8) in ('08896d67','dae0faeb');
+update public.jobs set date_precision = 'exact' where left(id::text,8) in ('08896d67','dae0faeb');
+-- Justin: labor entry becomes $40 and owns the existing payroll expense (no second expense is generated).
+update public.labor_entries set rate = round(40.0 / nullif(hours,0), 2) where left(id::text,8) = '25f36fae' and hours > 0;
+do $$ begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='labor_entries' and column_name='amount' and is_generated = 'NEVER') then
+    update public.labor_entries set amount = 40 where left(id::text,8) = '25f36fae';
+  end if;
+end $$;
+update public.expenses e set labor_entry_id = l.id
+  from public.labor_entries l where left(l.id::text,8) = '25f36fae' and left(e.id::text,8) = '964d4a3d' and e.labor_entry_id is null;
+update public.labor_entries l set paid_at = coalesce(l.paid_at, (e.incurred_on::timestamp at time zone 'America/Detroit'))
+  from public.expenses e where left(e.id::text,8) = '964d4a3d' and left(l.id::text,8) = '25f36fae';
+-- Goldobin Home Depot runs: supplies, not equipment.
+update public.expenses set category = 'job_supplies', expense_class = 'direct_job_cost', asset_id = null
+  where deleted_at is null and vendor ilike '%home depot%' and ((amount = 361.98 and incurred_on = '2026-05-03') or (amount = 12.70 and incurred_on = '2026-04-19'));
+commit;
+-- Check:
+select 'little/steffensky methods' as what, string_agg(p.method, ',') as v from public.payments p join public.invoices i on i.id = p.invoice_id where left(i.job_id::text,8) in ('08896d67','dae0faeb')
+union all select 'justin labor entry $', (select round(hours*rate,2)::text from public.labor_entries where left(id::text,8)='25f36fae')
+union all select 'justin payroll expenses on job (expect 1)', (select count(*)::text from public.expenses where left(job_id::text,8)='1bd613e1' and category='payroll' and deleted_at is null)
+union all select 'capital one $350 candidates', (select string_agg(left(id::text,8) || ' ' || incurred_on || ' ' || coalesce(vendor,'') || ' ' || category::text, '; ') from public.expenses where amount = 350 and deleted_at is null);
+
+-- ===================================================================
+-- OWNER CONFIRM — still open
+-- ===================================================================
+-- Cervelli dump ticket (7bde0f0a, $60 "NOT YET PAID") — once settled:
 --     update public.expenses set description = regexp_replace(description, '\s*\(?NOT YET PAID\)?', '', 'i'), is_pending = false where left(id::text,8) = '7bde0f0a';
--- Justin Mayes job 1bd613e1: labor entry 25f36fae says $15, payroll expense 964d4a3d says $40.
---   If $40 is right: update public.labor_entries set hours = 40.0 / nullif(rate,0) where left(id::text,8) = '25f36fae'; then update public.expenses set deleted_at = now() where left(id::text,8) = '964d4a3d' and mark the labor entry paid (mark_hours_paid) so the expense regenerates.
---   If $15 is right: update public.expenses set deleted_at = now() where left(id::text,8) = '964d4a3d';
--- Capital One $350 on 7/16 and Goldobin $361.98 + $12.70 were not found by id — search: select id, incurred_on, vendor, amount from public.expenses where amount in (350, 361.98, 12.70) and deleted_at is null;
+-- Capital One $350 on 7/16 was not found by id — the PART C check query lists candidates; then:
+--     update public.expenses set category = 'owner_draw', expense_class = 'owner_draw', is_tax_deductible = false, job_id = null where id = '<id>';

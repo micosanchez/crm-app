@@ -155,7 +155,7 @@ create trigger estimate_requests_status_to_lead after update on public.estimate_
 insert into public.leads (name, phone, email, address, source, status, channel_in, notes, customer_id, quote_id, estimate_request_id, created_at, first_response_at)
 select btrim(r.first_name || ' ' || r.last_name), r.phone, r.email, r.address,
        case when public.is_lead_source(r.lead_source) then coalesce(r.lead_source, 'website_direct')::public.lead_source else 'website_direct' end,
-       case r.status when 'accepted' then case when r.quote_id is not null then 'quoted' else 'contacted' end when 'declined' then 'not_a_fit' when 'spam' then 'spam' else 'new' end,
+       (case r.status when 'accepted' then case when r.quote_id is not null then 'quoted' else 'contacted' end when 'declined' then 'not_a_fit' when 'spam' then 'spam' else 'new' end)::public.lead_status,
        'web_form', r.description, r.customer_id, r.quote_id, r.id, r.created_at, coalesce(r.accepted_at, r.declined_at)
 from public.estimate_requests r
 where r.lead_id is null;
