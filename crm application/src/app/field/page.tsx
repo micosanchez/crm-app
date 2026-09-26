@@ -59,7 +59,7 @@ export default async function FieldPage() {
     <div className="mx-auto max-w-md space-y-4">
       <h1 className="text-2xl font-bold">Field — Today</h1>
       {user && <ClockWidget userId={user.id} openEntry={openEntry} jobs={todayJobs.map((j) => ({ id: j.id, title: j.title }))} />}
-      <FieldJobList jobs={todayJobs} />
+      <FieldJobList jobs={todayJobs} isStaff={isStaff} />
       {!isStaff && todayJobs.length === 0 && (
         <p className="text-xs text-gray-400">Jobs show up here once you&apos;re assigned to them for today.</p>
       )}
