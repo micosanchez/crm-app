@@ -107,7 +107,7 @@ begin
       insert into public.payments (invoice_id, amount, tip, method, kind, paid_at, reference)
       select id, 0, 112.50, 'unknown_legacy', 'payment', paid_at, '0048: tip moved from invoice #36' from public.invoices where left(id::text, 8) = '40ccce56';
     end if;
-    update public.invoices set status = 'void', voided_at = now(), void_reason = 'Tip; moved onto invoice #35 by 0048' where left(id::text, 8) = '1229f545';
+    update public.invoices set voided_at = now(), void_reason = 'Tip; moved onto invoice #35 by 0048' where left(id::text, 8) = '1229f545';
     update public.jobs set status = 'cancelled', cancel_reason = 'other', internal_notes = concat_ws(E'\n', internal_notes, 'Was a tip, not a job — see invoice #35 (0048)') where left(id::text, 8) = '7b1db2c6';
   end if;
 end $$;
