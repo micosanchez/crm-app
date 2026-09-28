@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { mutate } from '@/lib/offline/sync';
-import { EXPENSE_CATEGORIES, PAID_WITH_OPTIONS, type Expense, type ExpenseCategory, type Job, type PaidWith } from '@/lib/types';
+import { EXPENSE_CATEGORIES, EXPENSE_CLASSES, PAID_WITH_OPTIONS, type Expense, type ExpenseCategory, type ExpenseClass, type Job, type PaidWith } from '@/lib/types';
 
 const EMPTY = {
   category: 'dump_fees' as ExpenseCategory, amount: '', incurred_on: new Date().toISOString().slice(0, 10),
   vendor: '', description: '', job_id: '', paid_with: 'bluevine' as PaidWith,
+  expense_class: '' as ExpenseClass | '', // blank = let the category decide
 };
 
 export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]; jobs: Pick<Job, 'id' | 'title'>[] }) {
@@ -47,6 +48,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
       category: x.category, amount: String(x.amount), incurred_on: x.incurred_on,
       vendor: x.vendor ?? '', description: x.description ?? '', job_id: x.job_id ?? '',
       paid_with: x.paid_with ?? 'bluevine',
+      expense_class: x.expense_class ?? '',
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -82,6 +84,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
       job_id: form.job_id || null,
       paid_with: form.paid_with,
     };
+    if (form.expense_class) payload.expense_class = form.expense_class;
     if (receiptPath) payload.receipt_url = receiptPath;
 
     const res = editingId
@@ -124,6 +127,10 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
           <option value="">No job (overhead)</option>
           {jobs.map((j) => <option key={j.id} value={j.id}>{j.title}</option>)}
         </select>
+        <select className="input" title="Class — owner draw and personal stay in the ledger but out of profit" value={form.expense_class} onChange={(e) => setForm({ ...form, expense_class: e.target.value as ExpenseClass | '' })}>
+          <option value="">Class: auto from category</option>
+          {EXPENSE_CLASSES.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+        </select>
         <select className="input" title="Paid with" value={form.paid_with} onChange={(e) => setForm({ ...form, paid_with: e.target.value as PaidWith })}>
           {PAID_WITH_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
@@ -158,7 +165,7 @@ export default function ExpenseManager({ expenses, jobs }: { expenses: Expense[]
         {filtered.map((x) => (
           <div key={x.id} className="flex items-center justify-between gap-2 px-4 py-2 text-sm">
             <div className="min-w-0">
-              <p className="font-medium capitalize">{x.category.replace(/_/g, ' ')}{x.vendor && <span className="font-normal text-gray-500"> · {x.vendor}</span>}</p>
+              <p className="font-medium capitalize">{x.category.replace(/_/g, ' ')}{x.vendor && <span className="font-normal text-gray-500"> · {x.vendor}</span>}{x.expense_class && x.expense_class !== 'direct_job_cost' && <span className="ml-2 badge bg-gray-100 text-gray-600">{x.expense_class.replace(/_/g, ' ')}</span>}</p>
               <p className="truncate text-xs text-gray-500">
                 {x.incurred_on}
                 {x.job_id && x.jobs?.title

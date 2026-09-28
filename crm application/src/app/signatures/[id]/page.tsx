@@ -129,7 +129,6 @@ export default async function SignatureDetailPage({ params }: { params: { id: st
             </div>
           )}
           {payload.comments && <p className="text-sm" style={{ color: '#6b7280' }}>{payload.comments}</p>}
-          {payload.notes && <p className="text-sm" style={{ color: '#6b7280' }}>{payload.notes}</p>}
 
           {/* Signature of record */}
           <div className="border-t pt-5" style={{ borderColor: '#ececec' }}>

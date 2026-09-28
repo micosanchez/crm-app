@@ -54,6 +54,10 @@ export interface WebsiteLead {
   postal_code: string | null;
   description: string;
   lead_source: string;
+  heard_about_us: string | null;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
   internal_notes: string;
   ip: string | null;
   user_agent: string | null;
@@ -65,10 +69,13 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
 /** Which channel sent this visitor, from first-touch attribution the site captured. */
 export function leadSourceFrom(d: Record<string, unknown>): string {
   const src = str(d.utm_source).toLowerCase();
+  const med = str(d.utm_medium).toLowerCase();
   if (/instagram|^ig$/.test(src)) return 'instagram';
-  if (str(d.fbclid) || /facebook|^fb$|meta/.test(src)) return 'facebook';
-  if (/google/.test(src) || str(d.gclid)) return 'google';
-  return 'website';
+  if (str(d.fbclid) || /facebook|^fb$|meta/.test(src)) return /cpc|paid|ad/.test(med) || str(d.fbclid) ? 'meta_ads' : 'facebook_organic_page';
+  if (str(d.gclid) || (/google/.test(src) && /cpc|paid/.test(med))) return 'google_ads';
+  if (/google/.test(src)) return 'google_search_organic';
+  if (/nextdoor/.test(src)) return 'nextdoor';
+  return 'website_direct';
 }
 
 /** Netlify reports a file field as one object, an array of them, or a bare URL. */
@@ -106,6 +113,10 @@ export function mapWebsiteSubmission(p: NetlifyFormPayload): WebsiteLead | null 
     postal_code: str(d.postal_code) || null,
     description: str(d.details),
     lead_source: leadSourceFrom(d),
+    heard_about_us: str(d.heard_about_us).slice(0, 80) || null,
+    utm_source: str(d.utm_source).slice(0, 200) || null,
+    utm_medium: str(d.utm_medium).slice(0, 200) || null,
+    utm_campaign: str(d.utm_campaign).slice(0, 200) || null,
     internal_notes: [`Website quote form · ${submissionTag(submissionId)}`, ...attribution].join('\n'),
     ip: str(d.ip) || null,
     user_agent: str(d.user_agent).slice(0, 500) || null,

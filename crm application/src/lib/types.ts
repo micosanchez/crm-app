@@ -47,6 +47,15 @@ export interface Job {
    *  once a job is invoiced instead of the original estimate. */
   billed_value?: number | null;
   lead_source?: string | null;
+  service_type?: JobServiceType | null;
+  job_kind?: 'customer' | 'internal';
+  is_test?: boolean;
+  internal_notes?: string | null;
+  cancel_reason?: string | null;
+  hauling_unit?: string | null;
+  load_fraction?: number | null;
+  crew_size?: number | null;
+  quoted_price?: number | null;
   photos: { url: string; caption?: string; uploaded_by?: string; uploaded_at?: string }[];
   created_at: string;
   updated_at: string;
@@ -94,7 +103,9 @@ export interface InvoiceItem {
   amount: number;
 }
 
-export type PaymentMethod = 'cash' | 'venmo' | 'card' | 'check' | 'other';
+export type PaymentMethod = 'cash' | 'check' | 'venmo' | 'cash_app' | 'zelle' | 'stripe_card' | 'stripe_ach' | 'bank_transfer' | 'card' | 'other' | 'unknown_legacy';
+/** Methods a person can pick; unknown_legacy is only for the 2025 backfill. */
+export const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'check', 'venmo', 'cash_app', 'zelle', 'stripe_card', 'stripe_ach', 'bank_transfer', 'other'];
 
 export interface ScheduleEvent {
   id: string;
@@ -126,14 +137,23 @@ export interface Note {
 }
 
 export type LeadStatus = 'new' | 'contacted' | 'estimate_sent' | 'accepted' | 'scheduled' | 'won' | 'lost';
-export type LeadSource = 'google' | 'google_ads' | 'facebook' | 'instagram' | 'referral' | 'yard_sign' | 'website' | 'repeat_customer' | 'other';
+export type LeadSource = 'google_business_profile' | 'google_search_organic' | 'google_ads' | 'website_direct' | 'facebook_organic_page' | 'facebook_group_post' | 'meta_ads' | 'facebook_marketplace' | 'instagram' | 'nextdoor' | 'referral' | 'repeat_customer' | 'commercial_account' | 'truck_trailer_signage' | 'yard_sign_flyer' | 'other' | 'unknown'
+  | 'google' | 'facebook' | 'yard_sign' | 'website'; // legacy values still on old rows
 export type EstimateStatus = 'draft' | 'sent' | 'accepted' | 'declined' | 'expired' | 'cancelled';
-export type ExpenseCategory = 'dump_fees' | 'fuel' | 'payroll' | 'equipment_purchase' | 'equipment_repair' | 'vehicle_repair' | 'insurance' | 'marketing' | 'office' | 'software' | 'utilities' | 'permits' | 'misc';
+export type ExpenseCategory = 'dump_fees' | 'fuel' | 'payroll' | 'equipment_purchase' | 'equipment_repair' | 'vehicle_repair' | 'insurance' | 'marketing' | 'office' | 'software' | 'utilities' | 'permits' | 'misc'
+  | 'job_supplies' | 'crew_meals' | 'dumpster_rental' | 'payment_processing' | 'bank_fees' | 'vehicle_mileage' | 'owner_draw' | 'personal';
+export type ExpenseClass = 'direct_job_cost' | 'overhead' | 'capital' | 'owner_draw' | 'personal';
+export const EXPENSE_CLASSES: ExpenseClass[] = ['direct_job_cost', 'overhead', 'capital', 'owner_draw', 'personal'];
+export type JobServiceType = 'single_item' | 'furniture' | 'appliance' | 'mattress' | 'hot_tub' | 'garage_cleanout' | 'basement_cleanout' | 'estate_cleanout' | 'whole_home_cleanout' | 'yard_waste' | 'construction_debris' | 'demo' | 'commercial_cleanout' | 'property_turnover' | 'other';
+export const SERVICE_TYPES: JobServiceType[] = ['single_item', 'furniture', 'appliance', 'mattress', 'hot_tub', 'garage_cleanout', 'basement_cleanout', 'estate_cleanout', 'whole_home_cleanout', 'yard_waste', 'construction_debris', 'demo', 'commercial_cleanout', 'property_turnover', 'other'];
+export const QUOTE_LOSS_REASONS = ['price_too_high', 'went_with_competitor', 'did_it_themselves', 'city_bulk_pickup', 'timing_scheduling', 'scope_changed', 'no_response_ghosted', 'hazmat_or_out_of_scope', 'deposit_required', 'other'] as const;
+export const CANCEL_REASONS = ['customer_cancelled', 'no_show', 'price', 'scheduling', 'weather', 'hazmat_scope', 'went_with_competitor', 'other'] as const;
+export const HAULING_UNITS = ['truck_bed', 'trailer_6x12', 'dumpster', 'multiple'] as const;
 
 export const LEAD_PIPELINE: LeadStatus[] = ['new', 'contacted', 'estimate_sent', 'accepted', 'scheduled', 'won', 'lost'];
-/** Every value of the customers.lead_source / jobs.lead_source enum (0002 + 0033). */
-export const LEAD_SOURCES: LeadSource[] = ['google', 'google_ads', 'facebook', 'instagram', 'referral', 'yard_sign', 'website', 'repeat_customer', 'other'];
-export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['dump_fees', 'fuel', 'payroll', 'equipment_purchase', 'equipment_repair', 'vehicle_repair', 'insurance', 'marketing', 'office', 'software', 'utilities', 'permits', 'misc'];
+/** Lead sources a person can pick (0041). Legacy google/facebook/yard_sign/website stay valid on old rows. */
+export const LEAD_SOURCES: LeadSource[] = ['google_business_profile', 'google_search_organic', 'google_ads', 'website_direct', 'facebook_organic_page', 'facebook_group_post', 'meta_ads', 'facebook_marketplace', 'instagram', 'nextdoor', 'referral', 'repeat_customer', 'commercial_account', 'truck_trailer_signage', 'yard_sign_flyer', 'other', 'unknown'];
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['dump_fees', 'dumpster_rental', 'fuel', 'payroll', 'job_supplies', 'crew_meals', 'equipment_purchase', 'equipment_repair', 'vehicle_repair', 'vehicle_mileage', 'insurance', 'marketing', 'office', 'software', 'utilities', 'permits', 'payment_processing', 'bank_fees', 'owner_draw', 'personal', 'misc'];
 
 export interface Lead {
   id: string;
@@ -176,6 +196,10 @@ export interface Estimate {
   payment_terms?: string | null;
   additional_terms?: string | null;
   internal_notes?: string | null;
+  service_type?: JobServiceType | null;
+  loss_reason?: string | null;
+  is_test?: boolean;
+  account_id?: string | null;
   public_token?: string;
   signed_name?: string | null;
   signed_at?: string | null;
@@ -195,11 +219,14 @@ export interface EstimateItem {
   amount: number;
 }
 
-export type PaidWith = 'bluevine' | 'credit_card' | 'cash' | 'other';
+export type PaidWith = 'bluevine' | 'credit_card' | 'cash' | 'cash_app' | 'venmo' | 'zelle' | 'other';
 export const PAID_WITH_OPTIONS: { value: PaidWith; label: string }[] = [
   { value: 'bluevine', label: 'Bluevine' },
   { value: 'credit_card', label: 'Credit card' },
   { value: 'cash', label: 'Cash' },
+  { value: 'cash_app', label: 'Cash App' },
+  { value: 'venmo', label: 'Venmo' },
+  { value: 'zelle', label: 'Zelle' },
   { value: 'other', label: 'Other' },
 ];
 
@@ -213,6 +240,10 @@ export interface Expense {
   job_id: string | null;
   receipt_url: string | null;
   paid_with?: PaidWith;
+  expense_class?: ExpenseClass | null;
+  is_tax_deductible?: boolean;
+  is_pending?: boolean;
+  bank_txn_ref?: string | null;
   created_at: string;
   jobs?: Pick<Job, 'id' | 'title'>;
 }

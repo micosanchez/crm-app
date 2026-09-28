@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mutate } from '@/lib/offline/sync';
-import { LEAD_SOURCES, type Customer, type ServiceType } from '@/lib/types';
+import { LEAD_SOURCES, SERVICE_TYPES, type Customer, type JobServiceType, type ServiceType } from '@/lib/types';
 
 export default function NewJobForm({ customers, triggerClassName = 'btn-primary', triggerLabel = '+ New job', defaultDate, startOpen = false, onClose }: {
   customers: Pick<Customer, 'id' | 'name'>[];
@@ -20,6 +20,7 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
     title: '', customer_id: '', service: 'junk_removal' as ServiceType,
     description: '', address: '', estimated_value: '',
     scheduled_start: defaultDate ? `${defaultDate}T09:00` : '', lead_source: '',
+    service_type: '' as JobServiceType | '',
   });
 
   async function submit(e: React.FormEvent) {
@@ -36,7 +37,8 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
         address: form.address || null,
         estimated_value: form.estimated_value ? Number(form.estimated_value) : null,
         scheduled_start: form.scheduled_start ? new Date(form.scheduled_start).toISOString() : null,
-        lead_source: form.lead_source || null,
+        lead_source: form.lead_source || null, // blank → inherits the customer's source (DB trigger)
+        service_type: form.service_type,
         status: form.scheduled_start ? 'scheduled' : 'lead',
       },
     });
@@ -62,11 +64,15 @@ export default function NewJobForm({ customers, triggerClassName = 'btn-primary'
           <option value="landscaping">Landscaping</option>
           <option value="other">Other</option>
         </select>
+        <select className="input" required value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value as JobServiceType })}>
+          <option value="">What kind of job? *</option>
+          {SERVICE_TYPES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+        </select>
         <input className="input" type="number" step="0.01" placeholder="Estimated value $" value={form.estimated_value} onChange={(e) => setForm({ ...form, estimated_value: e.target.value })} />
         <input className="input" placeholder="Job address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
         <input className="input" type="datetime-local" value={form.scheduled_start} onChange={(e) => setForm({ ...form, scheduled_start: e.target.value })} />
         <select className="input" value={form.lead_source} onChange={(e) => setForm({ ...form, lead_source: e.target.value })}>
-          <option value="">Lead source…</option>
+          <option value="">Lead source (blank = same as customer)…</option>
           {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
         <textarea className="input md:col-span-2" placeholder="Description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />

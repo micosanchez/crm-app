@@ -6,9 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import { ymd } from '@/lib/dates';
 import { balanceDue } from '@/lib/money';
 import PaymentPanel from './PaymentPanel';
-import type { Invoice, InvoiceItem, PaymentMethod } from '@/lib/types';
+import { PAYMENT_METHODS, type Invoice, type InvoiceItem, type PaymentMethod } from '@/lib/types';
 
-const METHODS: PaymentMethod[] = ['cash', 'venmo', 'card', 'check', 'other'];
+const METHODS: PaymentMethod[] = PAYMENT_METHODS;
 
 /** Detroit calendar date of a timestamp — a 9pm payment must not show as tomorrow. */
 function toDateInput(iso: string | null | undefined): string {
