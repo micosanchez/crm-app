@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     turnstile_token?: string;
     photo_count?: number;
     ref?: string;
+    rental_id?: string;
     utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string; fbclid?: string; gclid?: string; referrer?: string;
   };
   try {
@@ -95,6 +96,7 @@ export async function POST(req: NextRequest) {
       postal_code: t(body.postal_code) || null,
       description: t(body.description),
       lead_source: t(body.ref).slice(0, 40).toLowerCase() || null,
+      rental_id: /^[0-9a-f-]{36}$/.test(t(body.rental_id)) ? t(body.rental_id) : null,
       heard_about_us: t(body.heard_about_us).slice(0, 80) || null,
       utm_source: t(body.utm_source).slice(0, 200) || (t(body.fbclid) ? 'facebook' : t(body.gclid) ? 'google' : null),
       utm_medium: t(body.utm_medium).slice(0, 200) || null,
@@ -113,6 +115,9 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Cross-sell: remember the junk request on the rental so the board can flag it.
+  if (/^[0-9a-f-]{36}$/.test(t(body.rental_id))) void admin.from('rentals').update({ junk_request_id: row.id }).eq('id', t(body.rental_id)).is('junk_request_id', null);
 
   // Signed upload URLs — one per photo the browser says it has, capped.
   const wanted = Math.max(0, Math.min(Number(body.photo_count) || 0, MAX_PHOTOS));

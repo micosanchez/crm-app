@@ -20,7 +20,7 @@ export const metadata: Metadata = {
  * here. Only the public identity fields are passed to the browser.
  */
 export default async function RequestPage({ searchParams }: {
-  searchParams: { ref?: string };
+  searchParams: { ref?: string; source?: string; rental?: string; name?: string; phone?: string; email?: string; address?: string };
 }) {
   const admin = createAdminClient();
   let biz: Biz = { ...BIZ };
@@ -48,7 +48,9 @@ export default async function RequestPage({ searchParams }: {
   return (
     <RequestForm
       biz={biz}
-      leadRef={(searchParams.ref ?? '').slice(0, 40)}
+      leadRef={(searchParams.source === 'tote_rental' ? 'tote_rental_crosssell' : searchParams.ref ?? '').slice(0, 40)}
+      rentalId={searchParams.source === 'tote_rental' && /^[0-9a-f-]{36}$/.test(searchParams.rental ?? '') ? searchParams.rental! : null}
+      prefill={{ name: searchParams.name ?? '', phone: searchParams.phone ?? '', email: searchParams.email ?? '', address: searchParams.address ?? '' }}
       turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? null}
     />
   );
