@@ -1,6 +1,6 @@
 # Moving tote rentals (built 2026-10-12)
 
-One division inside the CRM: public booking, Stripe deposits with the card kept on file, e-signed agreement, dispatch, check-in with fees, automated texts, reports, connector tools, and a landing page on sanchezhaulco.com.
+One division inside the CRM: public booking paid in full at checkout with the card kept on file, e-signed agreement, dispatch, check-in with fees, automated texts, reports, connector tools, and a landing page on sanchezhaulco.com.
 
 ## Go-live checklist (in order)
 
@@ -17,15 +17,15 @@ One division inside the CRM: public booking, Stripe deposits with the card kept 
 
 Card numbers are shown on the rental detail page while the secret key is a test key.
 
-1. Open `/rent` (or `/totes` on the site). Book 20 totes + 1 dolly for a date two days out. Sign, pay the deposit with `4242 4242 4242 4242`. Expect: rental turns **booked**, confirmation text + email, owner email, `booking_confirmed` event, deposit charge `succeeded`.
+1. Open `/rent` (or `/totes` on the site). Book 20 totes + 1 dolly for a date two days out. Sign, pay in full with `4242 4242 4242 4242`. Expect: rental turns **booked**, confirmation text + email, owner email, `booking_confirmed` event, deposit charge `succeeded`.
 2. `/rentals/today?day=<delivery date>` → Check out totes → scan or tap tags → Mark delivered. Expect: items out, `delivered` text, balance charged if settings say "delivery".
 3. Customer page (link in the text) → Extend one week. Expect extension charge succeeded, pickup moved.
 4. `/rentals/<id>` → Check in: mark one tote **damaged** with a photo, one **missing**. Expect pending fee lines for damage and replacement.
-5. Charges review → Settle. Expect deposit applied first, leftover refunded or balance charged, receipt text, status **closed**.
+5. Charges review → Settle. Expect the fees charged to the card on file, receipt text, status **closed**.
 6. Found item → the missing tote comes back: replacement fee refunded.
 7. Failure paths: book another rental with `4000 0000 0000 0341` (attaches, then fails) → settle fails → text with payment link → owner email after retries. `4000 0027 6000 3184` forces 3‑D Secure → `requires_action` → payment link text.
-8. Dispute: in the Stripe test dashboard, create a dispute on the deposit charge → rental flagged DISPUTE on the board, owner email, evidence packet at `/rentals/<id>/evidence`.
-9. Cancel a booked rental more than 48 h before delivery → full refund; inside 48 h → partial per settings.
+8. Dispute: in the Stripe test dashboard, create a dispute on the booking charge → rental flagged DISPUTE on the board, owner email, evidence packet at `/rentals/<id>/evidence`.
+9. Cancel a booked rental more than 48 h before delivery → full refund; inside 48 h → no automatic refund (staff can refund from the detail page).
 10. Waitlist: book every tote for a date, try to book again → waitlist card → cancel the first rental → cron texts the first person on the waitlist.
 
 ## Screens
@@ -42,7 +42,7 @@ Card numbers are shown on the rental detail page while the secret key is a test 
 | `/rentals/today` | Route with navigate / call / text / On my way |
 | `/rentals/inventory` | Assets, bulk add, mark damaged / lost / retired |
 | `/rentals/packages` | Packages and add-ons with a preview card |
-| `/rentals/settings` | Fees, deposits, scheduling, delivery, goals, terms, message templates (admin) |
+| `/rentals/settings` | Fees, payment timing, scheduling, delivery, goals, terms, message templates (admin) |
 | `/rentals/reports` | rental_report: revenue, utilization, losses, payback, conversion, cross-sell |
 | `/rentals/labels` | QR labels, 2×1 in. `/rentals/scan/<tag>` is what the QR opens |
 | `/rentals/partners` | Realtor partners, promo codes, monthly statement |
@@ -62,7 +62,7 @@ Card numbers are shown on the rental detail page while the secret key is a test 
 
 ## Money model
 
-`rental_charges` is the ledger. `deposit` is held, never revenue. `rental_payment` / `balance` / fee rows with a Stripe intent are collected money. `deposit_applied` on the rental is how much of the deposit covered fees. `balance_due` is recomputed by trigger. `rental_revenue(from,to)` = succeeded + refunded non-deposit charges, and it is its own line in `pnl_report`, `weekly_scorecard` and `monthly_close`.
+`rental_charges` is the ledger. The rental is paid in full at booking (one `rental_payment` row); deposits are off (quote returns 0) and the deposit code paths are dormant. `rental_payment` / `balance` / fee rows with a Stripe intent are collected money. `deposit_applied` on the rental is how much of the deposit covered fees. `balance_due` is recomputed by trigger. `rental_revenue(from,to)` = succeeded + refunded non-deposit charges, and it is its own line in `pnl_report`, `weekly_scorecard` and `monthly_close`.
 
 ## Texts
 

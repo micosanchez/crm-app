@@ -92,7 +92,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("create_rental", {
     title: "Book a tote rental by phone",
-    description: "Creates the hold exactly like the website (availability, lead time, slot cap and pricing are all checked in the database) and texts the customer a link to sign the agreement and pay the deposit. The hold lasts 30 minutes; if they miss it the same link lets them rebook with everything prefilled. Ask for name, phone, delivery address, date and window first. Nothing is charged until the customer pays.",
+    description: "Creates the hold exactly like the website (availability, lead time, slot cap and pricing are all checked in the database) and texts the customer a link to sign the agreement and pay (the rental is paid in full at booking). The hold lasts 30 minutes; if they miss it the same link lets them rebook with everything prefilled. Ask for name, phone, delivery address, date and window first. Nothing is charged until the customer pays.",
     inputSchema: {
       name: external_exports.string().min(1), phone: external_exports.string().min(10), email: external_exports.string().email().optional(),
       package_id: external_exports.string().uuid().optional().describe("Omit to use the only active package"),
@@ -115,7 +115,7 @@ function registerRentalTools(server, dbc, env) {
     const link = `${RENTAL_APP}/rent?resume=${j.public_token}`;
     let texted = null;
     if (a.send_link !== false) {
-      const t = await rentalOp(env, "send_text", { rental_id: j.rental_id, content: `Hi ${a.name.split(" ")[0]}, this is Sanchez Junk & Haul Co. Your moving totes are reserved for ${a.delivery_date}. Sign the agreement and pay the deposit here to lock it in: ${link}` });
+      const t = await rentalOp(env, "send_text", { rental_id: j.rental_id, content: `Hi ${a.name.split(" ")[0]}, this is Sanchez Junk & Haul Co. Your moving totes are reserved for ${a.delivery_date}. Sign the agreement and pay here to lock it in: ${link}` });
       texted = !t.isError;
     }
     return ok({ rental_id: j.rental_id, rental_number: j.rental_number, quote: j.quote, link, texted, next: "The customer signs and pays from the link; the rental turns booked automatically." });
@@ -129,7 +129,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("cancel_rental", {
     title: "Cancel a tote rental",
-    description: "Preview first (confirm=false) to see the refund per the cancellation policy, then confirm=true to cancel, refund the deposit/payment as the policy says, and text the customer.",
+    description: "Preview first (confirm=false) to see the refund per the cancellation policy, then confirm=true to cancel, refund the payment if the cancellation policy allows (inside the cutoff nothing is refunded automatically), and text the customer.",
     inputSchema: { rental: ref, reason: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
   }, guarded(async (a) => { const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "cancel", { rental_id: JSON.parse(r.content[0].text).id, reason: a.reason, confirm: a.confirm === true }); }));
 
@@ -164,7 +164,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("settle_rental", {
     title: "Settle a returned rental",
-    description: "Applies the deposit to any pending fees, charges the card for what is left (or refunds the unused deposit), texts the receipt, and closes the rental. Run after record_pickup once the fees look right. confirm must be true.",
+    description: "Charges the card on file for the pending fees (the rental itself was paid at booking), texts the receipt, and closes the rental. Run after record_pickup once the fees look right. confirm must be true.",
     inputSchema: { rental: ref, confirm: external_exports.boolean().default(false) }
   }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to settle."); const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "settle", { rental_id: JSON.parse(r.content[0].text).id }); }));
 
@@ -212,7 +212,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("rental_report", {
     title: "Tote rental report",
-    description: "Net rental revenue by month and type, utilization, deposits held and balances due, failed charges, lost/damaged assets and fees recovered, payback on the tote investment, booking conversion, lead sources, and the junk-removal cross-sell. Rental revenue also appears as its own line in pnl_report and weekly_scorecard.",
+    description: "Net rental revenue by month and type, utilization, balances due, failed charges, lost/damaged assets and fees recovered, payback on the tote investment, booking conversion, lead sources, and the junk-removal cross-sell. Rental revenue also appears as its own line in pnl_report and weekly_scorecard.",
     inputSchema: { from: DATE3.optional(), to: DATE3.optional() }, annotations: { readOnlyHint: true }
   }, guarded((a) => rpc(dbc, "rental_report", { p_from: a.from ?? null, p_to: a.to ?? null })));
 }

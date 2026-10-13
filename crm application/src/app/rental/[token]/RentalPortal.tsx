@@ -47,7 +47,7 @@ export default function RentalPortal({ token }: { token: string }) {
           {r.pickup_address !== r.delivery_address && <tr><td>Pick up at</td><td style={{ whiteSpace: 'normal' }}>{r.pickup_address}</td></tr>}
           <tr><td>Totes</td><td>{r.tote_count}{r.dolly_count ? ` + ${r.dolly_count} dolly` : ''}</td></tr>
           <tr><td>Total</td><td>{money(r.total)}</td></tr>
-          <tr><td>Deposit ({r.deposit_status})</td><td>{money(r.deposit_amount)}</td></tr>
+          {Number(r.deposit_amount) > 0 && <tr><td>Deposit ({r.deposit_status})</td><td>{money(r.deposit_amount)}</td></tr>}
           <tr><td>Balance due</td><td>{money(r.balance_due)}</td></tr>
           {r.card_last4 && <tr><td>Card on file</td><td>{r.card_brand} •••• {r.card_last4} (exp {r.card_exp})</td></tr>}
         </tbody></table></div>
@@ -63,8 +63,8 @@ export default function RentalPortal({ token }: { token: string }) {
 
         {r.card_last4 && active && <a className="btn ghost" href={`/rental/${token}/card`}>Update the card on file</a>}
 
-        {canCancel && <div className="card"><h3>Cancel</h3><p className="muted">Full refund {r.settings?.cancel_full_refund_hours}+ hours before delivery. Inside that window the deposit is kept.</p>
-          <button className="btn ghost sm" disabled={busy} onClick={async () => { const p = await act('cancel'); if (p?.preview && confirm(`${p.preview.full_refund ? 'Full refund' : 'Deposit is kept'}: ${money(p.preview.refund_amount)} back to your card. Cancel this rental?`)) { const d = await act('cancel', { confirm: true }); if (d?.ok) setMsg('Cancelled. Any refund lands in 5 business days.'); } }}>Cancel rental</button></div>}
+        {canCancel && <div className="card"><h3>Cancel</h3><p className="muted">Full refund {r.settings?.cancel_full_refund_hours}+ hours before delivery. Inside that window the payment is kept, but you can move your dates for free.</p>
+          <button className="btn ghost sm" disabled={busy} onClick={async () => { const p = await act('cancel'); if (p?.preview && confirm(`${p.preview.full_refund ? 'Full refund' : 'No refund inside the cancellation window'}: ${money(p.preview.refund_amount)} back to your card. Cancel this rental?`)) { const d = await act('cancel', { confirm: true }); if (d?.ok) setMsg('Cancelled. Any refund lands in 5 business days.'); } }}>Cancel rental</button></div>}
 
         {r.items?.length > 0 && <div className="card"><h3>Your items</h3><p className="muted">{r.items.map((i: { tag: string; condition: string | null }) => `${i.tag}${i.condition ? ` (${i.condition})` : ''}`).join(', ')}</p></div>}
 

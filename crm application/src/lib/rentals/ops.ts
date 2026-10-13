@@ -402,17 +402,17 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
   const hoursOut = (new Date(detroitAt(r.delivery_date, 0)).getTime() - Date.now()) / 3600_000;
   const fullRefund = hoursOut >= s.cancel_full_refund_hours;
   const { data: paid } = await db.from('rental_charges').select('*').eq('rental_id', r.id).eq('status', 'succeeded').in('type', ['deposit', 'balance', 'rental_payment']);
-  const refundable = fullRefund ? (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0) : (paid ?? []).filter((c) => c.type !== 'deposit').reduce((sum, c) => sum + Number(c.amount), 0);
+  const refundable = fullRefund ? (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0) : 0;   // inside the window the payment is kept (staff can still refund by hand)
   const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, refund_amount: Math.round(refundable * 100) / 100, policy: `Full refund ${s.cancel_full_refund_hours}+ hours before delivery; inside that window the deposit is kept.` };
   if (a.preview) return { ok: true, preview };
   if (['closed', 'cancelled'].includes(r.status)) throw new Error(`Rental is already ${r.status}.`);
   for (const c of paid ?? []) {
-    if (!fullRefund && c.type === 'deposit') continue;
-    if (c.stripe_payment_intent_id) await refundCharge(c.id, null, `Cancellation (${fullRefund ? 'full refund' : 'deposit kept'})`, db).catch((e: Error) => logEvent(r.id, 'refund:failed', { charge_id: c.id, error: e.message }, db));
+    if (!fullRefund) continue;
+    if (c.stripe_payment_intent_id) await refundCharge(c.id, null, 'Cancellation (full refund)', db).catch((e: Error) => logEvent(r.id, 'refund:failed', { charge_id: c.id, error: e.message }, db));
   }
   const { data: items } = await db.from('rental_items').select('asset_id').eq('rental_id', r.id).is('checked_in_at', null);
   for (const it of items ?? []) await db.from('rental_assets').update({ status: 'available' }).eq('id', it.asset_id);
-  await db.from('rentals').update({ status: 'cancelled', notes_internal: [r.notes_internal, `Cancelled ${todayDetroit()}: ${a.reason ?? ''} (${fullRefund ? 'full refund' : 'deposit kept'})`].filter(Boolean).join('\n') }).eq('id', r.id);
+  await db.from('rentals').update({ status: 'cancelled', notes_internal: [r.notes_internal, `Cancelled ${todayDetroit()}: ${a.reason ?? ''} (${fullRefund ? 'full refund' : 'payment kept'})`].filter(Boolean).join('\n') }).eq('id', r.id);
   await cancelQueued(r.id, undefined, db);
   await logEvent(r.id, 'cancelled', { ...preview, by: a.by ?? null }, db);
   return { ok: true, preview };

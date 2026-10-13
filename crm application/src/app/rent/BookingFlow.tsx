@@ -76,7 +76,9 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     }).catch(() => {});
     // embedded on sanchezhaulco.com: tell the parent page how tall we are so the iframe never scrolls inside
     if (initial.embed && window.parent !== window) {
-      const post = () => window.parent.postMessage({ type: 'sjhc_rent_height', height: document.documentElement.scrollHeight }, '*');
+      // min-height is dropped in embed mode (see style below) so the content height never depends on the iframe height; otherwise this loops
+      let last = 0;
+      const post = () => { const h = document.body.scrollHeight; if (Math.abs(h - last) > 2) { last = h; window.parent.postMessage({ type: 'sjhc_rent_height', height: h }, '*'); } };
       const ro = new ResizeObserver(post); ro.observe(document.body); post();
     }
     // back from a 3D Secure redirect
@@ -206,6 +208,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   return (
     <div className="tote">
       <style dangerouslySetInnerHTML={{ __html: TOTE_CSS }} />
+      {initial.embed && <style>{`.tote{min-height:0}.tote .sticky{position:static;padding:12px 0;background:none;border:0;backdrop-filter:none}`}</style>}
       <div className="wrap">
         {!initial.embed && (<header style={{ marginBottom: 8 }}><p className="pill">Sanchez Junk &amp; Haul Co.</p><h1 className="grad-text">Rent moving totes</h1><p className="muted">Delivered to your door. Picked up when you&apos;re done. {cat?.stripe.test_mode ? <span className="pill">test mode</span> : null}</p></header>)}
         <div className="progress" aria-label={`Step ${step} of 8: ${steps[step - 1]}`}>{steps.map((_, i) => <i key={i} className={i < step ? 'on' : ''} />)}</div>
@@ -218,7 +221,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           {cat.packages.map((p) => (
             <button key={p.id} type="button" className={`card ${pkgId === p.id ? 'sel' : ''}`} style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => setPkgId(p.id)} aria-pressed={pkgId === p.id}>
               <div className="row"><div><h3>{p.name}</h3><p className="muted">{p.tote_count} totes · {p.rental_days_included} days{p.description ? ` · ${p.description}` : ''}</p></div><div className="price" style={{ flex: '0 0 auto' }}>{money(p.price)}</div></div>
-              {p.extra_week_price ? <p className="muted">Extra week {money(p.extra_week_price)}{p.deposit_amount ? ` · deposit ${money(p.deposit_amount)}` : ''}</p> : null}
+              {p.extra_week_price ? <p className="muted">Extra week {money(p.extra_week_price)}</p> : null}
             </button>
           ))}
           {cat.addons.length > 0 && <><h3 style={{ marginTop: 16 }}>Add-ons</h3>
@@ -276,12 +279,11 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             {(quote.addons ?? []).map((a) => <tr key={a.name}><td>{a.qty} × {a.name}</td><td>{money(a.line)}</td></tr>)}
             <tr><td>Delivery{pickupDiff ? ' + pickup at a 2nd address' : ''} ({quote.delivery_miles} mi)</td><td>{money(quote.delivery_fee)}</td></tr>
             {Number(quote.discount) > 0 && <tr><td>Code {promo}</td><td>−{money(quote.discount)}</td></tr>}
-            <tr><td><b>Total</b></td><td><b>{money(quote.total)}</b></td></tr>
-            <tr><td><b>Deposit due today</b></td><td><b>{money(quote.deposit)}</b></td></tr>
-            <tr><td>Balance {money(quote.balance)} charged to the same card {quote.balance_charge_mode === 'booking' ? 'today' : quote.balance_charge_mode === 'pickup' ? 'at pickup' : 'on delivery day'}</td><td /></tr>
+            <tr><td><b>Total due today</b></td><td><b>{money(quote.balance_charge_mode === 'booking' ? quote.total : quote.deposit)}</b></td></tr>
+            {quote.balance_charge_mode !== 'booking' && <tr><td>Balance {money(quote.balance)} charged to the same card {quote.balance_charge_mode === 'pickup' ? 'at pickup' : 'on delivery day'}</td><td /></tr>}
           </tbody></table>
           <p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)} {win} · Pickup {pretty(addDays(date, rentalDays))} {pickupWin || win}<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
-          <p className="muted">Next you&apos;ll sign the rental terms and save a card. The deposit is held and applied to anything owed at check-in; the rest comes back to your card.</p>
+          <p className="muted">Next you&apos;ll sign the rental terms and pay. Your card stays on file for extensions or any fees after pickup, and you get a receipt for every charge.</p>
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'Holding your totes…' : 'Continue to sign & pay'}</button></div></div>
         </section>)}
 
@@ -296,8 +298,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
         </section>)}
 
         {step === 7 && pay && (<section>
-          <h2>7. {pay.kind === 'setup' ? 'Save a card' : `Pay the ${money(pay.amount)} deposit`}</h2>
-          <p className="muted">{pay.kind === 'setup' ? 'No deposit today. Your card is saved for the balance and any post-rental charges, as you authorized.' : 'Your card is saved for the balance and any post-rental charges, as you authorized. Cards, Apple Pay and Google Pay.'}</p>
+          <h2>7. {pay.kind === 'setup' ? 'Save a card' : `Pay ${money(pay.amount)}`}</h2>
+          <p className="muted">{pay.kind === 'setup' ? 'Nothing due today. Your card is saved for any charges you authorized.' : 'Paid in full today. Your card stays on file for extensions or post-rental fees, as you authorized. Cards, Apple Pay and Google Pay.'}</p>
           <div id="payment-element" className="card" style={{ minHeight: 120 }} />
           <div className="sticky"><div className="inner"><button className="btn" disabled={busy} onClick={submitPayment}>{busy ? 'Processing…' : pay.kind === 'setup' ? 'Save card & book' : `Pay ${money(pay.amount)} & book`}</button></div></div>
         </section>)}

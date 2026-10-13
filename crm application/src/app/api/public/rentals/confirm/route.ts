@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     const ci = await cardInfo(intent.payment_method);
     const dep = Number(r.deposit_amount);
     await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id);
-    if (b.kind !== 'setup') await db.from('rental_charges').update({ status: 'succeeded', description: 'Deposit (held)' }).eq('stripe_payment_intent_id', intent.id);
+    if (b.kind !== 'setup') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
     await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}` }, db);
     const fresh = await getRental(r.id, db);
     await queueMessage(fresh, 'booking_confirmed', {}, { email: true }, db);

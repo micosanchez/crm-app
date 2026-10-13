@@ -7,12 +7,12 @@ import { DEFAULT_TEMPLATES, VARS, type RentalTemplateKey } from '@/lib/rentals/t
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const GROUPS: { title: string; fields: [string, string, 'money' | 'number' | 'text' | 'select' | 'json'][] }[] = [
   { title: 'Fees', fields: [['late_fee_per_day', 'Late fee per day', 'money'], ['replacement_fee_per_tote', 'Replacement per tote', 'money'], ['replacement_fee_per_dolly', 'Replacement per dolly', 'money'], ['cleaning_fee_per_tote', 'Cleaning per tote', 'money'], ['damage_fee_per_tote', 'Damage per tote', 'money'], ['failed_trip_fee', 'Failed trip fee', 'money']] },
-  { title: 'Deposits', fields: [['deposit_mode', 'Deposit mode', 'select'], ['deposit_percent', 'Deposit % (percent mode)', 'number'], ['balance_charge_mode', 'Charge balance at', 'select'], ['cancel_full_refund_hours', 'Full refund if cancelled this many hours before delivery', 'number']] },
+  { title: 'Payment', fields: [['balance_charge_mode', 'Rental price is charged at (booking = paid in full up front)', 'select'], ['cancel_full_refund_hours', 'Full refund if cancelled this many hours before delivery', 'number']] },
   { title: 'Scheduling', fields: [['booking_lead_time_hours', 'Booking lead time (hours)', 'number'], ['max_bookings_per_slot', 'Max bookings per window', 'number'], ['turnaround_days', 'Turnaround buffer (days to clean and stack)', 'number'], ['service_days', 'Service days (0=Sun … 6=Sat)', 'json'], ['slot_windows', 'Time windows', 'json'], ['blackout_dates', 'Blackout dates (YYYY-MM-DD)', 'json']] },
   { title: 'Delivery', fields: [['delivery_fee_base', 'Delivery fee base', 'money'], ['free_delivery_radius_miles', 'Free radius (miles)', 'number'], ['per_mile_fee', 'Per mile beyond', 'money'], ['max_service_radius_miles', 'Max service radius (miles)', 'number']] },
   { title: 'Goals', fields: [['monthly_goal_low', 'Monthly profit goal low', 'money'], ['monthly_goal_high', 'Monthly profit goal high', 'money']] },
 ];
-const SELECTS: Record<string, string[]> = { deposit_mode: ['fixed', 'percent'], balance_charge_mode: ['booking', 'delivery', 'pickup'] };
+const SELECTS: Record<string, string[]> = { balance_charge_mode: ['booking', 'delivery', 'pickup'] };
 
 export default function SettingsForm({ settings, defaultTerms }: { settings: any; defaultTerms: string }) {
   const router = useRouter();
@@ -39,7 +39,7 @@ export default function SettingsForm({ settings, defaultTerms }: { settings: any
             : <input className="input" type="number" step={t === 'money' ? '0.01' : '1'} value={s[k] ?? ''} onChange={(e) => set(k, e.target.value)} placeholder={t === 'money' ? 'blank = not set' : ''} />}
         </label>))}</section>))}
       <section className="card space-y-2"><p className="panel-label">Terms (version {settings.terms_version})</p>
-        <p className="text-xs text-gray-500">Placeholders: {'{rental_number} {totes} {addons} {delivery_date} {pickup_date} {late_fee_per_day} {replacement_fee_per_tote} {replacement_fee_per_dolly} {cleaning_fee_per_tote} {damage_fee_per_tote} {deposit} {cancel_hours} {failed_trip_fee}'}. The card authorization clause is added automatically if you leave it out.</p>
+        <p className="text-xs text-gray-500">Placeholders: {'{rental_number} {totes} {addons} {delivery_date} {pickup_date} {late_fee_per_day} {replacement_fee_per_tote} {replacement_fee_per_dolly} {cleaning_fee_per_tote} {damage_fee_per_tote} {cancel_hours} {failed_trip_fee}'}. The card authorization clause is added automatically if you leave it out.</p>
         <textarea className="input font-mono text-xs" rows={14} value={s.terms_text ?? ''} placeholder={defaultTerms} onChange={(e) => set('terms_text', e.target.value)} />
         {!s.terms_text && <button className="btn-ghost" onClick={() => set('terms_text', defaultTerms)}>Start from the default terms</button>}
       </section>
