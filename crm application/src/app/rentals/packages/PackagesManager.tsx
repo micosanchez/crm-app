@@ -40,13 +40,12 @@ export default function PackagesManager({ packages, addons }: { packages: Pkg[];
           <label className="text-xs">Days included<input className="input" type="number" value={editing.rental_days_included} onChange={(e) => setEditing({ ...editing, rental_days_included: Number(e.target.value) })} /></label>
           <label className="text-xs">Price $<input className="input" type="number" step="0.01" value={editing.price ?? ''} onChange={(e) => setEditing({ ...editing, price: num(e.target.value) })} /></label>
           <label className="text-xs">Extra week $<input className="input" type="number" step="0.01" value={editing.extra_week_price ?? ''} onChange={(e) => setEditing({ ...editing, extra_week_price: num(e.target.value) })} /></label>
-          <label className="text-xs">Deposit $<input className="input" type="number" step="0.01" value={editing.deposit_amount ?? ''} onChange={(e) => setEditing({ ...editing, deposit_amount: num(e.target.value) })} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={editing.active} onChange={(e) => setEditing({ ...editing, active: e.target.checked })} /> Active</label>
           <div className="flex gap-2 md:col-span-2"><button className="btn-primary">Save</button><button type="button" className="btn-ghost" onClick={() => setEditing(null)}>Cancel</button></div>
         </form>}
         <div className="grid gap-3 md:grid-cols-2">{packages.map((p, i) => (
           <div key={p.id} className="card flex gap-3">
-            <div className="flex-1"><p className="font-semibold">{p.name} {!p.active && <span className="badge">inactive</span>}{p.price == null && <span className="badge bg-amber-50 text-amber-700">no price</span>}</p><p className="text-sm text-gray-500">{p.tote_count} totes · {p.rental_days_included} days · {money(p.price)} · extra week {money(p.extra_week_price)} · deposit {money(p.deposit_amount)}</p>
+            <div className="flex-1"><p className="font-semibold">{p.name} {!p.active && <span className="badge">inactive</span>}{p.price == null && <span className="badge bg-amber-50 text-amber-700">no price</span>}</p><p className="text-sm text-gray-500">{p.tote_count} totes · {p.rental_days_included} days · {money(p.price)} · extra week {money(p.extra_week_price)}</p>
               <div className="mt-2 flex gap-2 text-xs"><button className="underline" onClick={() => setEditing(p)}>Edit</button><button className="underline" onClick={() => save('rental_packages', { id: p.id, active: !p.active })}>{p.active ? 'Deactivate' : 'Activate'}</button><button className="underline" onClick={() => move('rental_packages', packages, i, -1)}>↑</button><button className="underline" onClick={() => move('rental_packages', packages, i, 1)}>↓</button></div></div>
             <Preview p={p} />
           </div>))}</div>
@@ -74,7 +73,7 @@ function Preview({ p }: { p: Pkg }) {
       <p className="text-lg font-bold leading-tight" style={{ fontFamily: 'Bebas Neue, Barlow Condensed, sans-serif' }}>{p.name || 'Package name'}</p>
       <p className="text-xs opacity-80">{p.tote_count} totes · {p.rental_days_included} days{p.description ? ` · ${p.description}` : ''}</p>
       <p className="mt-1 text-2xl" style={{ fontFamily: 'Bebas Neue, sans-serif' }}>{money(p.price)}</p>
-      {p.extra_week_price ? <p className="text-xs opacity-70">Extra week {money(p.extra_week_price)}{p.deposit_amount ? ` · deposit ${money(p.deposit_amount)}` : ''}</p> : null}
+      {p.extra_week_price ? <p className="text-xs opacity-70">Extra week {money(p.extra_week_price)}</p> : null}
     </div>
   );
 }
