@@ -184,14 +184,18 @@ async function prepare(file: File): Promise<Omit<Shot, 'key' | 'status'>> {
 
 /* ---------------- Component ---------------- */
 
-export default function RequestForm({ biz, leadRef, turnstileSiteKey }: {
+export default function RequestForm({ biz, leadRef, turnstileSiteKey, rentalId = null, prefill }: {
   biz: Biz;
   leadRef: string;
   turnstileSiteKey: string | null;
+  rentalId?: string | null;
+  prefill?: { name: string; phone: string; email: string; address: string };
 }) {
   const b = resolveBiz(biz);
 
-  const [v, setV] = useState<RequestInput>(EMPTY);
+  // Tote-rental cross-sell lands here with the customer's details in the URL.
+  const [first = '', ...rest] = (prefill?.name ?? '').trim().split(/\s+/);
+  const [v, setV] = useState<RequestInput>({ ...EMPTY, first_name: first, last_name: rest.join(' '), phone: prefill?.phone ?? '', email: prefill?.email ?? '', address: prefill?.address ?? '' });
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [shots, setShots] = useState<Shot[]>([]);
@@ -311,6 +315,7 @@ export default function RequestForm({ biz, leadRef, turnstileSiteKey }: {
           ...v,
           website: honeypot,
           ref: leadRef,
+          rental_id: rentalId,
           ...utmFromLocation(),
           turnstile_token: token,
           photo_count: shots.length,

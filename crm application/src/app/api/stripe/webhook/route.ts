@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { handleRentalWebhook } from '@/lib/rentals/ops';
 
 /**
  * POST /api/stripe/webhook — Stripe event receiver.
@@ -42,6 +43,14 @@ export async function POST(req: NextRequest) {
     type: string;
     data: { object: { id: string; payment_intent?: string | null; amount_total?: number | null; metadata?: Record<string, string> } };
   };
+
+  // Rentals: anything carrying rental metadata (or a dispute / detached card) is handled by the rentals branch.
+  const obj = event.data.object as Record<string, unknown> & { metadata?: Record<string, string> };
+  const rentalMeta = obj.metadata?.rental_id || ((obj as { payment_intent?: { metadata?: Record<string, string> } }).payment_intent?.metadata?.rental_id);
+  if (rentalMeta || ['charge.dispute.created', 'payment_method.detached', 'customer.updated', 'setup_intent.succeeded'].includes(event.type)) {
+    try { const note = await handleRentalWebhook(event.type, obj); if (rentalMeta) return NextResponse.json({ received: true, rentals: note }); }
+    catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500 }); } // let Stripe retry
+  }
 
   if (event.type === 'checkout.session.completed') {
     const s = event.data.object;

@@ -6,7 +6,7 @@ type CookieToSet = { name: string; value: string; options?: CookieOptions };
 // Customer-facing routes: sign links (/sign/estimate/<token>, /sign/invoice/<token>)
 // and the estimate request form. '/sign/' with the slash so the internal
 // /signatures archive is NOT public.
-const PUBLIC_PATHS = ['/login', '/offline', '/manifest.json', '/sw.js', '/request', '/sign/'];
+const PUBLIC_PATHS = ['/login', '/offline', '/manifest.json', '/sw.js', '/request', '/sign/', '/rent', '/rental/'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
