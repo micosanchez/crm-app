@@ -6,6 +6,8 @@ export const TOTE_CSS = `
 .tote{font-family:'Barlow Condensed',system-ui,sans-serif;background:var(--maroon2);color:var(--white);min-height:100vh;-webkit-font-smoothing:antialiased}
 .tote h1,.tote h2,.tote h3,.tote .h{font-family:'Bebas Neue','Barlow Condensed',sans-serif;letter-spacing:.02em;font-weight:400;line-height:1}
 .tote h1{font-size:40px}.tote h2{font-size:26px;margin:0 0 8px}.tote h3{font-size:20px;margin:0 0 6px}
+.tote h2,.tote h3,.tote label,.tote p,.tote td,.tote b{color:#fff}   /* the CRM's global heading colour is dark ink; force white on the maroon pages */
+.tote .muted{color:var(--silver)}
 .tote .wrap{max-width:640px;margin:0 auto;padding:16px 16px 120px}
 .tote .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
 .tote .card{background:#4a1024;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:16px;margin-bottom:12px;color:#fff}
@@ -27,8 +29,8 @@ export const TOTE_CSS = `
 .tote .ok{color:#b8f5d0;background:rgba(47,191,113,.12);border:1px solid rgba(47,191,113,.35);padding:10px 12px;border-radius:10px;margin:10px 0}
 .tote .stepper{display:inline-flex;align-items:center;border:1px solid rgba(255,255,255,.25);border-radius:10px;overflow:hidden}
 .tote .stepper button{width:44px;height:44px;border:0;background:#1f0710;color:#fff;font-size:22px;cursor:pointer}.tote .stepper span{min-width:40px;text-align:center;font-size:20px}
-.tote .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.tote .cal button{aspect-ratio:1;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#1f0710;color:#fff;font:500 16px 'Barlow Condensed',sans-serif;cursor:pointer}
+.tote .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:400px;margin:0 auto}
+.tote .cal button{aspect-ratio:1;max-height:52px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:#1f0710;color:#fff;font:500 16px 'Barlow Condensed',sans-serif;cursor:pointer}
 .tote .cal button[disabled]{opacity:.25;cursor:not-allowed;text-decoration:line-through}
 .tote .cal button.sel{background:var(--grad);border-color:transparent}
 .tote .cal .dow{text-align:center;font-size:12px;color:var(--muted);text-transform:uppercase}

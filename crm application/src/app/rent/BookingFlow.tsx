@@ -228,7 +228,6 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             {cat.addons.map((a) => { const q = addons[a.id] ?? 0; const freeToday = a.asset_type === 'dolly' ? Math.min(...(cat.availability.slice(0, 14).map((d) => d.dollies_free))) : 99; const max = Math.min(a.max_qty, Math.max(freeToday, 0)); return (
               <div key={a.id} className="card row"><div><b style={{ fontSize: 18 }}>{a.name}</b><p className="muted">{money(a.price)} per {a.per}{max === 0 ? ' · none free right now' : ''}</p></div>
                 <div className="stepper" style={{ flex: '0 0 auto' }}><button type="button" aria-label={`Fewer ${a.name}`} onClick={() => setAddons({ ...addons, [a.id]: Math.max(0, q - 1) })}>−</button><span>{q}</span><button type="button" aria-label={`More ${a.name}`} disabled={q >= max} onClick={() => setAddons({ ...addons, [a.id]: Math.min(max, q + 1) })}>+</button></div></div>); })}</>}
-          <JunkCallout href={junk} />
           <div className="sticky"><div className="inner"><button className="btn" disabled={!pkg} onClick={() => { setErr(null); setStep(2); }}>Next: delivery address</button></div></div>
         </section>)}
 
