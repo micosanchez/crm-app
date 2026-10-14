@@ -81,9 +81,11 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     // embedded on sanchezhaulco.com: tell the parent page how tall we are so the iframe never scrolls inside
     if (initial.embed && window.parent !== window) {
       // min-height is dropped in embed mode (see style below) so the content height never depends on the iframe height; otherwise this loops
+      // measure the content box, never body/html: the CRM's global css gives body a viewport-relative height, so a taller iframe made a taller body made a taller iframe (the long blank strip on desktop)
       let last = 0;
-      const post = () => { const h = document.body.scrollHeight; if (Math.abs(h - last) > 2) { last = h; window.parent.postMessage({ type: 'sjhc_rent_height', height: h }, '*'); } };
-      const ro = new ResizeObserver(post); ro.observe(document.body); post();
+      const box = () => document.querySelector('.tote') as HTMLElement | null;
+      const post = () => { const h = box()?.offsetHeight ?? 0; if (h && Math.abs(h - last) > 2) { last = h; window.parent.postMessage({ type: 'sjhc_rent_height', height: h }, '*'); } };
+      const ro = new ResizeObserver(post); if (box()) ro.observe(box()!); post();
     }
     // back from a 3D Secure redirect
     const q = new URLSearchParams(window.location.search);
@@ -215,7 +217,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   return (
     <div className="tote">
       <style dangerouslySetInnerHTML={{ __html: TOTE_CSS }} />
-      {initial.embed && <style>{`.tote{min-height:0}.tote .sticky{position:static;padding:12px 0;background:none;border:0;backdrop-filter:none}`}</style>}
+      {initial.embed && <style>{`html,body{height:auto!important;min-height:0!important;background:#2a0712!important}.tote{min-height:0}.tote .wrap{padding-bottom:24px}.tote .sticky{position:static;padding:12px 0;background:none;border:0;backdrop-filter:none}`}</style>}
       <div className="wrap">
         {!initial.embed && (<header style={{ marginBottom: 8 }}><p className="pill">Sanchez Junk &amp; Haul Co.</p><h1 className="grad-text">Rent moving totes</h1><p className="muted">Delivered to your door. Picked up when you&apos;re done. {cat?.stripe.test_mode ? <span className="pill">test mode</span> : null}</p></header>)}
         <div className="progress" aria-label={`Step ${step} of 8: ${steps[step - 1]}`}>{steps.map((_, i) => <i key={i} className={i < step ? 'on' : ''} />)}</div>
@@ -261,7 +263,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 
         {cat && step === 3 && (<section>
           <h2>3. Delivery date and window</h2>
-          {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. Weekday deliveries are 6 to 8 pm; weekends all day.</p>}
+          {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. Monday to Wednesday evenings and Saturday and Sunday daytime.</p>}
           <Calendar month={month} setMonth={setMonth} selected={date} ok={dateOk} onPick={(d) => { setDate(d); setWin(''); setErr(null); }} />
           {date && <><p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)}. Pickup {pretty(addDays(date, rentalDays))} ({rentalDays} days).</p>
             <label>Delivery window</label>
