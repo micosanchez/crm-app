@@ -403,7 +403,7 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
   const fullRefund = hoursOut >= s.cancel_full_refund_hours;
   const { data: paid } = await db.from('rental_charges').select('*').eq('rental_id', r.id).eq('status', 'succeeded').in('type', ['deposit', 'balance', 'rental_payment']);
   const refundable = fullRefund ? (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0) : 0;   // inside the window the payment is kept (staff can still refund by hand)
-  const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, refund_amount: Math.round(refundable * 100) / 100, policy: `Full refund ${s.cancel_full_refund_hours}+ hours before delivery; inside that window the deposit is kept.` };
+  const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, refund_amount: Math.round(refundable * 100) / 100, policy: `Full refund ${s.cancel_full_refund_hours}+ hours before delivery; inside that window the payment is kept.` };
   if (a.preview) return { ok: true, preview };
   if (['closed', 'cancelled'].includes(r.status)) throw new Error(`Rental is already ${r.status}.`);
   for (const c of paid ?? []) {
