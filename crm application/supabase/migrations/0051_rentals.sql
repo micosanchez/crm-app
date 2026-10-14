@@ -261,18 +261,21 @@ do $$ declare t text; begin
 end $$;
 
 -- ============ audit: every status change is an event ============
+create or replace function public.rentals_touch() returns trigger language plpgsql as $$
+begin new.updated_at := now(); return new; end $$;
 create or replace function public.rentals_audit() returns trigger language plpgsql as $$
 begin
-  new.updated_at := now();
   if tg_op = 'INSERT' then
     insert into public.rental_events (rental_id, event, detail) values (new.id, 'created', jsonb_build_object('status', new.status, 'total', new.total));
   elsif new.status is distinct from old.status then
     insert into public.rental_events (rental_id, event, detail) values (new.id, 'status:' || new.status, jsonb_build_object('from', old.status));
   end if;
-  return new;
+  return null;
 end $$;
+drop trigger if exists rentals_touch on public.rentals;
 drop trigger if exists rentals_audit on public.rentals;
-create trigger rentals_audit before insert or update on public.rentals for each row execute function public.rentals_audit();
+create trigger rentals_touch before insert or update on public.rentals for each row execute function public.rentals_touch();
+create trigger rentals_audit after insert or update on public.rentals for each row execute function public.rentals_audit();   -- AFTER: the row must exist before the event row's FK
 
 create or replace function public.rental_charges_touch() returns trigger language plpgsql as $$
 begin new.updated_at := now(); return new; end $$;
