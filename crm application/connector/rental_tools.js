@@ -98,7 +98,7 @@ function registerRentalTools(server, dbc, env) {
       package_id: external_exports.string().uuid().optional().describe("Omit to use the only active package"),
       delivery_address: external_exports.string().min(5), pickup_address: external_exports.string().optional().describe("Only if different"),
       delivery_date: DATE3, delivery_window: external_exports.string().describe("One of the slot windows, e.g. 5-7pm"), pickup_window: external_exports.string().optional(),
-      extra_weeks: external_exports.number().int().min(0).max(8).default(0), dollies: external_exports.number().int().min(0).max(4).default(0),
+      extra_weeks: external_exports.number().int().min(0).max(8).default(0), hand_trucks: external_exports.number().int().min(0).max(4).default(0).describe("Standard hand truck, $20 per rental"), convertible_hand_trucks: external_exports.number().int().min(0).max(2).default(0).describe("Convertible hand truck, $30 per rental"), furniture_dollies: external_exports.number().int().min(0).max(4).default(0).describe("Furniture dolly, $10 per rental"),
       promo_code: external_exports.string().optional(), notes: external_exports.string().optional(), sms_consent: external_exports.boolean().default(true).describe("Did they agree to texts about the rental?"),
       move_date: DATE3.optional().describe("Moving day; times the texts"), duration: external_exports.number().int().default(14).describe("14 (standard) or 7 (short move)"), junk_interest: external_exports.enum(["yes", "maybe", "no"]).optional().describe("Will they have anything to get rid of?"),
       marketing_sms: external_exports.boolean().default(false).describe("Only true if they said yes to occasional offer texts"),
@@ -109,8 +109,8 @@ function registerRentalTools(server, dbc, env) {
     if (ce) return fail("db_error", ce.message);
     const pkg = a.package_id ? cat.packages.find((p) => p.id === a.package_id) : cat.packages[0];
     if (!pkg) return fail("no_package", "No active package with a price. Set one at /rentals/packages.");
-    const dolly = cat.addons.find((x) => x.asset_type === "dolly");
-    const body = { package_id: pkg.id, duration: a.duration ?? 14, move_date: a.move_date ?? null, junk_interest: a.junk_interest ?? null, marketing_sms: a.marketing_sms ?? false, extra_weeks: a.extra_weeks ?? 0, addons: a.dollies && dolly ? [{ addon_id: dolly.id, qty: a.dollies }] : [], delivery_address: a.delivery_address, pickup_address: a.pickup_address ?? null, promo_code: a.promo_code ?? null, delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_window: a.pickup_window ?? a.delivery_window, name: a.name, phone: a.phone, email: a.email ?? "", lead_source: a.lead_source ?? "other", notes_customer: a.notes ?? null, sms_consent: a.sms_consent ?? true, website: "" };
+    const gear = [["hand_truck", a.hand_trucks], ["convertible_hand_truck", a.convertible_hand_trucks], ["furniture_dolly", a.furniture_dollies]].map(([t, q]) => ({ addon: cat.addons.find((x) => x.asset_type === t && x.kind === "rent"), q })).filter((g) => g.addon && g.q > 0).map((g) => ({ addon_id: g.addon.id, qty: g.q }));
+    const body = { package_id: pkg.id, duration: a.duration ?? 14, move_date: a.move_date ?? null, junk_interest: a.junk_interest ?? null, marketing_sms: a.marketing_sms ?? false, extra_weeks: a.extra_weeks ?? 0, addons: gear, delivery_address: a.delivery_address, pickup_address: a.pickup_address ?? null, promo_code: a.promo_code ?? null, delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_window: a.pickup_window ?? a.delivery_window, name: a.name, phone: a.phone, email: a.email ?? "", lead_source: a.lead_source ?? "other", notes_customer: a.notes ?? null, sms_consent: a.sms_consent ?? true, website: "" };
     const res = await fetch(`${RENTAL_APP}/api/public/rentals/hold`, { method: "POST", headers: { "content-type": "application/json", "user-agent": "sjhc-connector" }, body: JSON.stringify(body) });
     const j = await res.json().catch(() => ({}));
     if (j.error) return fail("hold_failed", j.error === "sold_out" ? "Not enough totes free for those dates." : j.error === "slot_full" ? "That delivery window is full." : j.error);
@@ -125,13 +125,13 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("update_rental", {
     title: "Update a tote rental",
-    description: "Change addresses, windows, notes, lead source, or move delivery/pickup dates (availability is re-checked and the customer gets a reschedule text).",
-    inputSchema: { rental: ref, delivery_address: external_exports.string().optional(), pickup_address: external_exports.string().optional(), delivery_date: DATE3.optional(), delivery_window: external_exports.string().optional(), pickup_date: DATE3.optional(), pickup_window: external_exports.string().optional(), notes_internal: external_exports.string().optional(), notes_customer: external_exports.string().optional(), lead_source: external_exports.enum(LEAD_SOURCES_V2).optional() }
+    description: "Change addresses, windows, notes, lead source, or move delivery/pickup dates (availability is re-checked and the customer gets a reschedule text). Set customer_requested=true when the customer asked: a delivery change under 48 hours before the window charges $25, expedited=true on an earlier pickup charges $25, and a later pickup is refused (use extend_rental). A company-side move is free and voids pending late weeks.",
+    inputSchema: { rental: ref, delivery_address: external_exports.string().optional(), pickup_address: external_exports.string().optional(), delivery_date: DATE3.optional(), delivery_window: external_exports.string().optional(), pickup_date: DATE3.optional(), pickup_window: external_exports.string().optional(), customer_requested: external_exports.boolean().default(false), expedited: external_exports.boolean().default(false), notes_internal: external_exports.string().optional(), notes_customer: external_exports.string().optional(), lead_source: external_exports.enum(LEAD_SOURCES_V2).optional() }
   }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; const { rental, ...rest } = a; return rentalOp(env, "update", { rental_id: f.row.id, ...rest }); }));
 
   server.registerTool("cancel_rental", {
     title: "Cancel a tote rental",
-    description: "Preview first (confirm=false) to see the refund per the cancellation policy, then confirm=true to cancel, refund the payment if the cancellation policy allows (inside the cutoff nothing is refunded automatically), and text the customer.",
+    description: "Preview first (confirm=false) to see the refund per the cancellation policy, then confirm=true to cancel, refund the payment per policy (free with 48+ hours' notice before the delivery window; with less notice a $25 fee is kept and the rest refunded; after delivery half the package price is kept), and text the customer.",
     inputSchema: { rental: ref, reason: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
   }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "cancel", { rental_id: f.row.id, reason: a.reason, confirm: a.confirm === true }); }));
 
@@ -201,7 +201,7 @@ function registerRentalTools(server, dbc, env) {
   }));
 
   server.registerTool("update_rental_asset", {
-    title: "Update a tote or dolly",
+    title: "Update a tote or piece of equipment",
     description: "Mark an asset available, damaged, lost or retired (with a note), or add new tags in bulk (tags like T-041).",
     inputSchema: { tag: external_exports.string().optional(), status: external_exports.string().optional(), note: external_exports.string().optional(), add_tags: external_exports.array(external_exports.string()).optional(), asset_type: external_exports.string().default("tote"), purchase_cost: external_exports.number().optional() }
   }, guarded(async (a) => {

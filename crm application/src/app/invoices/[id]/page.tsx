@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import StatusBadge from '@/components/StatusBadge';
 import InvoiceEditor from './InvoiceEditor';
+import ToteDiscountNotice, { type ToteDiscount } from '@/components/ToteDiscountNotice';
 import DeleteRecordButton from '@/components/DeleteRecordButton';
 import { requireStaff } from '@/lib/auth';
 import { fmtDate } from '@/lib/dates';
@@ -22,9 +23,11 @@ export default async function InvoiceDetail({ params }: { params: { id: string }
 
   const { data: me } = user ? await supabase.from('users').select('role').eq('id', user.id).single() : { data: null };
   const canEdit = me?.role === 'admin' || me?.role === 'dispatcher';
+  const { data: tote } = inv.customer_id ? await supabase.rpc('tote_junk_discount', { p_customer: inv.customer_id }) : { data: null };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <ToteDiscountNotice d={(tote as ToteDiscount | null) ?? null} total={inv.total} />
       <div className="no-print flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <Link href="/invoices" className="text-brand-600 hover:underline">← Invoices</Link>
         {inv.customer_id && <Link href={`/customers/${inv.customer_id}`} className="text-gray-500 hover:text-brand-600 hover:underline">Customer: {inv.customers?.name}</Link>}

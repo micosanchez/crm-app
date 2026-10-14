@@ -32,7 +32,17 @@ export async function runAction(action: string, a: Record<string, any>, actor: A
     case 'record_delivery': return recordDelivery(id!, { tags: a.tags ?? [], photo_urls: a.photo_urls, created_by: actor.by }, db);
     case 'record_pickup': return recordPickup(id!, { items: a.items ?? [], created_by: actor.by }, db);
     case 'extend': return extendRental(id!, Number(a.weeks ?? 1), db);
-    case 'reschedule': return reschedule(id!, { delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_date: a.pickup_date, pickup_window: a.pickup_window, by: actor.by ?? undefined }, db);
+    case 'reschedule': return reschedule(id!, { delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_date: a.pickup_date, pickup_window: a.pickup_window, by: actor.by ?? undefined, customer_requested: !!a.customer_requested, expedited: !!a.expedited, preview: !!a.preview }, db);
+    case 'junk_discount_redeem': {
+      // one redemption per qualifying rental; the unique index on junk_discount_estimate_id stops reuse of the quote too
+      const { data: r } = await db.from('rentals').select('id, rental_number, junk_discount_estimate_id').eq('id', id).single();
+      if (!r) throw new Error('Rental not found.');
+      if (r.junk_discount_estimate_id && r.junk_discount_estimate_id !== a.estimate_id) throw new Error(`${r.rental_number} already used its junk removal discount.`);
+      const { error } = await db.from('rentals').update({ junk_discount_estimate_id: a.undo ? null : a.estimate_id }).eq('id', id);
+      if (error) throw new Error(error.message);
+      await logEvent(id!, a.undo ? 'junk_discount_undone' : 'junk_discount_redeemed', { estimate_id: a.estimate_id, by: actor.by }, db);
+      return { ok: true };
+    }
     case 'cancel': return cancelRental(id!, { reason: a.reason, by: actor.by ?? undefined, preview: !a.confirm }, db);
     case 'failed_trip': return failedTrip(id!, { kind: a.kind ?? 'delivery', photo_urls: a.photo_urls, note: a.note, by: actor.by ?? undefined }, db);
     case 'found_item': return foundItem(id!, a.tag, db);
@@ -47,7 +57,7 @@ export async function runAction(action: string, a: Record<string, any>, actor: A
       const patch: Record<string, unknown> = {};
       for (const k of allowed) if (a[k] !== undefined) patch[k] = a[k];
       if (Object.keys(patch).length) await db.from('rentals').update(patch).eq('id', id);
-      if (a.delivery_date || a.pickup_date) await reschedule(id!, { delivery_date: a.delivery_date, pickup_date: a.pickup_date, by: actor.by ?? undefined }, db);
+      if (a.delivery_date || a.pickup_date) await reschedule(id!, { delivery_date: a.delivery_date, pickup_date: a.pickup_date, by: actor.by ?? undefined, customer_requested: !!a.customer_requested, expedited: !!a.expedited }, db);
       await logEvent(id!, 'updated', { ...patch, by: actor.by }, db);
       return getRental(id!, db);
     }

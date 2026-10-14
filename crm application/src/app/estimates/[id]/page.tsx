@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import EstimateEditor from './EstimateEditor';
+import ToteDiscountNotice, { type ToteDiscount } from '@/components/ToteDiscountNotice';
 import QuoteComposer, { type ComposerCustomer, type ComposerSettings, type ComposerPriceItem } from '../QuoteComposer';
 import { requireStaff } from '@/lib/auth';
 import { fmtDate } from '@/lib/dates';
@@ -22,6 +23,7 @@ export default async function EstimateDetail({ params }: { params: { id: string 
   const est = estimate as Estimate;
   const editable = est.status === 'draft' || est.status === 'sent';
   const custRecord = (customers ?? []).find((c) => c.id === est.customer_id);
+  const { data: tote } = est.customer_id ? await supabase.rpc('tote_junk_discount', { p_customer: est.customer_id }) : { data: null };
 
   const s: ComposerSettings = {
     default_valid_days: settings?.default_valid_days ?? 14,
@@ -44,6 +46,8 @@ export default async function EstimateDetail({ params }: { params: { id: string 
         <Link href="/estimates" className="text-sm text-brand-600 hover:underline">← Estimates</Link>
         <span className="badge bg-gray-100 capitalize text-gray-700">{est.status}</span>
       </div>
+
+      <ToteDiscountNotice d={(tote as ToteDiscount | null) ?? null} estimateId={est.id} total={est.total} />
 
       {editable ? (
         // Edit the quote in the composer — same live document the customer signs.

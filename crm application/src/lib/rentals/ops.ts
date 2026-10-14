@@ -12,7 +12,7 @@ import { DEFAULT_TEMPLATES, mergedTemplates, renderRental, type RentalTemplateKe
 
 export const SITE_JUNK_QUOTE = 'https://sanchezhaulco.com/contact.html';
 export const REVIEW_LINK = 'https://g.page/r/sanchez-junk-haul/review'; // shortcut: swap for the real GBP short link in Settings when known
-const FEE_TYPES = ['late_fee', 'missing_item', 'damage', 'cleaning', 'adjustment', 'failed_trip', 'extension'] as const;
+const FEE_TYPES = ['late_fee', 'missing_item', 'damage', 'cleaning', 'adjustment', 'failed_trip', 'extension', 'reschedule_fee', 'expedited_pickup'] as const;
 const SOFT_DECLINES = new Set(['insufficient_funds', 'try_again_later', 'processing_error', 'issuer_not_available', 'card_velocity_exceeded']);
 
 export function admin(): SupabaseClient {
@@ -23,6 +23,19 @@ export function admin(): SupabaseClient {
 export const cents = (n: number) => Math.round(Number(n) * 100);
 export const money = (n: number | string | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`;
 export const todayDetroit = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Detroit' })).toISOString().slice(0, 10);
+/** First hour of a delivery window like "6-10pm", "8am-12pm" or "12-4pm" (24h clock). Unknown text = midnight, the strictest reading. */
+export function windowStartHour(w: string | null | undefined): number {
+  const m = /^\s*(\d{1,2})(?::\d{2})?\s*(am|pm)?\s*-\s*(\d{1,2})(?::\d{2})?\s*(am|pm)?/i.exec(w ?? '');
+  if (!m) return 0;
+  let h = Number(m[1]) % 12; const startMark = m[2]?.toLowerCase(); const endMark = m[4]?.toLowerCase();
+  let end = Number(m[3]) % 12; if (endMark === 'pm') end += 12;
+  if (startMark === 'pm' || (!startMark && endMark === 'pm' && h + 12 <= end)) h += 12;
+  return h;
+}
+/** Hours from now until the scheduled delivery window opens. Exactly 48 counts as 48 hours' notice. */
+export function hoursBeforeDelivery(r: Pick<Rental, 'delivery_date' | 'delivery_window'>): number {
+  return (new Date(detroitAt(r.delivery_date, windowStartHour(r.delivery_window))).getTime() - Date.now()) / 3600_000;
+}
 export function detroitAt(dateYmd: string, hour: number): string {
   // Detroit wall-clock → UTC ISO. Offset probed via the same date so DST is right.
   const probe = new Date(`${dateYmd}T12:00:00Z`);
@@ -44,7 +57,7 @@ export type Rental = {
   customers?: { id: string; name: string; phone: string | null; email: string | null };
 };
 export type Charge = { id: string; rental_id: string; type: string; amount: number; description: string | null; stripe_payment_intent_id: string | null; stripe_refund_id: string | null; status: string; failure_reason: string | null; photo_urls: string[]; retry_count: number; next_retry_at: string | null; payment_link_url: string | null; created_at: string };
-export type Settings = Record<string, unknown> & { late_grace_days?: number; lid_fee?: number | null; rush_fee?: number | null; rush_hours?: number; sales_tax_rate?: number; cancel_fee_inside_window?: number | null; cancel_after_delivery_pct?: number; junk_offer_text?: string | null; zones?: unknown[]; late_fee_per_day: number | null; replacement_fee_per_tote: number | null; replacement_fee_per_dolly: number | null; cleaning_fee_per_tote: number | null; damage_fee_per_tote: number | null; failed_trip_fee: number | null; cancel_full_refund_hours: number; balance_charge_mode: string; turnaround_days: number; terms_text: string | null; terms_version: number; templates: Record<string, Partial<{ enabled: boolean; sms: string; email: string; email_subject: string }>> };
+export type Settings = Record<string, unknown> & { late_grace_days?: number; expedited_pickup_fee?: number | null; reschedule_fee_inside_window?: number | null; lid_fee?: number | null; rush_fee?: number | null; rush_hours?: number; sales_tax_rate?: number; cancel_fee_inside_window?: number | null; cancel_after_delivery_pct?: number; junk_offer_text?: string | null; zones?: unknown[]; late_fee_per_day: number | null; replacement_fee_per_tote: number | null; replacement_fee_per_dolly: number | null; cleaning_fee_per_tote: number | null; damage_fee_per_tote: number | null; failed_trip_fee: number | null; cancel_full_refund_hours: number; balance_charge_mode: string; turnaround_days: number; terms_text: string | null; terms_version: number; templates: Record<string, Partial<{ enabled: boolean; sms: string; email: string; email_subject: string }>> };
 
 export async function getSettings(db = admin()): Promise<Settings> {
   const { data } = await db.from('rental_settings').select('*').eq('id', true).single();
@@ -296,7 +309,8 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
   const s = await getSettings(db);
   const { data: items } = await db.from('rental_items').select('id, asset_id, rental_assets(asset_tag, asset_type)').eq('rental_id', r.id);
   const now = new Date().toISOString();
-  const counts = { missing_tote: 0, missing_dolly: 0, damaged: 0, dirty: 0 };
+  const counts = { missing_tote: 0, damaged: 0, dirty: 0 };
+  const gearOut: { tag: string; type: string; condition: string }[] = [];
   for (const it of a.items) {
     const row = (items ?? []).find((x) => (x.rental_assets as unknown as { asset_tag: string })?.asset_tag === it.tag);
     if (!row) throw new Error(`${it.tag} is not on this rental.`);
@@ -305,7 +319,8 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
     await db.from('rental_items').update({ checked_in_at: now, return_condition: it.condition, photo_urls: it.photo_urls ?? [] }).eq('id', row.id);
     const assetStatus = it.condition === 'good' ? 'available' : it.condition === 'dirty' ? 'returned_dirty' : it.condition === 'damaged' ? 'damaged' : 'lost';
     await db.from('rental_assets').update({ status: assetStatus }).eq('id', row.asset_id);
-    if (it.condition === 'missing') { if (type === 'dolly') counts.missing_dolly++; else counts.missing_tote++; }
+    if (type !== 'tote') { if (it.condition === 'missing' || it.condition === 'damaged') gearOut.push({ tag: it.tag, type, condition: it.condition }); continue; }
+    if (it.condition === 'missing') counts.missing_tote++;
     if (it.condition === 'damaged') counts.damaged++;
     if (it.condition === 'dirty') counts.dirty++;
   }
@@ -313,13 +328,20 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
   const lines: { type: string; amount: number; description: string }[] = [];
   const add = (n: number, fee: number | null, type: string, label: string) => { if (n > 0 && fee) lines.push({ type, amount: Math.round(n * fee * 100) / 100, description: `${n} × ${label} at ${money(fee)}` }); };
   add(counts.missing_tote, s.replacement_fee_per_tote, 'missing_item', 'missing tote');
-  add(counts.missing_dolly, s.replacement_fee_per_dolly, 'missing_item', 'missing dolly');
+  // equipment: a missing piece is billed at its listed replacement fee; damage to equipment is reviewed by hand (no automatic fee)
+  if (gearOut.some((g) => g.condition === 'missing')) {
+    const { data: fees } = await db.from('rental_addons').select('asset_type, name, replacement_fee').eq('kind', 'rent');
+    for (const g of gearOut.filter((x) => x.condition === 'missing')) {
+      const f = (fees ?? []).find((x) => x.asset_type === g.type && x.replacement_fee != null) ?? (g.type === 'dolly' ? { name: 'tote dolly', replacement_fee: s.replacement_fee_per_dolly } : null);
+      if (f?.replacement_fee) lines.push({ type: 'missing_item', amount: Number(f.replacement_fee), description: `Missing ${f.name ?? g.type} ${g.tag} at ${money(Number(f.replacement_fee))}` });
+    }
+  }
   add(counts.damaged, s.damage_fee_per_tote, 'damage', 'damaged tote');
   add(counts.dirty, s.cleaning_fee_per_tote, 'cleaning', 'cleaning');
   for (const l of lines) await db.from('rental_charges').insert({ rental_id: r.id, ...l, status: 'pending', photo_urls: photos, created_by: a.created_by ?? null });
   await db.rpc('rental_accrue_late_fees');
   await db.from('rentals').update({ status: 'returned', actual_picked_up_at: now }).eq('id', r.id);
-  await logEvent(r.id, 'picked_up', { ...counts, lines: lines.length, by: a.created_by ?? null }, db);
+  await logEvent(r.id, 'picked_up', { ...counts, gear: gearOut, lines: lines.length, by: a.created_by ?? null }, db);
   await cancelQueued(r.id, ['pickup_reminder', 'during_rental', 'overdue_1', 'overdue_3'], db);
   const plus = (n: number) => { const d = new Date(`${todayDetroit()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   await queueMessage(r, 'after_pickup', {}, { at: detroitAt(plus(1), 10), dedupe: `${r.id}:after_pickup` }, db);
@@ -378,17 +400,39 @@ export async function extendRental(rentalId: string, weeks: number, db = admin()
   const res = await chargeRental(r.id, { type: 'extension', amount, description: `Extension: ${weeks} week${weeks === 1 ? '' : 's'}` }, db);
   if (!res.ok) return { ok: false, error: 'requires_action' in res && res.requires_action ? 'Your bank needs to confirm this charge. Check your texts for the secure link, then we will extend the dates.' : `The card on file was declined (${(res as { error?: string }).error ?? 'declined'}).` };
   await db.from('rentals').update({ pickup_date: np, extra_weeks: r.extra_weeks + weeks, total: Number(r.total) }).eq('id', r.id);
-  await logEvent(r.id, 'extended', { weeks, new_pickup_date: np, amount }, db);
+  const { data: lateRows } = await db.from('rental_charges').select('id, description').eq('rental_id', r.id).eq('type', 'late_fee').eq('status', 'pending').order('created_at').limit(weeks);
+  for (const l of lateRows ?? []) await db.from('rental_charges').update({ status: 'void', description: `${l.description ?? 'Late week'} (covered by extension)` }).eq('id', l.id);
+  await logEvent(r.id, 'extended', { weeks, new_pickup_date: np, amount, late_weeks_replaced: lateRows?.length ?? 0 }, db);
   const fresh = await getRental(r.id, db);
   await scheduleLifecycle(fresh, db);
   await queueMessage(fresh, 'reschedule', { window: `pickup now ${fmtDate(np)}` }, { dedupe: `${r.id}:reschedule:${Date.now()}` }, db);
   return { ok: true, pickup_date: np, amount };
 }
-export async function reschedule(rentalId: string, a: { delivery_date?: string; delivery_window?: string; pickup_date?: string; pickup_window?: string; by?: string }, db = admin()) {
+/**
+ * Move dates. customer_requested decides who pays: a customer's delivery change inside the notice window costs the
+ * reschedule fee, an expedited early pickup costs the expedited fee, and a later pickup is an extension (billed by the
+ * week through extendRental). A company-side move is free and voids any late weeks already accrued.
+ */
+export function rescheduleFees(r: Rental, s: Settings, a: { delivery_date?: string; delivery_window?: string; pickup_date?: string; customer_requested?: boolean; expedited?: boolean }) {
+  const nd = a.delivery_date ?? r.delivery_date, np = a.pickup_date ?? r.pickup_date;
+  const delivered = !!r.actual_delivered_at || ['delivered', 'out', 'pickup_scheduled'].includes(r.status);
+  const deliveryMoved = !delivered && (nd !== r.delivery_date || (a.delivery_window != null && a.delivery_window !== r.delivery_window));
+  const lines: { type: 'reschedule_fee' | 'expedited_pickup'; amount: number; description: string }[] = [];
+  if (!a.customer_requested) return { lines, deliveryMoved, laterPickup: np > r.pickup_date, earlierPickup: np < r.pickup_date };
+  if (np > r.pickup_date) throw new Error('A later pickup is an extension. Use Extend, billed by the week at the package extra week rate.');
+  const hours = hoursBeforeDelivery(r);
+  const feeInside = Number(s.reschedule_fee_inside_window ?? 0);
+  if (deliveryMoved && hours < Number(s.cancel_full_refund_hours ?? 48) && feeInside > 0) lines.push({ type: 'reschedule_fee', amount: feeInside, description: `Delivery date change with ${Math.max(Math.floor(hours), 0)} hours' notice (under ${s.cancel_full_refund_hours})` });
+  if (np < r.pickup_date && a.expedited && Number(s.expedited_pickup_fee ?? 0) > 0) lines.push({ type: 'expedited_pickup', amount: Number(s.expedited_pickup_fee), description: `Expedited early pickup ${fmtDate(np)}` });
+  return { lines, deliveryMoved, laterPickup: false, earlierPickup: np < r.pickup_date };
+}
+export async function reschedule(rentalId: string, a: { delivery_date?: string; delivery_window?: string; pickup_date?: string; pickup_window?: string; by?: string; customer_requested?: boolean; expedited?: boolean; preview?: boolean }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
   const nd = a.delivery_date ?? r.delivery_date, np = a.pickup_date ?? r.pickup_date;
   if (np < nd) throw new Error('Pickup must be after delivery.');
+  const fees = rescheduleFees(r, s, a);
+  if (a.preview) return { ok: true, preview: { fees: fees.lines, total_fee: fees.lines.reduce((t, l) => t + l.amount, 0), hours_before_delivery: Math.round(hoursBeforeDelivery(r)) }, rental: r };
   if (nd !== r.delivery_date || np !== r.pickup_date) {
     // this rental's own counts are already in the availability picture; only check days it did not already occupy
     const end = new Date(`${np}T12:00:00Z`); end.setUTCDate(end.getUTCDate() + s.turnaround_days);
@@ -399,16 +443,24 @@ export async function reschedule(rentalId: string, a: { delivery_date?: string; 
     if (bad) throw new Error(`Not enough totes free on ${fmtDate(bad.day)}.`);
   }
   await db.from('rentals').update({ delivery_date: nd, delivery_window: a.delivery_window ?? r.delivery_window, pickup_date: np, pickup_window: a.pickup_window ?? r.pickup_window, status: r.status === 'delivered' || r.status === 'out' ? 'pickup_scheduled' : r.status }).eq('id', r.id);
-  await logEvent(r.id, 'rescheduled', { ...a }, db);
+  await logEvent(r.id, 'rescheduled', { ...a, who: a.customer_requested ? 'customer' : 'company', fees: fees.lines }, db);
+  if (!a.customer_requested && fees.laterPickup) {
+    // company-caused delay: the customer is never billed late weeks for a pickup we moved
+    const { data: late } = await db.from('rental_charges').select('id, description').eq('rental_id', r.id).eq('type', 'late_fee').eq('status', 'pending');
+    for (const l of late ?? []) await db.from('rental_charges').update({ status: 'void', description: `${l.description ?? 'Late week'} (pickup moved by us)` }).eq('id', l.id);
+    if (late?.length) await logEvent(r.id, 'late_fees_voided', { count: late.length, reason: 'company delay' }, db);
+  }
+  const charges = [];
+  for (const l of fees.lines) charges.push(await chargeRental(r.id, { ...l, created_by: a.by ?? null }, db).catch((e: Error) => ({ ok: false, error: e.message })));
   const fresh = await getRental(r.id, db);
   await scheduleLifecycle(fresh, db);
   await queueMessage(fresh, 'reschedule', { window: `delivery ${fmtDate(nd)} ${fresh.delivery_window}, pickup ${fmtDate(np)} ${fresh.pickup_window ?? ''}` }, { dedupe: `${r.id}:reschedule:${Date.now()}` }, db);
-  return { ok: true, rental: fresh };
+  return { ok: true, rental: fresh, charges };
 }
 export async function cancelRental(rentalId: string, a: { reason?: string; by?: string; preview?: boolean }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
-  const hoursOut = (new Date(detroitAt(r.delivery_date, 0)).getTime() - Date.now()) / 3600_000;
+  const hoursOut = hoursBeforeDelivery(r);
   const delivered = !!r.actual_delivered_at || ['delivered', 'out', 'pickup_scheduled'].includes(r.status);
   const { data: paid } = await db.from('rental_charges').select('*').eq('rental_id', r.id).eq('status', 'succeeded').in('type', ['deposit', 'balance', 'rental_payment']);
   const paidTotal = (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0);
@@ -416,7 +468,7 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
   const fullRefund = !delivered && hoursOut >= s.cancel_full_refund_hours;
   const kept = delivered ? Math.round(pkgPrice * (Number(s.cancel_after_delivery_pct ?? 50) / 100) * 100) / 100 : fullRefund ? 0 : Number(s.cancel_fee_inside_window ?? 0);
   const refundable = Math.max(Math.round((paidTotal - kept) * 100) / 100, 0);
-  const policy = `Free ${s.cancel_full_refund_hours}+ hours before delivery; ${money(s.cancel_fee_inside_window ?? 0)} fee inside that window; after delivery ${Number(s.cancel_after_delivery_pct ?? 50)}% of the package price is kept.`;
+  const policy = `Free with ${s.cancel_full_refund_hours}+ hours' notice before the delivery window; ${money(s.cancel_fee_inside_window ?? 0)} fee with less notice; after delivery ${Number(s.cancel_after_delivery_pct ?? 50)}% of the package price is kept.`;
   const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, delivered, kept, refund_amount: refundable, policy };
   if (a.preview) return { ok: true, preview };
   if (['closed', 'cancelled'].includes(r.status)) throw new Error(`Rental is already ${r.status}.`);

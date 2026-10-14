@@ -19,7 +19,7 @@ export default function QuoteForm({ tag }: { tag: string }) {
       <p className="pill">Sanchez Junk &amp; Haul Co.</p>
       <h1 className="grad-text">Moving? Don&apos;t take the junk with you.</h1>
       <p className="muted">{info?.rental ? `Hi ${info.rental.name.split(' ')[0]}, thanks for renting our totes.` : 'Thanks for scanning.'} Tell us what needs to go and we text you a free quote, usually the same day.</p>
-      <div className="callout"><h3>Tote renters get $25 off</h3><p>{info?.offer ?? '$25 off any junk removal job of $250 or more, booked during your rental or within 7 days of pickup. Code TOTE25.'}</p></div>
+      <div className="callout"><h3>Tote renters get $25 off</h3><p>{info?.offer ?? '$25 off any junk removal job of $250 or more, booked during your rental or within 7 days after pickup. No code needed.'}</p></div>
       {state === 'done' ? <div className="ok">Got it. We&apos;ll text you a quote shortly. Need it faster? <a href={`sms:+1${PHONE.replace(/-/g, '')}`}>Text {PHONE}</a>.</div> : (<>
         <label htmlFor="n">Name</label><input id="n" autoComplete="name" value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} />
         <label htmlFor="p">Phone</label><input id="p" type="tel" inputMode="tel" autoComplete="tel" value={v.phone} onChange={(e) => setV({ ...v, phone: e.target.value })} />

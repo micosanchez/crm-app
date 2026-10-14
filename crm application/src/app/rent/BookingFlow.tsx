@@ -122,7 +122,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     const r = await fetch('/api/public/rentals/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : undefined, promo_code: promo || undefined, delivery_date: date ?? undefined }) }).then((x) => x.json() as Promise<Quote>);
     setBusy(false);
     if (r.error === 'address_not_found' || r.error === 'pickup_address_not_found') { setErr(`We couldn't find that ${r.error.startsWith('pickup') ? 'pickup ' : ''}address. Try adding the city and ZIP.`); return false; }
-    if (r.error === 'out_of_area') { setErr(`That ZIP is outside our delivery zones right now. Call or text ${PHONE} and we'll quote it.`); return false; }
+    if (r.error === 'out_of_area') { setErr(`That address is outside our delivery zones right now. Call or text ${PHONE} and we'll quote it.`); return false; }
     if (r.error === 'zip_required') { setErr('Please add the ZIP code to the address.'); return false; }
     if (r.error) { setErr(r.error); return false; }
     setQuote(r); return true;
@@ -226,7 +226,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 
         {cat && step === 1 && (<section>
           <h2>1. Pick your package</h2>
-          <p className="muted">Every rental includes heavy duty 27 gallon totes with lids, a label for every tote, 2 markers, 2 full weeks, delivery and pickup.</p>
+          <p className="muted">Every rental includes heavy duty 27 gallon totes with lids, a label for every tote, 2 markers, 2 full weeks, and delivery and pickup (from {money(Math.min(...((s.zones?.length ? s.zones : [{ fee: 10 }]) as { fee: number }[]).map((z) => Number(z.fee))))} depending on your address).</p>
           {cat.packages.length === 0 && <p className="muted">Packages are being set up. Call or text {PHONE} to book.</p>}
           {cat.packages.map((p) => (
             <button key={p.id} type="button" className={`card ${pkgId === p.id ? 'sel' : ''}`} style={{ width: '100%', textAlign: 'left', cursor: 'pointer' }} onClick={() => setPkgId(p.id)} aria-pressed={pkgId === p.id}>
@@ -243,7 +243,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             return (<>
               <h3 style={{ marginTop: 16 }}>How are you moving the heavy stuff?</h3>
               {featured.map(row)}
-              {rest.length > 0 && (moreAddons ? rest.map(row) : <button type="button" className="btn ghost sm" onClick={() => setMoreAddons(true)}>More kits and supplies ({rest.length})</button>)}
+              {rest.length > 0 && (moreAddons ? rest.map(row) : <button type="button" className="btn ghost sm" onClick={() => setMoreAddons(true)}>Packing supplies ({rest.length})</button>)}
             </>);
           })()}
           <div className="sticky"><div className="inner"><button className="btn" disabled={!pkg} onClick={() => { setErr(null); setStep(2); }}>Next: delivery address</button></div></div>
@@ -308,6 +308,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             {quote.balance_charge_mode !== 'booking' && <tr><td>Balance {money(quote.balance)} charged to the same card {quote.balance_charge_mode === 'pickup' ? 'at pickup' : 'on delivery day'}</td><td /></tr>}
           </tbody></table>
           <p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)} {win} · Pickup {pretty(addDays(date, rentalDays))} {pickupWin || win}<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
+          <p className="muted">Pickup is {pretty(addDays(date, rentalDays))}. There is no grace period: if the totes are not ready by then, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
           <p className="muted">Next you&apos;ll sign the rental terms and pay. We save your card in case totes go missing or the rental runs late, and we text before charging. You get a receipt for every charge.</p>
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'Holding your totes…' : 'Continue to sign & pay'}</button></div></div>
         </section>)}

@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     if (!g) return NextResponse.json({ error: 'pickup_address_not_found' }, { headers: CORS });
     pickup_miles = g.miles; pickup_geo = g.display;
   }
-  const { data, error } = await admin.rpc('rental_quote', { p: { package_id: b.package_id, duration: b.duration ?? 14, extra_weeks: b.extra_weeks ?? 0, addons: b.addons ?? [], delivery_address: b.delivery_address ? withZip(b.delivery_address, delivery_geo) : null, pickup_address: pickup_geo ? withZip(b.pickup_address!, pickup_geo) : null, delivery_miles, pickup_miles, promo_code: b.promo_code ?? null, delivery_date: b.delivery_date ?? null } });
+  const { data, error } = await admin.rpc('rental_quote', { p: { package_id: b.package_id, duration: b.duration ?? 14, extra_weeks: b.extra_weeks ?? 0, addons: b.addons ?? [], delivery_address: b.delivery_address ? withZip(b.delivery_address, delivery_geo) : null, pickup_address: pickup_geo ? withZip(b.pickup_address!, pickup_geo) : null, delivery_place: delivery_geo, pickup_place: pickup_geo, delivery_miles, pickup_miles, promo_code: b.promo_code ?? null, delivery_date: b.delivery_date ?? null } });
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
   return NextResponse.json({ ...(data as object), delivery_geo, pickup_geo }, { headers: CORS });
 }

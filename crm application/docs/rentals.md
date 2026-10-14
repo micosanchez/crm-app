@@ -97,3 +97,19 @@ Queue table `rental_messages`, drained by the cron inside 8am–8pm Detroit, onl
 - QR scanning uses `BarcodeDetector` (Android Chrome); on iPhone tap the tag chips.
 - Calendar moves are date inputs on the rental, not drag and drop.
 - The cross-sell link goes to the CRM `/request` page rather than the website form so the lead is tagged without a webhook change.
+
+## Pricing and policy update (2026-10-14, migration 0058)
+
+Owner spec, applied to new bookings only (existing rentals keep the zone, fee and prices they were booked with).
+
+- **Packages** unchanged: Starter 20/$109, Home 30/$139 (Most Popular), Full House 40/$169, 14 days; extra week $25/$30/$35.
+- **Two zones** in `rental_settings.zones`: Zone 1 $10 (old zones 1 and 2 merged), Zone 2 $35 (Farmington Hills, Bloomfield Township, Redford, Ferndale, the five Grosse Pointes). One fee covers delivery and pickup. A zone with a `cities` list also needs the typed address or the geocoder's place name to name one of them (`rental_zone_city_ok`), so a shared ZIP (Farmington vs Farmington Hills) is never priced as the wrong city; it falls to "call for a quote". The old $50 zone (Woodhaven, Brownstown, Flat Rock, Rockwood, Westland, Inkster, Garden City, Belleville) is no longer bookable online until the owner approves adding those cities.
+- **Equipment** (exactly three rentable add-ons, per rental): Standard Hand Truck $20 (assets H-xx, $79 each), Convertible Hand Truck $30 (new type `convertible_hand_truck`, C-01, $126.57), Furniture Dolly $10 (F-xx). Roll It Kit, Tote dolly, Moving blankets, Furniture Protection Kit and Complete Move Kit are inactive; D-xx and B-xx assets are retired (rows kept). Sold supplies are unchanged.
+- **No grace period** (`late_grace_days = 0`): the day after the pickup date a pending "Late week 1" line at the package extra-week rate accrues, then one per further week; lines are collected at check-in settlement. Extending replaces accrued late weeks one for one. A company-side reschedule (box "Customer asked" left off) voids pending late weeks.
+- **Early pickup**: customers request it from their rental page (owner gets an email). Free on the normal route; tick "Expedited" when saving the new date to charge `expedited_pickup_fee` ($25).
+- **Cancel / delivery change**: free with 48+ hours before the delivery window start (exactly 48 counts); inside that, cancel keeps $25 and a customer-asked delivery change charges `reschedule_fee_inside_window` ($25). A later pickup asked by the customer must go through Extend.
+- **Damage / cleaning**: $10 per tote each, one condition per tote at check-in. Missing equipment bills its add-on `replacement_fee`; damaged equipment is marked damaged with no automatic fee.
+- **FIRST10**: $15, cap 10, counted inside the hold lock (paid rentals plus holds under 30 minutes) and once per customer.
+- **Junk removal $25 off $250+**: no code. `tote_junk_discount(customer)` shows a notice on the quote and invoice pages while the rental is out or within 7 days after pickup; "mark the discount used" stores `rentals.junk_discount_estimate_id` (unique) so one rental gives one discount.
+- **Shortages**: a sold-out booking emails the owner the shortage, the cost at `tote_unit_cost` ($8.79) and the delivery date; nothing is bought or confirmed automatically, and the customer is offered the waitlist.
+- Self-check for the window and fee rules: `node scripts/check-rental-policy.mjs`.

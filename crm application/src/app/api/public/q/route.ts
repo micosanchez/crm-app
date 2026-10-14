@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   if (rentalId) { const { data: r } = await db.from('rentals').select('delivery_address, customers(email)').eq('id', rentalId).maybeSingle(); address = r?.delivery_address ?? null; email = (r?.customers as unknown as { email?: string } | null)?.email ?? ''; }
   // one lead per phone number: a repeat scan tops up the open request instead of making a second one
   const { data: dup } = await db.from('estimate_requests').select('id').eq('phone', phone).in('status', ['new', 'contacted']).limit(1).maybeSingle();
-  const description = `${(b.details ?? '').trim() || 'Scanned the tote sticker, wants a junk removal quote.'} (QR ${b.tag ?? '?'}${rentalId ? ', tote renter, TOTE25 applies' : ''})`;
+  const description = `${(b.details ?? '').trim() || 'Scanned the tote sticker, wants a junk removal quote.'} (QR ${b.tag ?? '?'}${rentalId ? ', tote renter: $25 off $250+ if within 7 days of pickup' : ''})`;
   let id = dup?.id ?? null;
   if (dup) await db.from('estimate_requests').update({ description }).eq('id', dup.id);
   else {

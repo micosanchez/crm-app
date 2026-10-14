@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     // "Will you have anything to get rid of?" Yes becomes a junk request in the pipeline right away (plan section 11).
     if (r.junk_interest === 'yes' && !r.junk_request_id) {
       const c = r.customers!; const [first = '', ...rest] = (c.name ?? '').trim().split(/\s+/);
-      const { data: er } = await db.from('estimate_requests').insert({ status: 'new', first_name: first, last_name: rest.join(' ') || '-', email: c.email ?? '', phone: c.phone ?? '', address: r.delivery_address, state: 'MI', description: `Tote renter said YES to junk removal at checkout (rental ${r.rental_number}). ${r.notes_customer ?? ''} Offer TOTE25: $25 off $250+.`, lead_source: 'tote_rental_crosssell', rental_id: r.id, turnstile_verified: true }).select('id').single();
+      const { data: er } = await db.from('estimate_requests').insert({ status: 'new', first_name: first, last_name: rest.join(' ') || '-', email: c.email ?? '', phone: c.phone ?? '', address: r.delivery_address, state: 'MI', description: `Tote renter said YES to junk removal at checkout (rental ${r.rental_number}). ${r.notes_customer ?? ''} Offer Tote renter: $25 off $250+, no code, during the rental or 7 days after pickup.`, lead_source: 'tote_rental_crosssell', rental_id: r.id, turnstile_verified: true }).select('id').single();
       if (er) { await db.from('rentals').update({ junk_request_id: er.id }).eq('id', r.id); await db.from('lead_events').insert({ type: 'quote_form', rental_id: r.id, customer_id: c.id, detail: { source: 'checkout_yes', estimate_request_id: er.id } }); }
     }
     const fresh = await getRental(r.id, db);

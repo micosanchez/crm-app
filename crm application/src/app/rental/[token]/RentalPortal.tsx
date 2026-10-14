@@ -13,6 +13,7 @@ export default function RentalPortal({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [weeks, setWeeks] = useState(1);
   const [newPickup, setNewPickup] = useState('');
+  const [newDelivery, setNewDelivery] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = () => fetch(`/api/public/rentals/me?token=${token}`).then((x) => x.json()).then((d) => (d.error ? setErr(d.error) : setR(d)));
@@ -55,16 +56,20 @@ export default function RentalPortal({ token }: { token: string }) {
         {active && <div className="card"><h3>Need more time?</h3>
           <div className="row"><div className="stepper"><button type="button" onClick={() => setWeeks(Math.max(1, weeks - 1))}>−</button><span>{weeks}</span><button type="button" onClick={() => setWeeks(Math.min(8, weeks + 1))}>+</button></div>
             <button className="btn sm" disabled={busy} onClick={async () => { const d = await act('extend', { weeks }); if (d?.ok) setMsg(`Extended. New pickup ${pretty(d.pickup_date)}.`); }}>Extend {weeks} week{weeks > 1 ? 's' : ''}{r.package?.extra_week_price ? ` (${money(r.package.extra_week_price * weeks)})` : ''}</button></div>
-          <p className="muted">Charged to your card on file, if the totes are free.</p></div>}
+          <p className="muted">Charged to your card on file, if the totes are free. There is no grace period: if the totes are not ready by your pickup date, the next week is billed at this rate.</p></div>}
 
-        {active && <div className="card"><h3>Reschedule pickup</h3>
-          <div className="row"><input type="date" value={newPickup} min={r.delivery_date} onChange={(e) => setNewPickup(e.target.value)} aria-label="New pickup date" /><button className="btn sm" disabled={busy || !newPickup} onClick={async () => { const d = await act('reschedule_pickup', { pickup_date: newPickup }); if (d?.ok) setMsg('Pickup rescheduled.'); }}>Move pickup</button></div>
-          <p className="muted">Late fees apply after the original pickup date unless you extend.</p></div>}
+        {['delivered', 'out', 'pickup_scheduled'].includes(r.status) && <div className="card"><h3>Done early?</h3>
+          <div className="row"><input type="date" value={newPickup} min={r.delivery_date} max={r.pickup_date} onChange={(e) => setNewPickup(e.target.value)} aria-label="Early pickup date" /><button className="btn sm" disabled={busy || !newPickup} onClick={async () => { const d = await act('request_early_pickup', { pickup_date: newPickup }); if (d?.ok) setMsg('Request sent. We will text you to confirm the pickup time.'); }}>Request early pickup</button></div>
+          <p className="muted">If we can fit it into our normal schedule there&apos;s no charge. An expedited pickup that needs a special trip is {money(r.settings?.expedited_pickup_fee ?? 25)}, subject to availability, and we confirm with you first. Returning early does not give a partial refund.</p></div>}
+
+        {r.status === 'booked' && <div className="card"><h3>Change your delivery date</h3>
+          <div className="row"><input type="date" value={newDelivery} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setNewDelivery(e.target.value)} aria-label="New delivery date" /><button className="btn sm" disabled={busy || !newDelivery} onClick={async () => { const d = await act('request_delivery_change', { delivery_date: newDelivery }); if (d?.ok) setMsg(Number(d.fee) > 0 ? `Request sent. Because it is under ${r.settings?.cancel_full_refund_hours ?? 48} hours before your delivery, a ${money(d.fee)} change fee applies once we confirm the new date.` : 'Request sent, no fee. We will text you to confirm the new date and window.'); }}>Request change</button></div>
+          <p className="muted">Free with at least {r.settings?.cancel_full_refund_hours ?? 48} hours&apos; notice before your delivery window. With less notice the change fee is {money(r.settings?.reschedule_fee_inside_window ?? 25)}.</p></div>}
 
         {r.card_last4 && active && <a className="btn ghost" href={`/rental/${token}/card`}>Update the card on file</a>}
 
-        {canCancel && <div className="card"><h3>Cancel</h3><p className="muted">Full refund {r.settings?.cancel_full_refund_hours}+ hours before delivery. Inside that window the payment is kept, but you can move your dates for free.</p>
-          <button className="btn ghost sm" disabled={busy} onClick={async () => { const p = await act('cancel'); if (p?.preview && confirm(`${p.preview.full_refund ? 'Full refund' : 'No refund inside the cancellation window'}: ${money(p.preview.refund_amount)} back to your card. Cancel this rental?`)) { const d = await act('cancel', { confirm: true }); if (d?.ok) setMsg('Cancelled. Any refund lands in 5 business days.'); } }}>Cancel rental</button></div>}
+        {canCancel && <div className="card"><h3>Cancel</h3><p className="muted">Free with at least {r.settings?.cancel_full_refund_hours ?? 48} hours&apos; notice before your delivery window. With less notice a {money(r.settings?.cancel_fee_inside_window ?? 25)} cancellation fee is kept and the rest is refunded.</p>
+          <button className="btn ghost sm" disabled={busy} onClick={async () => { const p = await act('cancel'); if (p?.preview && confirm(`${p.preview.full_refund ? 'Free cancellation' : `${money(p.preview.kept)} cancellation fee`}: ${money(p.preview.refund_amount)} back to your card. Cancel this rental?`)) { const d = await act('cancel', { confirm: true }); if (d?.ok) setMsg('Cancelled. Any refund lands in 5 business days.'); } }}>Cancel rental</button></div>}
 
         {r.items?.length > 0 && <div className="card"><h3>Your items</h3><p className="muted">{r.items.map((i: { tag: string; condition: string | null }) => `${i.tag}${i.condition ? ` (${i.condition})` : ''}`).join(', ')}</p></div>}
 

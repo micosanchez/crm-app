@@ -52,7 +52,7 @@ export function JunkCallout({ href, offer }: { href: string; offer?: string | nu
   return (
     <div className="callout">
       <h3>If it doesn&apos;t go in your tote, let us give you a quote.</h3>
-      <p>Old furniture, mattresses, boxes of stuff you&apos;re not moving? We haul it away. {offer ?? 'Tote renters get $25 off any junk removal job of $250 or more. Code TOTE25.'}</p>
+      <p>Old furniture, mattresses, boxes of stuff you&apos;re not moving? We haul it away. {offer ?? 'Tote renters get $25 off any junk removal job of $250 or more. No code needed.'}</p>
       <a href={href} target="_blank" rel="noreferrer">Get a junk removal quote</a>
     </div>
   );
