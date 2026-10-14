@@ -17,12 +17,13 @@ Rental {rental_number}: {totes} totes{addons} delivered {delivery_date} and pick
 
 export function renderTerms(s: Settings, r: Rental, addonsLabel: string): { text: string; version: number } {
   const base = (s.terms_text && s.terms_text.trim()) || DEFAULT_TERMS;
+  const fee = (v: number | null | undefined) => (v == null ? 'the amount listed on our rental page' : money(v));   // blank fee = not set yet, never "$0.00"
   const vars: Record<string, string> = {
     rental_number: r.rental_number, totes: String(r.tote_count), addons: addonsLabel ? ` plus ${addonsLabel}` : '',
     delivery_date: fmtDate(r.delivery_date), pickup_date: fmtDate(r.pickup_date),
-    late_fee_per_day: money(s.late_fee_per_day), replacement_fee_per_tote: money(s.replacement_fee_per_tote), replacement_fee_per_dolly: money(s.replacement_fee_per_dolly),
-    cleaning_fee_per_tote: money(s.cleaning_fee_per_tote), damage_fee_per_tote: money(s.damage_fee_per_tote), deposit: money(r.deposit_amount),
-    cancel_hours: String(s.cancel_full_refund_hours), failed_trip_fee: money(s.failed_trip_fee),
+    late_fee_per_day: fee(s.late_fee_per_day), replacement_fee_per_tote: fee(s.replacement_fee_per_tote), replacement_fee_per_dolly: fee(s.replacement_fee_per_dolly),
+    cleaning_fee_per_tote: fee(s.cleaning_fee_per_tote), damage_fee_per_tote: fee(s.damage_fee_per_tote), deposit: money(r.deposit_amount),
+    cancel_hours: String(s.cancel_full_refund_hours), failed_trip_fee: fee(s.failed_trip_fee),
   };
   let text = base.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
   if (!/CARD AUTHORIZATION/i.test(text)) text += `\n\n${AUTHORIZATION_CLAUSE}`;

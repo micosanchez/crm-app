@@ -21,9 +21,9 @@ __name(rentalOp, "rentalOp");
 async function findRental(dbc, ref) {
   const q = dbc.from("rentals").select(RENTAL_SELECT);
   const { data, error } = /^[0-9a-f-]{36}$/i.test(ref) ? await q.eq("id", ref).maybeSingle() : await q.eq("rental_number", ref.toUpperCase().startsWith("R-") ? ref.toUpperCase() : `R-${ref}`).maybeSingle();
-  if (error) return fail("db_error", error.message);
-  if (!data) return fail("not_found", `No rental ${ref}`);
-  return ok(data);
+  if (error) return { err: fail("db_error", error.message) };
+  if (!data) return { err: fail("not_found", `No rental ${ref}`) };
+  return { row: data };
 }
 __name(findRental, "findRental");
 
@@ -55,8 +55,8 @@ function registerRentalTools(server, dbc, env) {
     description: "Everything about one rental: customer, dates, items (tags and conditions), charges, agreement, events and the customer link.",
     inputSchema: { rental: ref }, annotations: { readOnlyHint: true }
   }, guarded(async (a) => {
-    const r = await findRental(dbc, a.rental); if (r.isError) return r;
-    const row = JSON.parse(r.content[0].text);
+    const f = await findRental(dbc, a.rental); if (f.err) return f.err;
+    const row = f.row;
     const [{ data: items }, { data: charges }, { data: agreement }, { data: events }] = await Promise.all([
       dbc.from("rental_items").select("checked_out_at, checked_in_at, return_condition, rental_assets(asset_tag, asset_type)").eq("rental_id", row.id),
       dbc.from("rental_charges").select("id, type, amount, description, status, stripe_payment_intent_id, payment_link_url, created_at").eq("rental_id", row.id).order("created_at"),
@@ -125,32 +125,32 @@ function registerRentalTools(server, dbc, env) {
     title: "Update a tote rental",
     description: "Change addresses, windows, notes, lead source, or move delivery/pickup dates (availability is re-checked and the customer gets a reschedule text).",
     inputSchema: { rental: ref, delivery_address: external_exports.string().optional(), pickup_address: external_exports.string().optional(), delivery_date: DATE3.optional(), delivery_window: external_exports.string().optional(), pickup_date: DATE3.optional(), pickup_window: external_exports.string().optional(), notes_internal: external_exports.string().optional(), notes_customer: external_exports.string().optional(), lead_source: external_exports.enum(LEAD_SOURCES_V2).optional() }
-  }, guarded(async (a) => { const r = await findRental(dbc, a.rental); if (r.isError) return r; const { rental, ...rest } = a; return rentalOp(env, "update", { rental_id: JSON.parse(r.content[0].text).id, ...rest }); }));
+  }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; const { rental, ...rest } = a; return rentalOp(env, "update", { rental_id: f.row.id, ...rest }); }));
 
   server.registerTool("cancel_rental", {
     title: "Cancel a tote rental",
     description: "Preview first (confirm=false) to see the refund per the cancellation policy, then confirm=true to cancel, refund the payment if the cancellation policy allows (inside the cutoff nothing is refunded automatically), and text the customer.",
     inputSchema: { rental: ref, reason: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
-  }, guarded(async (a) => { const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "cancel", { rental_id: JSON.parse(r.content[0].text).id, reason: a.reason, confirm: a.confirm === true }); }));
+  }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "cancel", { rental_id: f.row.id, reason: a.reason, confirm: a.confirm === true }); }));
 
   server.registerTool("extend_rental", {
     title: "Extend a tote rental",
     description: "Adds whole weeks, checks the totes are still free, charges the card on file for the extension and moves the pickup date. confirm must be true.",
     inputSchema: { rental: ref, weeks: external_exports.number().int().min(1).max(8).default(1), confirm: external_exports.boolean().default(false) }
-  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to charge the extension."); const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "extend", { rental_id: JSON.parse(r.content[0].text).id, weeks: a.weeks ?? 1 }); }));
+  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to charge the extension."); const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "extend", { rental_id: f.row.id, weeks: a.weeks ?? 1 }); }));
 
   server.registerTool("record_delivery", {
     title: "Record a tote delivery",
     description: "Check out the totes (by asset tag, e.g. T-001) to the customer, mark delivered, text them, and charge the balance if settings say balance is due at delivery. Tags optional: without them the next free tags are assigned.",
     inputSchema: { rental: ref, tags: external_exports.array(external_exports.string()).default([]) }
-  }, guarded(async (a) => { const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "record_delivery", { rental_id: JSON.parse(r.content[0].text).id, tags: a.tags ?? [] }); }));
+  }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "record_delivery", { rental_id: f.row.id, tags: a.tags ?? [] }); }));
 
   server.registerTool("record_pickup", {
     title: "Record a tote pickup",
     description: "Check the totes back in with a condition per tag (good, dirty, damaged, missing). Fees for dirty/damaged/missing and late days are added as pending charges for review; nothing is charged until settle.",
     inputSchema: { rental: ref, items: external_exports.array(external_exports.object({ tag: external_exports.string(), condition: external_exports.enum(RENTAL_CONDITIONS).default("good"), note: external_exports.string().optional() })).min(1), all_good: external_exports.boolean().default(false).describe("Shortcut: every item on the rental came back good") }
   }, guarded(async (a) => {
-    const r = await findRental(dbc, a.rental); if (r.isError) return r; const row = JSON.parse(r.content[0].text);
+    const f = await findRental(dbc, a.rental); if (f.err) return f.err; const row = f.row;
     let items = a.items ?? [];
     if (a.all_good) { const { data } = await dbc.from("rental_items").select("rental_assets(asset_tag)").eq("rental_id", row.id).is("checked_in_at", null); items = (data ?? []).map((i) => ({ tag: i.rental_assets?.asset_tag, condition: "good" })); }
     return rentalOp(env, "record_pickup", { rental_id: row.id, items });
@@ -160,13 +160,13 @@ function registerRentalTools(server, dbc, env) {
     title: "Charge a rental fee",
     description: "Adds a fee (late_fee, missing_item, damage, cleaning, extension, adjustment, failed_trip) and charges the card on file now. confirm must be true. For the end-of-rental settlement use settle_rental instead.",
     inputSchema: { rental: ref, type: external_exports.enum(RENTAL_CHARGE_TYPES), amount: external_exports.number().positive(), description: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
-  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to charge the card."); const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "charge", { rental_id: JSON.parse(r.content[0].text).id, type: a.type, amount: a.amount, description: a.description }); }));
+  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to charge the card."); const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "charge", { rental_id: f.row.id, type: a.type, amount: a.amount, description: a.description }); }));
 
   server.registerTool("settle_rental", {
     title: "Settle a returned rental",
     description: "Charges the card on file for the pending fees (the rental itself was paid at booking), texts the receipt, and closes the rental. Run after record_pickup once the fees look right. confirm must be true.",
     inputSchema: { rental: ref, confirm: external_exports.boolean().default(false) }
-  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to settle."); const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "settle", { rental_id: JSON.parse(r.content[0].text).id }); }));
+  }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to settle."); const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "settle", { rental_id: f.row.id }); }));
 
   server.registerTool("refund_rental_charge", {
     title: "Refund a rental charge",
@@ -184,7 +184,7 @@ function registerRentalTools(server, dbc, env) {
     title: "Text a rental customer",
     description: "Sends one of the rental templates (on_my_way, delivery_reminder, pickup_reminder_2d, overdue_1 ...) or custom text from the Quo line. Texts never include prices. Respects opt-outs.",
     inputSchema: { rental: ref, template: external_exports.enum(RENTAL_TEMPLATES).optional(), content: external_exports.string().optional().describe("Custom message instead of a template"), window: external_exports.string().optional().describe("For on_my_way: the arrival window to mention") }
-  }, guarded(async (a) => { const r = await findRental(dbc, a.rental); if (r.isError) return r; return rentalOp(env, "send_text", { rental_id: JSON.parse(r.content[0].text).id, template: a.template, content: a.content, window: a.window }); }));
+  }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "send_text", { rental_id: f.row.id, template: a.template, content: a.content, window: a.window }); }));
 
   server.registerTool("list_rental_assets", {
     title: "List totes and dollies",

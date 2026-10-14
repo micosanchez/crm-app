@@ -442,7 +442,7 @@ begin
     nullif(p->>'payer_name',''), nullif(lower(p->>'payer_email'),''), case when (p->>'sms_consent')::boolean then now() end, nullif(p->>'notes_customer',''))
   returning id into v_id;
   for l in select * from jsonb_array_elements(q->'addons') x loop
-    insert into public.rental_addon_lines (rental_id, addon_id, qty, unit_price) values (v_id, (l.x->>'addon_id')::uuid, (l.x->>'qty')::int, (l.x->>'unit_price')::numeric);
+    insert into public.rental_addon_lines (rental_id, addon_id, qty, unit_price) values (v_id, (l.value->>'addon_id')::uuid, (l.value->>'qty')::int, (l.value->>'unit_price')::numeric);
   end loop;
   return jsonb_build_object('rental_id', v_id, 'public_token', (select public_token from public.rentals where id = v_id), 'rental_number', (select rental_number from public.rentals where id = v_id), 'customer_id', v_cust, 'quote', q);
 end $$;
