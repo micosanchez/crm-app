@@ -8,7 +8,7 @@ Rental {rental_number}: {totes} totes{addons} delivered {delivery_date} and pick
 
 1. Rental period. The totes are yours from delivery through the pickup date. Need longer? Extend by the week from your rental page; extra weeks are charged to your card on file.
 2. Late returns. If the totes are not ready for pickup on the pickup date, a late fee of {late_fee_per_day} per day applies until they are picked up.
-3. Missing or damaged items. A replacement fee of {replacement_fee_per_tote} per tote and {replacement_fee_per_dolly} per dolly applies to items not returned. Damaged items (cracked, broken lids, melted, chemical damage) are charged {damage_fee_per_tote} each. Totes returned dirty inside are charged a {cleaning_fee_per_tote} cleaning fee each.
+3. Missing or damaged items. A replacement fee of {replacement_fee_per_tote} per tote and {replacement_fee_per_dolly} per dolly applies to items not returned. Damaged items (cracked, broken lids, melted, chemical damage) are charged {damage_fee_per_tote} each. Totes returned dirty inside are charged {cleaning_fee_per_tote} each for cleaning.
 4. Payment. The full rental price is paid when you book. Your card stays on file, as authorized below, for extensions and for any fees after pickup.
 5. Cancellation. Cancel {cancel_hours} or more hours before delivery for a full refund. Inside that window the payment is not refunded, but you can move your dates at no charge.
 6. Delivery and pickup. Someone 18 or older must be present, or the totes must be left where we agreed. If we arrive and cannot complete the stop, a failed trip fee of {failed_trip_fee} applies and we reschedule.

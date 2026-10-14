@@ -13,6 +13,10 @@ One division inside the CRM: public booking paid in full at checkout with the ca
 6. **Test in Stripe test mode** (see below), then swap to live keys and delete the test rentals.
 7. **Website**: Netlify Drop the zip `~/Downloads/SJHC Command Center_files/sanchezhaulco-DEPLOY-2026-10-12.zip` onto the hilarious-rolypoly-6357d4 site. `/totes` goes live with the live packages pulled from the CRM.
 
+## Live test on 2026-10-13 (what was verified)
+
+Booking page on phone and desktop, two addresses, add-on, extra week, hold, e-signature + PDF, pending charge row with a Stripe PaymentIntent, customer portal, connector `create_rental` by phone with the resume link, hold expiry by the 15-minute cron. Found and fixed: audit trigger order (0053), charge upsert index (0054), add-on hold loop (0055), connector lookup wrapper (v2.2.1). Not run: the actual card payment, because `STRIPE_SECRET_KEY` in Netlify is a **live** key and the publishable key is still missing. Test rentals were cancelled and the test package deactivated afterwards.
+
 ## Stage 11 test script (Stripe test mode)
 
 Card numbers are shown on the rental detail page while the secret key is a test key.
