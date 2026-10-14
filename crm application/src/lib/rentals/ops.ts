@@ -40,10 +40,11 @@ export type Rental = {
   stripe_customer_id: string | null; stripe_payment_method_id: string | null; card_brand: string | null; card_last4: string | null; card_exp: string | null;
   lead_source: string | null; partner_id: string | null; promo_code: string | null; payer_name: string | null; payer_email: string | null; sms_consent_at: string | null;
   abandoned_text_sent_at: string | null; junk_request_id: string | null; disputed_at: string | null; notes_internal: string | null; notes_customer: string | null; created_at: string;
+  move_date?: string | null; move_reason?: string | null; home_size?: string | null; junk_interest?: 'yes' | 'maybe' | 'no' | null; lead_score?: number; marketing_sms_consent_at?: string | null; marketing_email_consent_at?: string | null; tax_amount?: number; rush_fee?: number; zone?: string | null; gear?: Record<string, number>; rental_days?: number | null;
   customers?: { id: string; name: string; phone: string | null; email: string | null };
 };
 export type Charge = { id: string; rental_id: string; type: string; amount: number; description: string | null; stripe_payment_intent_id: string | null; stripe_refund_id: string | null; status: string; failure_reason: string | null; photo_urls: string[]; retry_count: number; next_retry_at: string | null; payment_link_url: string | null; created_at: string };
-export type Settings = Record<string, unknown> & { late_fee_per_day: number | null; replacement_fee_per_tote: number | null; replacement_fee_per_dolly: number | null; cleaning_fee_per_tote: number | null; damage_fee_per_tote: number | null; failed_trip_fee: number | null; cancel_full_refund_hours: number; balance_charge_mode: string; turnaround_days: number; terms_text: string | null; terms_version: number; templates: Record<string, Partial<{ enabled: boolean; sms: string; email: string; email_subject: string }>> };
+export type Settings = Record<string, unknown> & { late_grace_days?: number; lid_fee?: number | null; rush_fee?: number | null; rush_hours?: number; sales_tax_rate?: number; cancel_fee_inside_window?: number | null; cancel_after_delivery_pct?: number; junk_offer_text?: string | null; zones?: unknown[]; late_fee_per_day: number | null; replacement_fee_per_tote: number | null; replacement_fee_per_dolly: number | null; cleaning_fee_per_tote: number | null; damage_fee_per_tote: number | null; failed_trip_fee: number | null; cancel_full_refund_hours: number; balance_charge_mode: string; turnaround_days: number; terms_text: string | null; terms_version: number; templates: Record<string, Partial<{ enabled: boolean; sms: string; email: string; email_subject: string }>> };
 
 export async function getSettings(db = admin()): Promise<Settings> {
   const { data } = await db.from('rental_settings').select('*').eq('id', true).single();
@@ -74,7 +75,8 @@ export async function queueMessage(r: Rental, key: RentalTemplateKey, extra: Rec
   const vars = {
     first_name: first(c?.name), rental_number: r.rental_number, delivery_date: fmtDate(r.delivery_date), delivery_window: r.delivery_window,
     pickup_date: fmtDate(r.pickup_date), pickup_window: r.pickup_window ?? r.delivery_window, link: rentalLink(r), receipt_link: `${rentalLink(r)}#receipts`,
-    pay_link: '', card_link: `${rentalLink(r)}/card`, junk_link: junkQuoteLink(r, c), review_link: REVIEW_LINK, totes: r.tote_count, window: '', ...extra,
+    pay_link: '', card_link: `${rentalLink(r)}/card`, junk_link: junkQuoteLink(r, c), review_link: REVIEW_LINK, totes: r.tote_count, window: '',
+    junk_offer: r.marketing_sms_consent_at ? 'Tote renters also get $25 off junk removal: sanchezhaulco.com/q' : '', ...extra,
   };
   const rows: Record<string, unknown>[] = [];
   const dedupe = opts.dedupe ?? `${r.id}:${key}`;
@@ -97,25 +99,30 @@ export async function cancelQueued(rentalId: string, keys?: RentalTemplateKey[],
 }
 /** Lifecycle reminders keyed by date; safe to call again after a reschedule. */
 export async function scheduleLifecycle(r: Rental, db = admin()) {
-  const dayBefore = new Date(`${r.delivery_date}T12:00:00Z`); dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
-  const twoBefore = new Date(`${r.pickup_date}T12:00:00Z`); twoBefore.setUTCDate(twoBefore.getUTCDate() - 2);
-  await cancelQueued(r.id, ['delivery_reminder', 'pickup_reminder_2d', 'pickup_day'], db);
-  await queueMessage(r, 'delivery_reminder', {}, { at: detroitAt(dayBefore.toISOString().slice(0, 10), 10), dedupe: `${r.id}:delivery_reminder:${r.delivery_date}` }, db);
-  await queueMessage(r, 'pickup_reminder_2d', {}, { at: detroitAt(twoBefore.toISOString().slice(0, 10), 10), dedupe: `${r.id}:pickup_reminder_2d:${r.pickup_date}` }, db);
-  await queueMessage(r, 'pickup_day', {}, { at: detroitAt(r.pickup_date, 8), dedupe: `${r.id}:pickup_day:${r.pickup_date}` }, db);
+  const dayBefore = (ymd: string) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
+  const plus = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  await cancelQueued(r.id, ['delivery_reminder', 'during_rental', 'pickup_reminder'], db);
+  // day-before delivery text at 5 pm, skipped when the booking is younger than a day (they just got the confirmation)
+  const remindAt = detroitAt(dayBefore(r.delivery_date), 17);
+  if (new Date(remindAt).getTime() - new Date(r.created_at).getTime() > 24 * 3600_000) await queueMessage(r, 'delivery_reminder', {}, { at: remindAt, dedupe: `${r.id}:delivery_reminder:${r.delivery_date}` }, db);
+  // during the rental: move date plus two days, 6 pm. Promotional: needs marketing consent, not when they said no or already asked for a quote.
+  if (r.move_date && r.junk_interest !== 'no' && !r.junk_request_id) await queueMessage(r, 'during_rental', {}, { at: detroitAt(plus(r.move_date, 2), 18), dedupe: `${r.id}:during_rental` }, db);
+  await queueMessage(r, 'pickup_reminder', {}, { at: detroitAt(dayBefore(r.pickup_date), 17), dedupe: `${r.id}:pickup_reminder:${r.pickup_date}` }, db);
 }
 /** Drain due messages. Texts only inside 8am–8pm Detroit and only to customers who opted in; email any time. */
 export async function sendDueMessages(db = admin()) {
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hour12: false }).format(new Date())) % 24;
   const inQuiet = hour < 8 || hour >= 20;
-  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, status)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
+  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, status)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
   let sent = 0, skipped = 0, failed = 0;
   for (const m of due ?? []) {
-    const r = m.rentals as { sms_consent_at: string | null; status: string } | null;
+    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; status: string } | null;
+    const kind = (DEFAULT_TEMPLATES[m.template as RentalTemplateKey]?.kind ?? 'transactional');
     if (r?.status === 'cancelled' && !['abandoned', 'receipt'].includes(m.template)) { await db.from('rental_messages').update({ status: 'cancelled' }).eq('id', m.id); continue; }
     if (m.channel === 'sms') {
       if (inQuiet) continue; // stays queued until the window opens
-      if (!r?.sms_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no SMS consent' }).eq('id', m.id); skipped++; continue; }
+      if (kind === 'promotional' && !r?.marketing_sms_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no marketing consent' }).eq('id', m.id); skipped++; continue; }
+      if (m.rental_id) { const { count } = await db.from('rental_messages').select('id', { count: 'exact', head: true }).eq('rental_id', m.rental_id).eq('channel', 'sms').eq('status', 'sent'); if ((count ?? 0) >= 6 && kind === 'promotional') { await db.from('rental_messages').update({ status: 'skipped', error: 'six text cap' }).eq('id', m.id); skipped++; continue; } }
       const { data: opt } = await db.from('sms_opt_outs').select('phone').eq('phone', m.to_phone).maybeSingle();
       if (opt) { await db.from('rental_messages').update({ status: 'skipped', error: 'opted out (STOP)' }).eq('id', m.id); skipped++; continue; }
       const res = await sendText({ to: m.to_phone, content: m.body, event: `sms:rental_${m.template}`, entityKind: 'rental', entityId: m.rental_id ?? undefined, markInboxDone: true });
@@ -313,7 +320,10 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
   await db.rpc('rental_accrue_late_fees');
   await db.from('rentals').update({ status: 'returned', actual_picked_up_at: now }).eq('id', r.id);
   await logEvent(r.id, 'picked_up', { ...counts, lines: lines.length, by: a.created_by ?? null }, db);
-  await cancelQueued(r.id, ['pickup_day', 'pickup_reminder_2d', 'overdue_1', 'overdue_3'], db);
+  await cancelQueued(r.id, ['pickup_reminder', 'during_rental', 'overdue_1', 'overdue_3'], db);
+  const plus = (n: number) => { const d = new Date(`${todayDetroit()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  await queueMessage(r, 'after_pickup', {}, { at: detroitAt(plus(1), 10), dedupe: `${r.id}:after_pickup` }, db);
+  await queueMessage(r, 'referral', {}, { at: detroitAt(plus(7), 18), dedupe: `${r.id}:referral` }, db);
   return { ok: true, counts, review: await chargesReview(r.id, db) };
 }
 export async function chargesReview(rentalId: string, db = admin()) {
@@ -330,7 +340,6 @@ export async function maybeClose(rentalId: string, db = admin()) {
   if (Number(r.balance_due) > 0 || !allIn) { if (r.status === 'returned') await db.from('rentals').update({ status: 'inspected' }).eq('id', r.id); return false; }
   await db.from('rentals').update({ status: 'closed' }).eq('id', r.id);
   await logEvent(r.id, 'closed', {}, db);
-  await queueMessage(await getRental(r.id, db), 'closed', {}, { email: true }, db);
   return true;
 }
 export async function foundItem(rentalId: string, tag: string, db = admin()) {
@@ -400,19 +409,28 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
   const hoursOut = (new Date(detroitAt(r.delivery_date, 0)).getTime() - Date.now()) / 3600_000;
-  const fullRefund = hoursOut >= s.cancel_full_refund_hours;
+  const delivered = !!r.actual_delivered_at || ['delivered', 'out', 'pickup_scheduled'].includes(r.status);
   const { data: paid } = await db.from('rental_charges').select('*').eq('rental_id', r.id).eq('status', 'succeeded').in('type', ['deposit', 'balance', 'rental_payment']);
-  const refundable = fullRefund ? (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0) : 0;   // inside the window the payment is kept (staff can still refund by hand)
-  const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, refund_amount: Math.round(refundable * 100) / 100, policy: `Full refund ${s.cancel_full_refund_hours}+ hours before delivery; inside that window the payment is kept.` };
+  const paidTotal = (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0);
+  const pkgPrice = Number(r.subtotal); // package price including any extra weeks
+  const fullRefund = !delivered && hoursOut >= s.cancel_full_refund_hours;
+  const kept = delivered ? Math.round(pkgPrice * (Number(s.cancel_after_delivery_pct ?? 50) / 100) * 100) / 100 : fullRefund ? 0 : Number(s.cancel_fee_inside_window ?? 0);
+  const refundable = Math.max(Math.round((paidTotal - kept) * 100) / 100, 0);
+  const policy = `Free ${s.cancel_full_refund_hours}+ hours before delivery; ${money(s.cancel_fee_inside_window ?? 0)} fee inside that window; after delivery ${Number(s.cancel_after_delivery_pct ?? 50)}% of the package price is kept.`;
+  const preview = { rental_number: r.rental_number, hours_before_delivery: Math.round(hoursOut), full_refund: fullRefund, delivered, kept, refund_amount: refundable, policy };
   if (a.preview) return { ok: true, preview };
   if (['closed', 'cancelled'].includes(r.status)) throw new Error(`Rental is already ${r.status}.`);
+  let left = refundable;
   for (const c of paid ?? []) {
-    if (!fullRefund) continue;
-    if (c.stripe_payment_intent_id) await refundCharge(c.id, null, 'Cancellation (full refund)', db).catch((e: Error) => logEvent(r.id, 'refund:failed', { charge_id: c.id, error: e.message }, db));
+    if (left <= 0) break;
+    if (!c.stripe_payment_intent_id) continue;
+    const amt = Math.min(Number(c.amount), left);
+    await refundCharge(c.id, amt, `Cancellation (${fullRefund ? 'full refund' : `${money(kept)} kept per policy`})`, db).catch((e: Error) => logEvent(r.id, 'refund:failed', { charge_id: c.id, error: e.message }, db));
+    left = Math.round((left - amt) * 100) / 100;
   }
   const { data: items } = await db.from('rental_items').select('asset_id').eq('rental_id', r.id).is('checked_in_at', null);
   for (const it of items ?? []) await db.from('rental_assets').update({ status: 'available' }).eq('id', it.asset_id);
-  await db.from('rentals').update({ status: 'cancelled', notes_internal: [r.notes_internal, `Cancelled ${todayDetroit()}: ${a.reason ?? ''} (${fullRefund ? 'full refund' : 'payment kept'})`].filter(Boolean).join('\n') }).eq('id', r.id);
+  await db.from('rentals').update({ status: 'cancelled', notes_internal: [r.notes_internal, `Cancelled ${todayDetroit()}: ${a.reason ?? ''} (kept ${money(kept)}, refunded ${money(refundable)})`].filter(Boolean).join('\n') }).eq('id', r.id);
   await cancelQueued(r.id, undefined, db);
   await logEvent(r.id, 'cancelled', { ...preview, by: a.by ?? null }, db);
   return { ok: true, preview };
@@ -496,7 +514,12 @@ export async function runRentalCron(db = admin()) {
     break; // first person only; the next one gets a text on the next run if totes are still free
   }
   out.waitlist_notified = notified;
-  // 7. send what is due
+  // 7. retention: addresses and move dates reveal empty homes; drop them two years after pickup unless they became a junk customer
+  const cutoff = new Date(); cutoff.setUTCMonth(cutoff.getUTCMonth() - 24);
+  const { data: old } = await db.from('rentals').select('id').in('status', ['closed', 'cancelled']).lt('pickup_date', cutoff.toISOString().slice(0, 10)).is('junk_request_id', null).neq('delivery_address', '[removed]').limit(50);
+  for (const o of old ?? []) await db.from('rentals').update({ delivery_address: '[removed]', pickup_address: null, move_date: null, notes_customer: null }).eq('id', o.id);
+  out.retention_scrubbed = old?.length ?? 0;
+  // 8. send what is due
   out.messages = await sendDueMessages(db);
   return out;
 }

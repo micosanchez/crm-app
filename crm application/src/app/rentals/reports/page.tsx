@@ -35,6 +35,12 @@ export default async function RentalReports({ searchParams }: { searchParams: { 
         <Cell label="Booking conversion" value={r.conversion?.page_views ? `${Math.round((r.conversion.paid_bookings / r.conversion.page_views) * 100)}%` : '—'} sub={`${r.conversion?.paid_bookings ?? 0} paid of ${r.conversion?.page_views ?? 0} page views`} />
         <Cell label="Cross-sell" value={String(r.crosssell?.requests ?? 0)} sub={`${r.crosssell?.quotes_won ?? 0} junk quotes won · ${money(r.crosssell?.junk_revenue)} junk revenue`} />
       </Cluster>
+      <Cluster cols="grid-cols-2 sm:grid-cols-4">
+        <Cell label="Bookings" value={String(r.bookings ?? 0)} sub={`avg order ${money(r.aov)} · add-ons on ${r.addon_attach_pct ?? 0}%`} />
+        <Cell label="Turned away" value={String(r.turned_away ?? 0)} sub="sold out + waitlist; buy totes after 2+ a month, two months running" tone={Number(r.turned_away) >= 2 ? 'var(--status-danger)' : undefined} />
+        <Cell label="Junk interest at checkout" value={`${r.leads?.checkout_yes ?? 0} yes / ${r.leads?.checkout_maybe ?? 0} maybe`} sub={`${r.leads?.hot_leads ?? 0} hot leads (score 7+)`} />
+        <Cell label="Sticker scans → quote forms" value={`${r.leads?.qr_scans ?? 0} → ${r.leads?.quote_forms ?? 0}`} sub={`zone fees ${money(r.zone_fees)}`} />
+      </Cluster>
       <section><Label>Utilization by week</Label><Stack>{(r.utilization?.by_week ?? []).map((w: { week: string; pct_out: number }) => <Row key={w.week} title={w.week} meta="" tag={`${w.pct_out ?? 0}% out`} />)}</Stack></section>
       <section><Label>Lead source per booking</Label><Stack>{Object.entries(r.lead_sources ?? {}).map(([k, v]) => <Row key={k} title={k.replace(/_/g, ' ')} meta="" tag={String(v)} />)}</Stack></section>
     </div>

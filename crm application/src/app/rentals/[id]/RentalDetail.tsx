@@ -85,6 +85,13 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
           {r.status === 'booked' && <button className="btn-ghost text-red-700" disabled={!!busy} onClick={() => run('cancel', async () => { const p: any = await act('cancel', { rental_id: r.id }); if (!ask(`${p.preview.full_refund ? 'Full refund' : 'Deposit kept'} (${money(p.preview.refund_amount)} back). Cancel ${r.rental_number}?`)) return null; return act('cancel', { rental_id: r.id, confirm: true, reason: 'cancelled by staff' }); }, (res: any) => res ? 'Cancelled.' : undefined)}>Cancel rental</button>}
         </section>
 
+        <section className="card space-y-1 text-sm" id="move">
+          <p className="panel-label">Move and junk lead</p>
+          <p>Moving day <b>{r.move_date ?? 'not given'}</b> · {r.zone ?? 'zone ?'} · rental {r.rental_days ?? '?'} days{r.home_size ? ` · ${r.home_size}` : ''}{r.move_reason ? ` · ${String(r.move_reason).replace('_', ' ')}` : ''}</p>
+          <p>Junk removal at checkout: <b>{r.junk_interest ?? 'not asked'}</b> · lead score <b>{r.lead_score ?? 0}/10</b> {Number(r.lead_score) >= 7 ? <span className="badge bg-red-50 text-red-700">text within the hour</span> : Number(r.lead_score) >= 4 ? <span className="badge bg-amber-50 text-amber-700">ask on pickup day</span> : null}{r.junk_request_id ? <> · <a className="underline" href={`/requests/${r.junk_request_id}`}>junk request</a></> : null}</p>
+          <p className="text-gray-500">Marketing texts {r.marketing_sms_consent_at ? 'allowed' : 'not allowed'} · marketing email {r.marketing_email_consent_at ? 'allowed' : 'not allowed'} · offer code TOTE25 ($25 off $250+, through 7 days after pickup)</p>
+        </section>
+
         <section className="card space-y-2" id="payment">
           <p className="panel-label">Payment</p>
           {testMode && <p className="badge bg-amber-50 text-amber-700">Stripe TEST mode</p>}

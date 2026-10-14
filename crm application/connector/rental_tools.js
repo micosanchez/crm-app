@@ -92,7 +92,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("create_rental", {
     title: "Book a tote rental by phone",
-    description: "Creates the hold exactly like the website (availability, lead time, slot cap and pricing are all checked in the database) and texts the customer a link to sign the agreement and pay (the rental is paid in full at booking). The hold lasts 30 minutes; if they miss it the same link lets them rebook with everything prefilled. Ask for name, phone, delivery address, date and window first. Nothing is charged until the customer pays.",
+    description: "Creates the hold exactly like the website (availability, lead time, ZIP zone fee, rush fee, slot cap and pricing are all checked in the database) and texts the customer a link to sign the agreement and pay (the rental is paid in full at booking). The hold lasts 30 minutes; if they miss it the same link lets them rebook with everything prefilled. Ask for name, phone, delivery address, date and window first. Nothing is charged until the customer pays.",
     inputSchema: {
       name: external_exports.string().min(1), phone: external_exports.string().min(10), email: external_exports.string().email().optional(),
       package_id: external_exports.string().uuid().optional().describe("Omit to use the only active package"),
@@ -100,6 +100,8 @@ function registerRentalTools(server, dbc, env) {
       delivery_date: DATE3, delivery_window: external_exports.string().describe("One of the slot windows, e.g. 5-7pm"), pickup_window: external_exports.string().optional(),
       extra_weeks: external_exports.number().int().min(0).max(8).default(0), dollies: external_exports.number().int().min(0).max(4).default(0),
       promo_code: external_exports.string().optional(), notes: external_exports.string().optional(), sms_consent: external_exports.boolean().default(true).describe("Did they agree to texts about the rental?"),
+      move_date: DATE3.optional().describe("Moving day; times the texts"), duration: external_exports.number().int().default(14).describe("14 (standard) or 7 (short move)"), junk_interest: external_exports.enum(["yes", "maybe", "no"]).optional().describe("Will they have anything to get rid of?"),
+      marketing_sms: external_exports.boolean().default(false).describe("Only true if they said yes to occasional offer texts"),
       lead_source: external_exports.enum(LEAD_SOURCES_V2).default("other"), send_link: external_exports.boolean().default(true)
     }
   }, guarded(async (a) => {
@@ -108,7 +110,7 @@ function registerRentalTools(server, dbc, env) {
     const pkg = a.package_id ? cat.packages.find((p) => p.id === a.package_id) : cat.packages[0];
     if (!pkg) return fail("no_package", "No active package with a price. Set one at /rentals/packages.");
     const dolly = cat.addons.find((x) => x.asset_type === "dolly");
-    const body = { package_id: pkg.id, extra_weeks: a.extra_weeks ?? 0, addons: a.dollies && dolly ? [{ addon_id: dolly.id, qty: a.dollies }] : [], delivery_address: a.delivery_address, pickup_address: a.pickup_address ?? null, promo_code: a.promo_code ?? null, delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_window: a.pickup_window ?? a.delivery_window, name: a.name, phone: a.phone, email: a.email ?? "", lead_source: a.lead_source ?? "other", notes_customer: a.notes ?? null, sms_consent: a.sms_consent ?? true, website: "" };
+    const body = { package_id: pkg.id, duration: a.duration ?? 14, move_date: a.move_date ?? null, junk_interest: a.junk_interest ?? null, marketing_sms: a.marketing_sms ?? false, extra_weeks: a.extra_weeks ?? 0, addons: a.dollies && dolly ? [{ addon_id: dolly.id, qty: a.dollies }] : [], delivery_address: a.delivery_address, pickup_address: a.pickup_address ?? null, promo_code: a.promo_code ?? null, delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_window: a.pickup_window ?? a.delivery_window, name: a.name, phone: a.phone, email: a.email ?? "", lead_source: a.lead_source ?? "other", notes_customer: a.notes ?? null, sms_consent: a.sms_consent ?? true, website: "" };
     const res = await fetch(`${RENTAL_APP}/api/public/rentals/hold`, { method: "POST", headers: { "content-type": "application/json", "user-agent": "sjhc-connector" }, body: JSON.stringify(body) });
     const j = await res.json().catch(() => ({}));
     if (j.error) return fail("hold_failed", j.error === "sold_out" ? "Not enough totes free for those dates." : j.error === "slot_full" ? "That delivery window is full." : j.error);

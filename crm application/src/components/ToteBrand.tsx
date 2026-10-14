@@ -48,11 +48,11 @@ export const TOTE_CSS = `
 `;
 
 /** Stage 12 cross-sell callout. Never lists prices. */
-export function JunkCallout({ href }: { href: string }) {
+export function JunkCallout({ href, offer }: { href: string; offer?: string | null }) {
   return (
     <div className="callout">
       <h3>If it doesn&apos;t go in your tote, let us give you a quote.</h3>
-      <p>Old furniture, mattresses, boxes of stuff you&apos;re not moving? We haul it away.</p>
+      <p>Old furniture, mattresses, boxes of stuff you&apos;re not moving? We haul it away. {offer ?? 'Tote renters get $25 off any junk removal job of $250 or more. Code TOTE25.'}</p>
       <a href={href} target="_blank" rel="noreferrer">Get a junk removal quote</a>
     </div>
   );

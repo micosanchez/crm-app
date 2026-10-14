@@ -13,6 +13,24 @@ One division inside the CRM: public booking paid in full at checkout with the ca
 6. **Test in Stripe test mode** (see below), then swap to live keys and delete the test rentals.
 7. **Website**: Netlify Drop the zip `~/Downloads/SJHC Command Center_files/sanchezhaulco-DEPLOY-2026-10-12.zip` onto the hilarious-rolypoly-6357d4 site. `/totes` goes live with the live packages pulled from the CRM.
 
+## Business plan build (2026-10-13, migration 0056)
+
+What the plan turned into, and where it lives:
+
+- **Packages** Starter 20/$109, Home 30/$139 (Most Popular), Full House 40/$169, 14 days, extra week $25/$30/$35, one-week prices $89/$115/$139 behind a "short move" link. Edit at `/rentals/packages` (week price, badge, best-for).
+- **Add-ons** (`/rentals/packages`, lower half): Roll It Kit is the featured upsell ("How are you moving the heavy stuff?"), the rest sit behind "More kits and supplies". Kinds: rent (gear comes back, replacement fee), sell (supplies, 6% Michigan tax at checkout), bundle (`requires` lists the gear it ties up). Gear availability is date-aware at hold time (`rental_gear_free`); stock shown on the page is the fleet count. Gear assets: D-01..03 tote dollies, H-01..04 hand trucks, F-01..02 furniture dollies, B-01..02 blanket sets. Buy the 3rd tote dolly, the furniture dollies and the blankets before the first kit is rented.
+- **Delivery zones by ZIP** (`/rentals/settings` → Delivery zones): Zone 1 free, Zone 2 $25, Zone 3 $50; the farther of the two addresses sets the fee; unknown ZIP = out of area (call for a quote). Rush $25 inside 48 hours. Weekday window is 6 to 8 pm only.
+- **Policies** in the terms and the settings: missing tote $20, lid $6, damage $15, cleaning $15 (waive the first by hand), tote dolly $50, hand truck $75, furniture dolly $25, blanket $12; two-day grace then a week billed at the extra-week rate (cron); cancellation free 48h+, $25 inside, half the package price after delivery; one free delivery retry then $20; missed pickup $20.
+- **Checkout data**: moving date (required), "Will you have anything to get rid of?" (Yes creates a junk request in the pipeline and marks the rental), two separate unchecked marketing boxes (consent text saved in `consent_records`), home size and move reason on the confirmation page. Lead score 0 to 10 on every rental (`rental_lead_score`): 7+ shows "text within the hour" on the rental page and in the owner email.
+- **Texts** (Settings → templates): booked, day-before-delivery 5 pm (skipped when booked under a day before), during rental (move date + 2 days, 6 pm, promotional), day-before-pickup 5 pm with "Reply YES", day-after-pickup review ask, referral at +7 days (promotional). Transactional texts go to everyone who booked; promotional only with the marketing box; six texts per rental max. The $25 junk line in the confirmation only appears with marketing consent.
+- **QR stickers** (`/rentals/labels`): 4 x 4 in, one per tote, QR = `sanchezhaulco.com/q?t=T-014&utm_source=tote…` which forwards to the CRM `/q` page. A scan is logged as a `lead_events` row (not a lead); the three-field form creates the estimate request tagged `tote_rental_crosssell` with TOTE25 noted, de-duplicated by phone.
+- **Offers**: FIRST10 ($15 off, capped at 10 uses, counted on paid bookings) lives in `/rentals/partners`. TOTE25 is a note on the junk quote (add a $25 line on jobs of $250+ booked through 7 days after pickup). Referral $15/$15 is manual for now: add a partner code per referrer when someone asks.
+- **Reports** (`/rentals/reports`): bookings, average order, add-on attach %, turned away (sold-out attempts + waitlist), checkout yes/maybe, sticker scans → quote forms, hot leads; weekly scorecard rentals block has utilization and totes out vs available.
+- **Retention**: addresses and move dates are blanked 24 months after pickup unless the customer became a junk lead (cron step 7).
+- **Website**: `sanchezhaulco.com/tote-rental` (old `/totes` redirects), zones, offers, kits, FAQ with the policies; `/q` forwards to the CRM.
+
+Not built (manual for now): customer self-pickup discount, mid-rental extra totes ($3 each + $20 trip: add as a custom charge), realtor gift codes (make a partner code), partner referral logging.
+
 ## Live test on 2026-10-13 (what was verified)
 
 Booking page on phone and desktop, two addresses, add-on, extra week, hold, e-signature + PDF, pending charge row with a Stripe PaymentIntent, customer portal, connector `create_rental` by phone with the resume link, hold expiry by the 15-minute cron. Found and fixed: audit trigger order (0053), charge upsert index (0054), add-on hold loop (0055), connector lookup wrapper (v2.2.1). Not run: the actual card payment, because `STRIPE_SECRET_KEY` in Netlify is a **live** key and the publishable key is still missing. Test rentals were cancelled and the test package deactivated afterwards.

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
 /** POST {token, action, ...} → extend | reschedule_pickup | cancel (preview or confirm) | card_setup | card_confirm. */
 export async function POST(req: NextRequest) {
-  let b: { token?: string; action?: string; weeks?: number; pickup_date?: string; pickup_window?: string; confirm?: boolean; intent_id?: string };
+  let b: { token?: string; action?: string; weeks?: number; pickup_date?: string; pickup_window?: string; confirm?: boolean; intent_id?: string; home_size?: string; move_reason?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: 'bad body' }, { status: 400, headers: CORS }); }
   if (!b.token || !b.action) return NextResponse.json({ error: 'missing' }, { status: 400, headers: CORS });
   try {
@@ -37,6 +37,13 @@ export async function POST(req: NextRequest) {
         if (!b.pickup_date) throw new Error('Pick a date.');
         const res = await reschedule(r.id, { pickup_date: b.pickup_date, pickup_window: b.pickup_window, by: 'customer' }, db);
         return NextResponse.json({ ok: true, pickup_date: res.rental.pickup_date, pickup_window: res.rental.pickup_window }, { headers: CORS });
+      }
+      case 'profile': {
+        const patch: Record<string, string> = {};
+        if (b.home_size) patch.home_size = String(b.home_size).slice(0, 40);
+        if (b.move_reason) patch.move_reason = String(b.move_reason).slice(0, 40);
+        if (Object.keys(patch).length) await db.from('rentals').update(patch).eq('id', r.id);
+        return NextResponse.json({ ok: true }, { headers: CORS });
       }
       case 'cancel': return NextResponse.json(await cancelRental(r.id, { reason: 'customer request', by: 'customer', preview: !b.confirm }, db), { headers: CORS });
       case 'card_setup': {

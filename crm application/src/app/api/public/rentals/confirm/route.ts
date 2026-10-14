@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { admin, getRentalByToken, getSettings, logEvent, queueMessage, scheduleLifecycle, chargeBalance, getRental } from '@/lib/rentals/ops';
+import { admin, getRentalByToken, getSettings, logEvent, queueMessage, scheduleLifecycle, chargeBalance, getRental, money } from '@/lib/rentals/ops';
 import { stripe, cardInfo } from '@/lib/rentals/stripe';
 import { sendNotification, APP_URL } from '@/lib/notify';
 
@@ -24,12 +24,19 @@ export async function POST(req: NextRequest) {
     await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id);
     if (b.kind !== 'setup') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
     await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}` }, db);
+    if (r.partner_id) await db.rpc('rental_partner_use', { p_partner: r.partner_id }).then(() => {}, () => {});
+    // "Will you have anything to get rid of?" Yes becomes a junk request in the pipeline right away (plan section 11).
+    if (r.junk_interest === 'yes' && !r.junk_request_id) {
+      const c = r.customers!; const [first = '', ...rest] = (c.name ?? '').trim().split(/\s+/);
+      const { data: er } = await db.from('estimate_requests').insert({ status: 'new', first_name: first, last_name: rest.join(' ') || '-', email: c.email ?? '', phone: c.phone ?? '', address: r.delivery_address, state: 'MI', description: `Tote renter said YES to junk removal at checkout (rental ${r.rental_number}). ${r.notes_customer ?? ''} Offer TOTE25: $25 off $250+.`, lead_source: 'tote_rental_crosssell', rental_id: r.id, turnstile_verified: true }).select('id').single();
+      if (er) { await db.from('rentals').update({ junk_request_id: er.id }).eq('id', r.id); await db.from('lead_events').insert({ type: 'quote_form', rental_id: r.id, customer_id: c.id, detail: { source: 'checkout_yes', estimate_request_id: er.id } }); }
+    }
     const fresh = await getRental(r.id, db);
     await queueMessage(fresh, 'booking_confirmed', {}, { email: true }, db);
     await scheduleLifecycle(fresh, db);
     const s = await getSettings(db);
     if (s.balance_charge_mode === 'booking') await chargeBalance(r.id, db).catch(() => {});
-    sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}`, text: `${fresh.tote_count} totes · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\n${APP_URL}/rentals/${fresh.id}` }).catch(() => {});
+    sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}\n${APP_URL}/rentals/${fresh.id}` }).catch(() => {});
     return NextResponse.json({ ok: true, rental_number: fresh.rental_number, token: fresh.public_token, total: fresh.total, deposit: dep }, { headers: CORS });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500, headers: CORS }); }
 }

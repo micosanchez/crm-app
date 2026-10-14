@@ -11,7 +11,7 @@ const ROOTS = new Set(['/', '/login', '/field']);
 export default function BackButton() {
   const pathname = usePathname();
   const router = useRouter();
-  if (!pathname || ROOTS.has(pathname) || pathname.startsWith('/sign/') || pathname.startsWith('/request') || pathname.startsWith('/rent') || pathname.includes('/print')) return null;
+  if (!pathname || ROOTS.has(pathname) || pathname.startsWith('/sign/') || pathname.startsWith('/request') || pathname.startsWith('/rent') || pathname === '/q' || pathname.includes('/print')) return null;
   return (
     <button
       type="button"
