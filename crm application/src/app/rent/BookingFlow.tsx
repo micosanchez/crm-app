@@ -27,6 +27,14 @@ function fireConversion(detail: Record<string, unknown>) {
 export default function BookingFlow({ initial }: { initial: { package: string | null; date: string | null; embed: boolean; resume: string | null; token: string | null; promo: string | null; utm: Record<string, string | null> } }) {
   const [cat, setCat] = useState<Catalog | null>(null);
   const [step, setStep] = useState(1);
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) { firstStep.current = false; return; }
+    // a new step is usually shorter: without this the page stays where the Next button was and shows whatever is below the form
+    if (initial.embed && window.parent !== window) window.parent.postMessage({ type: 'sjhc_rent_step', step }, '*');
+    else window.scrollTo({ top: 0, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pkgId, setPkgId] = useState<string | null>(initial.package);
@@ -35,6 +43,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [duration, setDuration] = useState<7 | 14>(14);
   const [moreAddons, setMoreAddons] = useState(false);
   const [moveDate, setMoveDate] = useState('');
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveMonth, setMoveMonth] = useState('');
   const [profile, setProfile] = useState({ home_size: '', move_reason: '', saved: false });
   const [addr, setAddr] = useState('');
   const [pickupDiff, setPickupDiff] = useState(false);
@@ -268,7 +278,9 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           {date && <><p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)}. Pickup {pretty(addDays(date, rentalDays))} ({rentalDays} days).</p>
             <label>Delivery window</label>
             <div className="row" style={{ flexWrap: 'wrap' }}>{windowsFor(date).map((w: string) => <button key={w} type="button" className={`btn ghost sm ${win === w ? 'sel' : ''}`} style={win === w ? { background: 'var(--grad)', borderColor: 'transparent' } : {}} disabled={slotFull(date, w)} onClick={() => setWin(w)}>{w}{slotFull(date, w) ? ' (full)' : ''}</button>)}</div>
-            <label htmlFor="movedate">When is moving day?</label><input id="movedate" type="date" min={date} value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+            <label htmlFor="movedate">When is moving day?</label>
+            <button id="movedate" type="button" className="card row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', margin: '4px 0', color: '#fff', font: 'inherit', fontSize: 18 }} aria-expanded={moveOpen} onClick={() => { setMoveMonth((moveDate || date).slice(0, 7)); setMoveOpen(!moveOpen); }}><span>{moveDate ? pretty(moveDate) : 'Pick your moving day'}</span><span aria-hidden="true" style={{ flex: '0 0 auto' }}>{moveOpen ? '▴' : '▾'}</span></button>
+            {moveOpen && <Calendar month={moveMonth} setMonth={setMoveMonth} selected={moveDate || null} ok={(d) => d >= date} onPick={(d) => { setMoveDate(d); setMoveOpen(false); }} note="Pick the day you move. It can be any day on or after delivery." />}
             <label>Pickup window ({pretty(addDays(date, rentalDays))})</label>
             <div className="row" style={{ flexWrap: 'wrap' }}>{windowsFor(addDays(date, rentalDays)).map((w: string) => <button key={w} type="button" className="btn ghost sm" style={pickupWin === w ? { background: 'var(--grad)', borderColor: 'transparent' } : {}} onClick={() => setPickupWin(w)}>{w}</button>)}</div>
             {pkg?.extra_week_price ? <><label>Need longer? Add weeks ({money(pkg.extra_week_price)} each)</label><div className="stepper"><button type="button" onClick={() => setExtraWeeks(Math.max(0, extraWeeks - 1))}>−</button><span>{extraWeeks}</span><button type="button" onClick={() => setExtraWeeks(Math.min(8, extraWeeks + 1))}>+</button></div></> : null}</>}
@@ -350,7 +362,7 @@ function heardToSource(h: string, fallback: string) {
   return m[h] ?? fallback;
 }
 
-function Calendar({ month, setMonth, selected, ok, onPick }: { month: string; setMonth: (m: string) => void; selected: string | null; ok: (d: string) => boolean; onPick: (d: string) => void }) {
+function Calendar({ month, setMonth, selected, ok, onPick, note = 'Greyed dates are full for your order or not a delivery day.' }: { month: string; setMonth: (m: string) => void; selected: string | null; ok: (d: string) => boolean; onPick: (d: string) => void; note?: string }) {
   const [y, m] = month.split('-').map(Number);
   const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
   const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -363,7 +375,7 @@ function Calendar({ month, setMonth, selected, ok, onPick }: { month: string; se
         {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
         {Array.from({ length: days }).map((_, i) => { const d = `${y}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`; const can = ok(d); return <button key={d} type="button" disabled={!can} className={selected === d ? 'sel' : ''} onClick={() => onPick(d)} aria-label={`${d}${can ? '' : ' unavailable'}`}>{i + 1}</button>; })}
       </div>
-      <p className="muted" style={{ marginTop: 8 }}>Greyed dates are full for your order or not a delivery day.</p>
+      <p className="muted" style={{ marginTop: 8 }}>{note}</p>
     </div>
   );
 }
