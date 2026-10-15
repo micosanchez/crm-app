@@ -4,8 +4,8 @@
 // balance math live in exactly one place (src/lib/rentals/ops.ts).
 var RENTAL_APP = "https://crmsjh.netlify.app";
 var RENTAL_STATUSES = ["pending_payment", "booked", "delivered", "out", "pickup_scheduled", "returned", "inspected", "closed", "cancelled"];
-var RENTAL_CHARGE_TYPES = ["late_fee", "missing_item", "damage", "cleaning", "extension", "adjustment", "failed_trip"];
-var RENTAL_TEMPLATES = ["booking_confirmed", "delivery_reminder", "on_my_way", "delivered", "pickup_reminder_2d", "pickup_day", "overdue_1", "overdue_3", "receipt", "payment_failed", "card_expiring", "closed", "reschedule", "failed_trip"];
+var RENTAL_CHARGE_TYPES = ["late_fee", "missing_item", "damage", "cleaning", "extension", "adjustment", "failed_trip", "reschedule_fee", "expedited_pickup"];
+var RENTAL_TEMPLATES = ["booking_confirmed", "delivery_reminder", "on_my_way", "delivered", "during_rental", "pickup_reminder", "after_pickup", "referral", "overdue_1", "overdue_3", "receipt", "payment_failed", "card_expiring", "abandoned", "waitlist_open", "reschedule", "failed_trip_free", "failed_trip"];   // must match DEFAULT_TEMPLATES in src/lib/rentals/templates.ts
 var RENTAL_CONDITIONS = ["good", "dirty", "damaged", "missing"];
 var RENTAL_SELECT = "id, rental_number, status, delivery_address, pickup_address, delivery_date, delivery_window, pickup_date, pickup_window, tote_count, dolly_count, extra_weeks, subtotal, delivery_fee, addons_total, discount_amount, total, deposit_amount, deposit_status, deposit_applied, balance_due, card_brand, card_last4, card_exp, lead_source, promo_code, sms_consent_at, disputed_at, junk_request_id, notes_customer, notes_internal, created_at, public_token, customers(id, name, phone, email)";
 
@@ -149,18 +149,18 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("record_pickup", {
     title: "Record a tote pickup",
-    description: "Check the totes back in with a condition per tag (good, dirty, damaged, missing). Fees for dirty/damaged/missing and late days are added as pending charges for review; nothing is charged until settle.",
-    inputSchema: { rental: ref, items: external_exports.array(external_exports.object({ tag: external_exports.string(), condition: external_exports.enum(RENTAL_CONDITIONS).default("good"), note: external_exports.string().optional() })).min(1), all_good: external_exports.boolean().default(false).describe("Shortcut: every item on the rental came back good") }
+    description: "Check the totes back in with a condition per tag (good, dirty, damaged, missing). The CRM requires a photo for anything not good, so record those from the rental page in the CRM; use this tool for all-good pickups. Fees ($10 dirty, $10 damaged, $20 missing tote, $6 per missing lid) and any late weeks are added as pending charges for review; nothing is charged until settle_rental.",
+    inputSchema: { rental: ref, items: external_exports.array(external_exports.object({ tag: external_exports.string(), condition: external_exports.enum(RENTAL_CONDITIONS).default("good"), note: external_exports.string().optional() })).min(1), all_good: external_exports.boolean().default(false).describe("Shortcut: every item on the rental came back good"), missing_lids: external_exports.number().int().min(0).default(0).describe("Number of lids not returned ($6 each)") }
   }, guarded(async (a) => {
     const f = await findRental(dbc, a.rental); if (f.err) return f.err; const row = f.row;
     let items = a.items ?? [];
     if (a.all_good) { const { data } = await dbc.from("rental_items").select("rental_assets(asset_tag)").eq("rental_id", row.id).is("checked_in_at", null); items = (data ?? []).map((i) => ({ tag: i.rental_assets?.asset_tag, condition: "good" })); }
-    return rentalOp(env, "record_pickup", { rental_id: row.id, items });
+    return rentalOp(env, "record_pickup", { rental_id: row.id, items, missing_lids: a.missing_lids ?? 0 });
   }));
 
   server.registerTool("charge_rental", {
     title: "Charge a rental fee",
-    description: "Adds a fee (late_fee, missing_item, damage, cleaning, extension, adjustment, failed_trip) and charges the card on file now. confirm must be true. For the end-of-rental settlement use settle_rental instead.",
+    description: "Adds a fee (late_fee, missing_item, damage, cleaning, extension, adjustment, failed_trip, reschedule_fee, expedited_pickup) and charges the card on file now. Only charge what the signed terms allow, and text the customer the photo or reason first. confirm must be true. For the end-of-rental settlement use settle_rental instead.",
     inputSchema: { rental: ref, type: external_exports.enum(RENTAL_CHARGE_TYPES), amount: external_exports.number().positive(), description: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
   }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to charge the card."); const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "charge", { rental_id: f.row.id, type: a.type, amount: a.amount, description: a.description }); }));
 
