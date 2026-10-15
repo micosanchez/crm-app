@@ -304,7 +304,7 @@ export async function recordDelivery(rentalId: string, a: { tags: string[]; phot
   if (s.balance_charge_mode === 'delivery') charge = await chargeBalance(r.id, db).catch((e: Error) => ({ ok: false, error: e.message }));
   return { ok: true, rental: await getRental(r.id, db), balance_charge: charge };
 }
-export async function recordPickup(rentalId: string, a: { items: { tag: string; condition: 'good' | 'dirty' | 'damaged' | 'missing'; photo_urls?: string[] }[]; created_by?: string | null }, db = admin()) {
+export async function recordPickup(rentalId: string, a: { items: { tag: string; condition: 'good' | 'dirty' | 'damaged' | 'missing'; photo_urls?: string[] }[]; missing_lids?: number; created_by?: string | null }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
   const { data: items } = await db.from('rental_items').select('id, asset_id, rental_assets(asset_tag, asset_type)').eq('rental_id', r.id);
@@ -328,6 +328,7 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
   const lines: { type: string; amount: number; description: string }[] = [];
   const add = (n: number, fee: number | null, type: string, label: string) => { if (n > 0 && fee) lines.push({ type, amount: Math.round(n * fee * 100) / 100, description: `${n} × ${label} at ${money(fee)}` }); };
   add(counts.missing_tote, s.replacement_fee_per_tote, 'missing_item', 'missing tote');
+  add(Math.max(0, Math.floor(Number(a.missing_lids ?? 0))), (s.lid_fee as number | null) ?? null, 'missing_item', 'missing lid');
   // equipment: a missing piece is billed at its listed replacement fee; damage to equipment is reviewed by hand (no automatic fee)
   if (gearOut.some((g) => g.condition === 'missing')) {
     const { data: fees } = await db.from('rental_addons').select('asset_type, name, replacement_fee').eq('kind', 'rent');
@@ -490,11 +491,17 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
 export async function failedTrip(rentalId: string, a: { kind: 'delivery' | 'pickup'; photo_urls?: string[]; note?: string; by?: string }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
-  await logEvent(r.id, 'failed_trip', { ...a }, db);
+  // terms: the first missed delivery is retried free; a second one, and any missed pickup, costs the trip fee
+  let free = false;
+  if (a.kind === 'delivery') {
+    const { count } = await db.from('rental_events').select('id', { count: 'exact', head: true }).eq('rental_id', r.id).eq('event', 'failed_trip').contains('detail', { kind: 'delivery' });
+    free = (count ?? 0) === 0;
+  }
+  await logEvent(r.id, 'failed_trip', { ...a, free }, db);
   let charge: unknown = null;
-  if (s.failed_trip_fee && Number(s.failed_trip_fee) > 0) charge = await chargeRental(r.id, { type: 'failed_trip', amount: Number(s.failed_trip_fee), description: `Failed ${a.kind} trip: ${a.note ?? 'no one home / totes not ready'}`, photo_urls: a.photo_urls }, db).catch((e: Error) => ({ ok: false, error: e.message }));
-  await queueMessage(r, 'failed_trip', {}, { dedupe: `${r.id}:failed_trip:${Date.now()}` }, db);
-  return { ok: true, charge };
+  if (!free && s.failed_trip_fee && Number(s.failed_trip_fee) > 0) charge = await chargeRental(r.id, { type: 'failed_trip', amount: Number(s.failed_trip_fee), description: `Failed ${a.kind} trip: ${a.note ?? 'no one home / totes not ready'}`, photo_urls: a.photo_urls }, db).catch((e: Error) => ({ ok: false, error: e.message }));
+  await queueMessage(r, free ? 'failed_trip_free' : 'failed_trip', {}, { dedupe: `${r.id}:failed_trip:${Date.now()}` }, db);
+  return { ok: true, charge, free };
 }
 export async function evidencePacket(rentalId: string, db = admin()) {
   const r = await getRental(rentalId, db);

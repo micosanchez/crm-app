@@ -7,7 +7,7 @@
  */
 export type RentalTemplateKey =
   | 'booking_confirmed' | 'delivery_reminder' | 'on_my_way' | 'delivered' | 'during_rental' | 'pickup_reminder' | 'after_pickup' | 'referral'
-  | 'overdue_1' | 'overdue_3' | 'receipt' | 'payment_failed' | 'card_expiring' | 'abandoned' | 'waitlist_open' | 'reschedule' | 'failed_trip';
+  | 'overdue_1' | 'overdue_3' | 'receipt' | 'payment_failed' | 'card_expiring' | 'abandoned' | 'waitlist_open' | 'reschedule' | 'failed_trip' | 'failed_trip_free';
 
 export interface TemplateDef { label: string; enabled: boolean; kind: 'transactional' | 'promotional'; sms: string; email_subject?: string; email?: string }
 
@@ -35,6 +35,7 @@ export const DEFAULT_TEMPLATES: Record<RentalTemplateKey, TemplateDef> = {
   abandoned: { label: 'Abandoned booking (one text)', enabled: true, kind: 'promotional', sms: `Hi {first_name}, ${SIGN} here. Your tote booking didn't finish. Pick it back up here whenever you're ready: {link}` },
   waitlist_open: { label: 'Waitlist: dates opened', enabled: true, kind: 'transactional', sms: `Hi {first_name}, good news from ${SIGN}: totes just opened up for your dates. Book here before they go: {link}` },
   reschedule: { label: 'Rescheduled', enabled: true, kind: 'transactional', sms: `Hi {first_name}, your tote rental {rental_number} is rescheduled: {window}. Details: {link}` },
+  failed_trip_free: { label: 'Missed delivery, first one (no fee)', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by with your totes but couldn't complete the delivery. No charge this time. Pick a new time here or just reply with one that works: {link}` },
   failed_trip: { label: 'Failed trip', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by for your totes but couldn't complete the stop. A trip fee applies per your agreement. Pick a new time here: {link}` },
 };
 

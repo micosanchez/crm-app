@@ -30,7 +30,7 @@ export async function runAction(action: string, a: Record<string, any>, actor: A
       return chargesReview(id!, db);
     }
     case 'record_delivery': return recordDelivery(id!, { tags: a.tags ?? [], photo_urls: a.photo_urls, created_by: actor.by }, db);
-    case 'record_pickup': return recordPickup(id!, { items: a.items ?? [], created_by: actor.by }, db);
+    case 'record_pickup': return recordPickup(id!, { items: a.items ?? [], missing_lids: Number(a.missing_lids ?? 0), created_by: actor.by }, db);
     case 'extend': return extendRental(id!, Number(a.weeks ?? 1), db);
     case 'reschedule': return reschedule(id!, { delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_date: a.pickup_date, pickup_window: a.pickup_window, by: actor.by ?? undefined, customer_requested: !!a.customer_requested, expedited: !!a.expedited, preview: !!a.preview }, db);
     case 'junk_discount_redeem': {
