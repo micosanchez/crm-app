@@ -57,14 +57,14 @@ export async function ensureStripeCustomer(existingId: string | null, c: { name:
   return cust.id;
 }
 
-/** Deposit at booking: saves the card for later merchant-initiated charges. */
+/** Booking payment (the rental is paid in full up front): also saves the card for later merchant-initiated charges. */
 export function createDepositIntent(a: { cents: number; customer: string; rental_id: string; rental_number: string; receipt_email?: string | null }) {
   return stripe<{ id: string; client_secret: string }>('/payment_intents', {
     amount: a.cents, currency: 'usd', customer: a.customer, setup_future_usage: 'off_session',
     automatic_payment_methods: { enabled: true }, receipt_email: a.receipt_email ?? undefined,
-    description: `Tote rental ${a.rental_number} deposit`, statement_descriptor_suffix: 'TOTES',
-    metadata: { rental_id: a.rental_id, rental_number: a.rental_number, charge_type: 'deposit' },
-  }, { idempotencyKey: `deposit:${a.rental_id}` });
+    description: `Tote rental ${a.rental_number}, paid in full`, statement_descriptor_suffix: 'TOTES',
+    metadata: { rental_id: a.rental_id, rental_number: a.rental_number, charge_type: 'booking' },
+  }, { idempotencyKey: `booking:${a.rental_id}` });
 }
 
 /** $0 deposit: just save the card. */

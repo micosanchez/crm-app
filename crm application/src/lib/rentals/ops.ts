@@ -519,6 +519,15 @@ export async function runRentalCron(db = admin()) {
     await queueMessage(r, 'abandoned', { link: `${APP_URL}/rent?resume=${r.public_token}` }, { at: new Date(Date.now() + 3600_000).toISOString(), dedupe: `${r.id}:abandoned`, force: false }, db);
     await db.from('rentals').update({ abandoned_text_sent_at: new Date().toISOString() }).eq('id', r.id);
   }
+  // owner heads-up for every checkout that expired unpaid, so the lead can be called back
+  for (const h of list) {
+    const r = await getRental(h.rental_id, db).catch(() => null);
+    if (!r) continue;
+    const c = r.customers;
+    await sendNotification({ event: 'rental_abandoned', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `rental_abandoned:${r.id}`,
+      subject: `Unfinished tote booking: ${c?.name ?? 'someone'} ${c?.phone ?? ''}`.trim(),
+      text: `${c?.name ?? 'A customer'} started booking ${r.tote_count} totes for delivery ${fmtDate(r.delivery_date)} ${r.delivery_window} (${money(Number(r.total))}, ${r.zone ?? ''}) but did not pay within 30 minutes, so the hold was released.\n\nPhone: ${c?.phone ?? '-'}\nEmail: ${c?.email ?? '-'}\nAddress: ${r.delivery_address}\n${h.opted_in && h.phone ? 'They will get one automatic text with a link to finish.' : 'No automatic text was sent.'}\n\nTheir link to finish booking: ${APP_URL}/rent?resume=${r.public_token}\nIn the CRM: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
+  }
   out.holds_expired = list.length;
   // 2. late fees + overdue texts
   const { data: fees } = await db.rpc('rental_accrue_late_fees');
@@ -601,7 +610,7 @@ export async function handleRentalWebhook(type: string, obj: Record<string, unkn
         }
         return 'charge recorded';
       }
-      if (md.charge_type === 'deposit') { await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', pi.id); return 'deposit recorded'; }
+      if (md.charge_type === 'booking' || md.charge_type === 'deposit') { await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', pi.id); return 'booking payment recorded'; }   // 'deposit' = intents created before 2026-10-14
       return 'ignored';
     }
     case 'payment_intent.payment_failed': {

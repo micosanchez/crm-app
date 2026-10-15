@@ -122,3 +122,4 @@ Owner spec, applied to new bookings only (existing rentals keep the zone, fee an
 
 ### Receipts
 `/rental/<token>/receipt` is the customer receipt: same letterhead as estimates and invoices, rental line items, charges after booking with photos, payments (shown before any refund) and refunds, and the balance. Every receipt text and email links there; the rental page has a "View your full receipt" button. Stripe's own email receipts are not used.
+- **Unfinished checkouts**: when a hold expires unpaid (30 minutes), the cron emails the owner the customer's name, phone, order and resume link (`rental_abandoned`, once per rental). The Stripe booking payment is described as "Tote rental R-xxxx, paid in full" (metadata `charge_type: booking`; the webhook still accepts the older `deposit`).
