@@ -87,7 +87,7 @@ export async function queueMessage(r: Rental, key: RentalTemplateKey, extra: Rec
   const c = r.customers ?? (await getRental(r.id, db)).customers!;
   const vars = {
     first_name: first(c?.name), rental_number: r.rental_number, delivery_date: fmtDate(r.delivery_date), delivery_window: r.delivery_window,
-    pickup_date: fmtDate(r.pickup_date), pickup_window: r.pickup_window ?? r.delivery_window, link: rentalLink(r), receipt_link: `${rentalLink(r)}#receipts`,
+    pickup_date: fmtDate(r.pickup_date), pickup_window: r.pickup_window ?? r.delivery_window, link: rentalLink(r), receipt_link: `${rentalLink(r)}/receipt`,
     pay_link: '', card_link: `${rentalLink(r)}/card`, junk_link: junkQuoteLink(r, c), review_link: REVIEW_LINK, totes: r.tote_count, window: '',
     junk_offer: r.marketing_sms_consent_at ? 'Tote renters also get $25 off junk removal: sanchezhaulco.com/q' : '', ...extra,
   };
@@ -177,7 +177,7 @@ export async function attemptCharge(r: Rental, chargeId: string, db = admin()) {
   if (res.ok) {
     await db.from('rental_charges').update({ status: 'succeeded', stripe_payment_intent_id: res.payment_intent_id, failure_reason: null, next_retry_at: null }).eq('id', ch.id);
     await logEvent(r.id, 'charge:succeeded', { charge_id: ch.id, type: ch.type, amount: ch.amount, pi: res.payment_intent_id }, db);
-    await queueMessage(r, 'receipt', { receipt_link: `${rentalLink(r)}#receipts` }, { dedupe: `${r.id}:receipt:${ch.id}`, email: true }, db);
+    await queueMessage(r, 'receipt', { receipt_link: `${rentalLink(r)}/receipt` }, { dedupe: `${r.id}:receipt:${ch.id}`, email: true }, db);
     return { ok: true, charge: { ...ch, status: 'succeeded' } as Charge };
   }
   if (res.requires_action) {

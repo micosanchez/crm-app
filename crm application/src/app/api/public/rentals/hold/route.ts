@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { geocode } from '@/lib/rentals/geo';
+import { geocode, driveMinutes } from '@/lib/rentals/geo';
 
 /** Zones are keyed on ZIP. If the customer left it off, borrow the ZIP the geocoder found. */
 function withZip(addr: string, display: string | null | undefined) { if (/\d{5}(-\d{4})?\s*$/.test(addr.trim())) return addr.trim(); const z = ((display ?? '').match(/\b\d{5}\b/g) ?? []).pop(); return z ? `${addr.trim()}, ${z}` : addr.trim(); }   // last 5-digit group: the ZIP, not the house number
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const pickupDifferent = typeof b.pickup_address === 'string' && b.pickup_address.trim() && b.pickup_address.trim() !== String(b.delivery_address).trim();
   const pg = pickupDifferent ? await geocode(String(b.pickup_address)) : null;
   if (pickupDifferent && !pg) return NextResponse.json({ error: 'pickup_address_not_found' }, { headers: CORS });
-  const { data, error } = await admin.rpc('rental_create_hold', { p: { ...b, delivery_address: withZip(String(b.delivery_address), dg.display), pickup_address: pickupDifferent ? withZip(String(b.pickup_address), pg?.display) : null, delivery_place: dg.display, pickup_place: pg?.display ?? null, delivery_miles: dg.miles, pickup_miles: pg?.miles ?? null, ip,
+  const { data, error } = await admin.rpc('rental_create_hold', { p: { ...b, delivery_address: withZip(String(b.delivery_address), dg.display), pickup_address: pickupDifferent ? withZip(String(b.pickup_address), pg?.display) : null, delivery_place: dg.display, pickup_place: pg?.display ?? null, delivery_minutes: await driveMinutes(dg), pickup_minutes: pg ? await driveMinutes(pg) : null, delivery_miles: dg.miles, pickup_miles: pg?.miles ?? null, ip,
     marketing_sms_text: 'Yes, text me occasional offers from Sanchez Junk & Haul Co. Msg & data rates may apply. Reply STOP to opt out.', marketing_email_text: 'Yes, email me occasional offers from Sanchez Junk & Haul Co. Unsubscribe any time.' } });
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
   const d = data as { rental_id?: string; error?: string };

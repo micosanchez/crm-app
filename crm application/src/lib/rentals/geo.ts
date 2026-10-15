@@ -29,3 +29,19 @@ export function milesBetween(a: { lat: number; lng: number }, b: { lat: number; 
   // straight line × 1.3 ≈ road miles for Downriver's grid
   return Math.round(2 * R * Math.asin(Math.sqrt(h)) * 1.3 * 10) / 10;
 }
+
+const driveCache = new Map<string, number>();
+/** Drive minutes from the shop (no traffic). OSRM public router; if it is down, estimate from road miles. */
+export async function driveMinutes(g: Pick<Geo, 'lat' | 'lng' | 'miles'>): Promise<number> {
+  const key = `${g.lat.toFixed(4)},${g.lng.toFixed(4)}`;
+  if (driveCache.has(key)) return driveCache.get(key)!;
+  let min = Math.round(g.miles * 1.35);   // fallback: ~44 mph average across the metro
+  try {
+    // shortcut: OSRM demo server (fair use, no key); move to a keyed routing API once bookings pass ~50/day
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${BASE.lng},${BASE.lat};${g.lng},${g.lat}?overview=false`, { cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    const j = (await res.json()) as { routes?: { duration: number }[] };
+    if (j.routes?.[0]) min = Math.round(j.routes[0].duration / 60);
+  } catch { /* keep the estimate */ }
+  driveCache.set(key, min);
+  return min;
+}

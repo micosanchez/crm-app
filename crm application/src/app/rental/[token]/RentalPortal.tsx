@@ -73,7 +73,7 @@ export default function RentalPortal({ token }: { token: string }) {
 
         {r.items?.length > 0 && <div className="card"><h3>Your items</h3><p className="muted">{r.items.map((i: { tag: string; condition: string | null }) => `${i.tag}${i.condition ? ` (${i.condition})` : ''}`).join(', ')}</p></div>}
 
-        <div className="card" id="receipts"><h3>Receipts</h3>
+        <div className="card" id="receipts"><h3>Receipts</h3><p><a className="btn ghost sm" href={`/rental/${token}/receipt`}>View your full receipt</a></p>
           {r.charges?.length ? <table><tbody>{r.charges.map((c: { id: string; type: string; description: string | null; amount: number; status: string; created_at: string; photo_urls: string[]; payment_link_url: string | null }) => (
             <tr key={c.id}><td style={{ whiteSpace: 'normal' }}>{new Date(c.created_at).toLocaleDateString('en-US', { timeZone: 'America/Detroit' })} · {c.description ?? c.type} <span className="pill">{c.status.replace(/_/g, ' ')}</span>{c.photo_urls?.length ? <> · {c.photo_urls.map((u, i) => <a key={u} href={u} target="_blank" rel="noreferrer">photo {i + 1} </a>)}</> : null}{c.payment_link_url && c.status !== 'succeeded' ? <> · <a href={c.payment_link_url}>pay securely</a></> : null}</td><td>{money(c.amount)}</td></tr>))}</tbody></table> : <p className="muted">No charges yet.</p>}</div>
 

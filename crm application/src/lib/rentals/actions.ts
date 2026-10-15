@@ -70,7 +70,7 @@ export async function runAction(action: string, a: Record<string, any>, actor: A
         const s = (await db.from('rental_settings').select('templates').eq('id', true).single()).data?.templates;
         const t = mergedTemplates(s)[a.template as RentalTemplateKey] ?? DEFAULT_TEMPLATES[a.template as RentalTemplateKey];
         if (!t) throw new Error(`Unknown template ${a.template}`);
-        body = renderRental(t.sms, { first_name: first(c.name), rental_number: r.rental_number, delivery_date: r.delivery_date, delivery_window: r.delivery_window, pickup_date: r.pickup_date, pickup_window: r.pickup_window ?? '', link: rentalLink(r), receipt_link: `${rentalLink(r)}#receipts`, card_link: `${rentalLink(r)}/card`, window: a.window ?? '', pay_link: a.pay_link ?? '', totes: r.tote_count });
+        body = renderRental(t.sms, { first_name: first(c.name), rental_number: r.rental_number, delivery_date: r.delivery_date, delivery_window: r.delivery_window, pickup_date: r.pickup_date, pickup_window: r.pickup_window ?? '', link: rentalLink(r), receipt_link: `${rentalLink(r)}/receipt`, card_link: `${rentalLink(r)}/card`, window: a.window ?? '', pay_link: a.pay_link ?? '', totes: r.tote_count });
       }
       if (!body || !c.phone) throw new Error('Nothing to send or no phone on file.');
       const res = await sendText({ to: c.phone, content: body, event: `sms:rental_${a.template ?? 'manual'}`, entityKind: 'rental', entityId: r.id });
