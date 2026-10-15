@@ -113,3 +113,8 @@ Owner spec, applied to new bookings only (existing rentals keep the zone, fee an
 - **Junk removal $25 off $250+**: no code. `tote_junk_discount(customer)` shows a notice on the quote and invoice pages while the rental is out or within 7 days after pickup; "mark the discount used" stores `rentals.junk_discount_estimate_id` (unique) so one rental gives one discount.
 - **Shortages**: a sold-out booking emails the owner the shortage, the cost at `tote_unit_cost` ($8.79) and the delivery date; nothing is bought or confirmed automatically, and the customer is offered the waitlist.
 - Self-check for the window and fee rules: `node scripts/check-rental-policy.mjs`.
+
+### Follow-up the same day (migration 0059)
+- **Any Metro Detroit ZIP books online.** Zone 2 ($35) is now every ZIP in Wayne, Oakland and Macomb counties that is not in Zone 1 (2020 Census ZCTA-county file, ZIPs with at least 25% of their land in the three counties, plus 48112). The city check is gone. Outside the three counties stays "call for a quote".
+- **Gear owned:** 2 standard hand trucks (H-01, H-02), 1 convertible (C-01). H-03, H-04, F-01, F-02 retired (not owned).
+- **Buy on demand** (`rental_addons.buy_on_demand`): the furniture dolly (no stock check, `requires` is empty) and every sold supply. The owner's booking email lists them under "BUY BEFORE DELIVERY". When you own furniture dollies and want them tracked again, set its `requires` back to `{"furniture_dolly":1}` and add the F- tags in Inventory.

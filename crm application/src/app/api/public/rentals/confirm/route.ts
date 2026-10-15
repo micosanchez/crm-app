@@ -36,7 +36,10 @@ export async function POST(req: NextRequest) {
     await scheduleLifecycle(fresh, db);
     const s = await getSettings(db);
     if (s.balance_charge_mode === 'booking') await chargeBalance(r.id, db).catch(() => {});
-    sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}\n${APP_URL}/rentals/${fresh.id}` }).catch(() => {});
+    // items bought for this booking (supplies and on-demand gear) so the owner can shop before delivery day
+    const { data: lines } = await db.from('rental_addon_lines').select('qty, rental_addons(name, buy_on_demand)').eq('rental_id', r.id);
+    const toBuy = (lines ?? []).filter((l) => (l.rental_addons as unknown as { buy_on_demand?: boolean } | null)?.buy_on_demand).map((l) => `${l.qty} × ${(l.rental_addons as unknown as { name: string }).name}`);
+    sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}${toBuy.length ? `\nBUY BEFORE DELIVERY (${fresh.delivery_date}): ${toBuy.join(', ')}` : ''}\n${APP_URL}/rentals/${fresh.id}` }).catch(() => {});
     return NextResponse.json({ ok: true, rental_number: fresh.rental_number, token: fresh.public_token, total: fresh.total, deposit: dep }, { headers: CORS });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500, headers: CORS }); }
 }
