@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 
-export const META_PIXEL_ID = '1733144807699622';
+export const META_PIXEL_ID = '2159736844938215';
 const API = `https://graph.facebook.com/v21.0/${META_PIXEL_ID}/events`;
 
 export interface MetaUser {
