@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { MAX_PHOTOS, REQUEST_PHOTOS_BUCKET, toE164, type RequestPhoto } from '@/lib/requests';
 import { sendNotification, APP_URL } from '@/lib/notify';
+import { sendMetaEvent } from '@/lib/metaCapi';
 import {
   WEBSITE_FORM_NAME, mapWebsiteSubmission, submissionTag, verifyNetlifySignature,
   type NetlifyFormPayload, type WebsiteLead,
@@ -90,7 +91,12 @@ export async function POST(req: NextRequest) {
   const photos = await copyPhotos(admin, id, lead.photoUrls);
   if (photos.length) await admin.from('estimate_requests').update({ photos }).eq('id', id);
 
-  if (!existing) await notifyOwner(id, lead, photos.length);
+  if (!existing) {
+    await notifyOwner(id, lead, photos.length);
+    // Meta CAPI Lead with the pixel's event_id from the form, so Meta dedupes it against the browser Lead fired on /success.
+    await sendMetaEvent({ name: 'Lead', event_id: lead.meta_event_id ?? `netlify-${lead.submissionId}`, source_url: 'https://sanchezhaulco.com/contact', custom: { content_category: 'lead', content_name: 'junk-removal' },
+      user: { email: lead.email, phone: lead.phone, first_name: lead.first_name, last_name: lead.last_name, city: lead.city, state: lead.state, zip: lead.postal_code, ip: lead.ip, user_agent: lead.user_agent, fbp: lead.fbp, fbc: lead.fbc, fbclid: lead.fbclid } });
+  }
   return NextResponse.json({ ok: true, id, photos: photos.length });
 }
 

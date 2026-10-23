@@ -31,14 +31,14 @@ const lead = mapWebsiteSubmission({
 assert.equal(lead.first_name, 'Maria');
 assert.equal(lead.last_name, 'de la Cruz');
 assert.equal(lead.email, 'maria@example.com');
-assert.equal(lead.lead_source, 'facebook');
+assert.equal(lead.lead_source, 'meta_ads');
 assert.deepEqual(lead.photoUrls, ['https://files.netlify.com/a.jpg', 'https://files.netlify.com/c.png']);
 assert.match(lead.internal_notes, /Netlify submission sub1/);
 assert.match(lead.internal_notes, /utm_campaign: fall-cleanouts/);
 
 const bare = mapWebsiteSubmission({ id: 'sub2', data: { phone: '7345551234', details: 'couch', photos: { url: 'https://x/y.jpg' } } });
 assert.equal(bare.first_name, '');
-assert.equal(bare.lead_source, 'website');
+assert.equal(bare.lead_source, 'website_direct');
 assert.deepEqual(bare.photoUrls, ['https://x/y.jpg']);
 assert.equal(mapWebsiteSubmission({ data: {} }), null, 'no submission id');
 
@@ -51,5 +51,16 @@ assert.equal(split.city, 'Taylor');
 assert.equal(split.state, 'MI');
 assert.equal(split.postal_code, '48180');
 assert.equal(bare.state, 'MI', 'state defaults to MI');
+
+const fb = mapWebsiteSubmission({ id: 'sub4', data: { meta_event_id: '9b1c-uuid', fbp: 'fb.1.1700000000000.123456', fbc: 'fb.1.1700000000000.IwAR1x_y', fbclid: 'IwAR1x_y' } });
+assert.equal(fb.meta_event_id, '9b1c-uuid');
+assert.equal(fb.fbp, 'fb.1.1700000000000.123456');
+assert.equal(fb.fbc, 'fb.1.1700000000000.IwAR1x_y');
+assert.equal(fb.fbclid, 'IwAR1x_y');
+const junk = mapWebsiteSubmission({ id: 'sub5', data: { meta_event_id: '<script>', fbp: 'not-a-cookie', fbc: 'x' } });
+assert.equal(junk.meta_event_id, null, 'bad event id dropped');
+assert.equal(junk.fbp, null);
+assert.equal(junk.fbc, null);
+assert.equal(bare.fbp, null, 'missing cookies are null');
 
 console.log('website lead checks passed');

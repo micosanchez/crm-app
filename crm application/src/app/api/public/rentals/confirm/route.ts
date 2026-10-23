@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { admin, getRentalByToken, getSettings, logEvent, queueMessage, scheduleLifecycle, chargeBalance, getRental, money } from '@/lib/rentals/ops';
 import { stripe, cardInfo } from '@/lib/rentals/stripe';
 import { sendNotification, APP_URL } from '@/lib/notify';
+import { clientIp } from '@/lib/requests';
+import { sendMetaEvent } from '@/lib/metaCapi';
 
 export const dynamic = 'force-dynamic';
 const CORS = { 'Access-Control-Allow-Origin': '*' };
@@ -24,6 +26,10 @@ export async function POST(req: NextRequest) {
     await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id);
     if (b.kind !== 'setup') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
     await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}` }, db);
+    // Meta CAPI Purchase. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number), so Meta keeps one.
+    { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
+      await sendMetaEvent({ name: 'Purchase', event_id: r.rental_number, source_url: 'https://sanchezhaulco.com/tote-rental', custom: { value: Number(r.total), currency: 'USD', content_name: 'tote_rental', content_type: 'product', order_id: r.rental_number },
+        user: { email: c.email, phone: c.phone, first_name: fn, last_name: ln.join(' '), state: 'MI', zip: (r.delivery_address.match(/\b\d{5}\b/g) ?? []).pop(), ip: clientIp(req.headers), user_agent: req.headers.get('user-agent'), fbp: tag('fbp'), fbc: tag('fbc'), fbclid: tag('fbclid') } }); }
     if (r.partner_id) await db.rpc('rental_partner_use', { p_partner: r.partner_id }).then(() => {}, () => {});
     // "Will you have anything to get rid of?" Yes becomes a junk request in the pipeline right away (plan section 11).
     if (r.junk_interest === 'yes' && !r.junk_request_id) {

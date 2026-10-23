@@ -142,7 +142,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     setErr(null); setBusy(true);
     const body = { package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : null, promo_code: promo || null,
       delivery_date: date, delivery_window: win, pickup_window: pickupWin || win, name: contact.name, phone: contact.phone, email: contact.email, lead_source: contact.heard ? heardToSource(contact.heard, leadSource) : leadSource,
-      notes_customer: contact.notes, move_date: moveDate || null, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, website: '' };
+      notes_customer: contact.notes, move_date: moveDate || null, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
     const r = await fetch('/api/public/rentals/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
     setBusy(false);
     if (r.error === 'sold_out') { setErr('Those dates just filled up. Pick another date, or join the waitlist and we will text you when totes free up.'); setWaitlist(true); setStep(3); return; }

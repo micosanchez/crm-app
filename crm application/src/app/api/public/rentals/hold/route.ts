@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
   const d = data as { rental_id?: string; error?: string };
   if (d.error === 'sold_out') await alertShortage(admin, b).catch(() => {});
-  if (d.rental_id) await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}` }).eq('id', d.rental_id);
+  // fbp/fbc/fbclid ride along for the Meta CAPI Purchase at confirm time (same key:value bag as ip/ua; no column)
+  const fb = (['fbp', 'fbc', 'fbclid'] as const).map((k) => (typeof b[k] === 'string' && /^[\w.-]{1,200}$/.test(b[k] as string) ? ` ${k}:${b[k]}` : '')).join('');
+  if (d.rental_id) await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}${fb}` }).eq('id', d.rental_id);
   return NextResponse.json(data, { headers: CORS });
 }
 /** Owner alert: how many totes short, what they cost, and the delivery date they are needed by. Nothing is bought or confirmed automatically. */
