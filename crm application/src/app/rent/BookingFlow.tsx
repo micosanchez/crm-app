@@ -55,7 +55,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [win, setWin] = useState('');
   const [pickupWin, setPickupWin] = useState('');
   const [month, setMonth] = useState<string>(() => (initial.date ?? new Date().toISOString().slice(0, 10)).slice(0, 7));
-  const [contact, setContact] = useState({ name: '', phone: '', email: '', heard: '', notes: '', junk: '' as '' | 'yes' | 'maybe' | 'no', mkt_sms: false, mkt_email: false, payer: false, payer_name: '', payer_email: '' });
+  const [contact, setContact] = useState({ name: '', phone: '', email: '', heard: '', notes: '', junk: '' as '' | 'yes' | 'maybe' | 'no', mkt_sms: false, mkt_email: true, payer: false, payer_name: '', payer_email: '' });
   const [hold, setHold] = useState<{ rental_id: string; public_token: string; rental_number: string } | null>(null);
   const [terms, setTerms] = useState<{ text: string; version: number } | null>(null);
   const [agreed, setAgreed] = useState(false);
