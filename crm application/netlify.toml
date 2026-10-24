@@ -35,3 +35,5 @@
 #   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY (Rentals: test keys until Stage 11 passes)
 #   NETLIFY_FORM_WEBHOOK_SECRET (random string — must match the "JWS secret token" on the website's
 #                              quote-request outgoing webhook; see src/app/api/webhooks/netlify-form)
+#   META_CAPI_ACCESS_TOKEN     (Meta Events Manager → Settings → Conversions API → Generate access token; server-side Lead/Purchase)
+#   META_TEST_EVENT_CODE       (optional — Events Manager → Test events; remove once events show up)

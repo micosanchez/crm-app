@@ -61,6 +61,11 @@ export interface WebsiteLead {
   internal_notes: string;
   ip: string | null;
   user_agent: string | null;
+  // Meta Conversions API: the pixel's event id (dedupe) and its cookies (attribution), all optional
+  meta_event_id: string | null;
+  fbp: string | null;
+  fbc: string | null;
+  fbclid: string | null;
   photoUrls: string[];
 }
 
@@ -120,6 +125,10 @@ export function mapWebsiteSubmission(p: NetlifyFormPayload): WebsiteLead | null 
     internal_notes: [`Website quote form · ${submissionTag(submissionId)}`, ...attribution].join('\n'),
     ip: str(d.ip) || null,
     user_agent: str(d.user_agent).slice(0, 500) || null,
+    meta_event_id: /^[\w-]{1,64}$/.test(str(d.meta_event_id)) ? str(d.meta_event_id) : null,
+    fbp: /^fb\.1\.\d+\.\d+$/.test(str(d.fbp)) ? str(d.fbp) : null,
+    fbc: /^fb\.1\.\d+\.[\w-]+$/.test(str(d.fbc)) ? str(d.fbc) : null,
+    fbclid: /^[\w-]{1,200}$/.test(str(d.fbclid)) ? str(d.fbclid) : null,
     photoUrls: photoUrlsFrom(d.photos),
   };
 }

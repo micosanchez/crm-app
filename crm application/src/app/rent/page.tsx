@@ -16,7 +16,7 @@ export default function RentPage({ searchParams }: { searchParams: Record<string
     <>
       <link rel="stylesheet" href={TOTE_FONTS} />
       <BookingFlow initial={{ package: searchParams.package ?? null, date: searchParams.date ?? null, embed: searchParams.embed === '1', resume: searchParams.resume ?? null, token: searchParams.token ?? null, promo: searchParams.code ?? searchParams.promo ?? null,
-        utm: { source: searchParams.utm_source ?? null, medium: searchParams.utm_medium ?? null, campaign: searchParams.utm_campaign ?? null, ref: searchParams.ref ?? null, fbclid: searchParams.fbclid ?? null, gclid: searchParams.gclid ?? null } }} />
+        utm: { source: searchParams.utm_source ?? null, medium: searchParams.utm_medium ?? null, campaign: searchParams.utm_campaign ?? null, ref: searchParams.ref ?? null, fbclid: searchParams.fbclid ?? null, gclid: searchParams.gclid ?? null, fbp: searchParams.fbp ?? null, fbc: searchParams.fbc ?? null } }} />
     </>
   );
 }

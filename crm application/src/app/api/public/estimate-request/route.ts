@@ -5,6 +5,7 @@ import {
   clientIp, toE164, validateRequest, verifyTurnstile, type RequestInput,
 } from '@/lib/requests';
 import { sendNotification, APP_URL } from '@/lib/notify';
+import { sendMetaEvent } from '@/lib/metaCapi';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,10 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  // Meta CAPI Lead. This form has no browser pixel, so there is nothing to dedupe against.
+  await sendMetaEvent({ name: 'Lead', event_id: row.id, source_url: `${APP_URL}/request`, custom: { content_category: 'lead', content_name: 'junk-removal' },
+    user: { email: t(body.email), phone, first_name: t(body.first_name), last_name: t(body.last_name), city: t(body.city), state: t(body.state) || 'MI', zip: t(body.postal_code), ip, user_agent: req.headers.get('user-agent'), fbclid: t(body.fbclid) } });
 
   // Cross-sell: remember the junk request on the rental so the board can flag it.
   if (/^[0-9a-f-]{36}$/.test(t(body.rental_id))) void admin.from('rentals').update({ junk_request_id: row.id }).eq('id', t(body.rental_id)).is('junk_request_id', null);
