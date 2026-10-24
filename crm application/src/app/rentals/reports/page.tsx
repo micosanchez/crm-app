@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import RentalsNav from '../RentalsNav';
 import { Cluster, Cell, Stack, Row, Label } from '@/components/Hud';
-import { money } from '@/lib/rentals/client';
+import { money } from '@/lib/rentals/format';
 
 export const dynamic = 'force-dynamic';
 
