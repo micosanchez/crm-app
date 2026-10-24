@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import RentalsNav from '../RentalsNav';
-import { prettyDate } from '@/lib/rentals/client';
+import { prettyDate } from '@/lib/rentals/format';
 
 export const dynamic = 'force-dynamic';
 
