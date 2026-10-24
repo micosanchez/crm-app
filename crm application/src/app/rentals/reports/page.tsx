@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { requireStaff } from '@/lib/auth';
 import RentalsNav from '../RentalsNav';
 import { Cluster, Cell, Stack, Row, Label } from '@/components/Hud';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function RentalReports({ searchParams }: { searchParams: { from?: string; to?: string } }) {
   await requireStaff();
-  const supabase = createClient();
+  const supabase = createAdminClient()!;
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Detroit' }));
   const from = searchParams.from ?? new Date(today.getFullYear(), today.getMonth() - 2, 1).toISOString().slice(0, 10);
   const to = searchParams.to ?? today.toISOString().slice(0, 10);

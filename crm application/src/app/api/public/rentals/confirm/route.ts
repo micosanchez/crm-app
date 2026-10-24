@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { admin, getRentalByToken, getSettings, logEvent, queueMessage, scheduleLifecycle, chargeBalance, getRental, money } from '@/lib/rentals/ops';
-import { stripe, cardInfo } from '@/lib/rentals/stripe';
-import { sendNotification, APP_URL } from '@/lib/notify';
+import { admin, getRentalByToken, confirmBooking } from '@/lib/rentals/ops';
+import { stripe } from '@/lib/rentals/stripe';
 import { clientIp } from '@/lib/requests';
-import { sendMetaEvent } from '@/lib/metaCapi';
 
 export const dynamic = 'force-dynamic';
 const CORS = { 'Access-Control-Allow-Origin': '*' };
 
-/** POST {token, intent_id, kind} after Stripe confirms on the client. Verified against Stripe, never trusted from the browser. Idempotent. */
+/** POST {token, intent_id, kind} after Stripe confirms on the client. Verified against Stripe, never trusted from the browser. Idempotent; the Stripe webhook books it too if this never arrives. */
 export async function POST(req: NextRequest) {
   let b: { token?: string; intent_id?: string; kind?: 'payment' | 'setup' };
   try { b = await req.json(); } catch { return NextResponse.json({ error: 'bad body' }, { status: 400, headers: CORS }); }
@@ -16,37 +14,15 @@ export async function POST(req: NextRequest) {
   try {
     const db = admin();
     const r = await getRentalByToken(b.token, db);
-    if (r.status !== 'pending_payment') return NextResponse.json({ ok: true, already: true, rental_number: r.rental_number, token: r.public_token }, { headers: CORS });
-    const intent = await stripe<{ id: string; status: string; payment_method?: string; metadata?: Record<string, string>; customer?: string }>(`/${b.kind === 'setup' ? 'setup_intents' : 'payment_intents'}/${b.intent_id}`);
+    if (r.status !== 'pending_payment' && r.status !== 'cancelled') return NextResponse.json({ ok: true, already: true, rental_number: r.rental_number, token: r.public_token }, { headers: CORS });
+    const kind = b.kind === 'setup' ? 'setup' : 'payment';
+    const intent = await stripe<{ id: string; status: string; payment_method?: string; metadata?: Record<string, string>; customer?: string }>(`/${kind === 'setup' ? 'setup_intents' : 'payment_intents'}/${b.intent_id}`);
     if (intent.metadata?.rental_id !== r.id) return NextResponse.json({ error: 'That payment does not belong to this booking.' }, { status: 400, headers: CORS });
     if (intent.status !== 'succeeded') return NextResponse.json({ error: `Payment is ${intent.status.replace(/_/g, ' ')}. Please try again.` }, { status: 402, headers: CORS });
     if (!intent.payment_method) return NextResponse.json({ error: 'No card was saved. Please try again.' }, { status: 402, headers: CORS });
-    const ci = await cardInfo(intent.payment_method);
-    const dep = Number(r.deposit_amount);
-    await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id);
-    if (b.kind !== 'setup') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
-    await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}` }, db);
-    // Meta CAPI Purchase. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number), so Meta keeps one.
-    { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
-      await sendMetaEvent({ name: 'Purchase', event_id: r.rental_number, source_url: 'https://sanchezhaulco.com/tote-rental', custom: { value: Number(r.total), currency: 'USD', content_name: 'tote_rental', content_type: 'product', order_id: r.rental_number },
-        user: { email: c.email, phone: c.phone, first_name: fn, last_name: ln.join(' '), state: 'MI', zip: (r.delivery_address.match(/\b\d{5}\b/g) ?? []).pop(), ip: clientIp(req.headers), user_agent: req.headers.get('user-agent'), fbp: tag('fbp'), fbc: tag('fbc'), fbclid: tag('fbclid') } }); }
-    if (r.partner_id) await db.rpc('rental_partner_use', { p_partner: r.partner_id }).then(() => {}, () => {});
-    // "Will you have anything to get rid of?" Yes becomes a junk request in the pipeline right away (plan section 11).
-    if (r.junk_interest === 'yes' && !r.junk_request_id) {
-      const c = r.customers!; const [first = '', ...rest] = (c.name ?? '').trim().split(/\s+/);
-      const { data: er } = await db.from('estimate_requests').insert({ status: 'new', first_name: first, last_name: rest.join(' ') || '-', email: c.email ?? '', phone: c.phone ?? '', address: r.delivery_address, state: 'MI', description: `Tote renter said YES to junk removal at checkout (rental ${r.rental_number}). ${r.notes_customer ?? ''} Offer Tote renter: $25 off $250+, no code, during the rental or 7 days after pickup.`, lead_source: 'tote_rental_crosssell', rental_id: r.id, turnstile_verified: true }).select('id').single();
-      if (er) { await db.from('rentals').update({ junk_request_id: er.id }).eq('id', r.id); await db.from('lead_events').insert({ type: 'quote_form', rental_id: r.id, customer_id: c.id, detail: { source: 'checkout_yes', estimate_request_id: er.id } }); }
-    }
-    const fresh = await getRental(r.id, db);
-    await queueMessage(fresh, 'booking_confirmed', {}, { email: true }, db);
-    await scheduleLifecycle(fresh, db);
-    const s = await getSettings(db);
-    if (s.balance_charge_mode === 'booking') await chargeBalance(r.id, db).catch(() => {});
-    // items bought for this booking (supplies and on-demand gear) so the owner can shop before delivery day
-    const { data: lines } = await db.from('rental_addon_lines').select('qty, rental_addons(name, buy_on_demand)').eq('rental_id', r.id);
-    const toBuy = (lines ?? []).filter((l) => (l.rental_addons as unknown as { buy_on_demand?: boolean } | null)?.buy_on_demand).map((l) => `${l.qty} × ${(l.rental_addons as unknown as { name: string }).name}`);
-    await sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}${toBuy.length ? `\nBUY BEFORE DELIVERY (${fresh.delivery_date}): ${toBuy.join(', ')}` : ''}\n${APP_URL}/rentals/${fresh.id}` }).catch(() => {});
-    return NextResponse.json({ ok: true, rental_number: fresh.rental_number, token: fresh.public_token, total: fresh.total, deposit: dep }, { headers: CORS });
+    const res = await confirmBooking(r.id, { id: intent.id, kind, payment_method: intent.payment_method, customer: intent.customer ?? null }, { ip: clientIp(req.headers), user_agent: req.headers.get('user-agent') }, db);
+    if (!res.ok) return NextResponse.json({ error: res.error ?? 'This booking expired. Please start again.' }, { status: 409, headers: CORS });
+    return NextResponse.json({ ok: true, already: res.already, rental_number: res.rental.rental_number, token: res.rental.public_token, total: res.rental.total, deposit: Number(res.rental.deposit_amount) }, { headers: CORS });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500, headers: CORS }); }
 }
 export async function OPTIONS() { return new NextResponse(null, { headers: { ...CORS, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }); }

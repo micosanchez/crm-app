@@ -15,6 +15,7 @@ export default async function MarketingList({ searchParams }: { searchParams: { 
   await requireStaff();
   const show = (VIEWS.find(([k]) => k === searchParams.show)?.[0] ?? 'email') as (typeof VIEWS)[number][0];
   const supabase = createClient();
+  // shortcut: PostgREST returns at most 1000 rows per query; page these reads once customers or jobs pass ~800
   const [{ data: customers }, { data: rentals }, { data: jobs }, { data: optOuts }] = await Promise.all([
     supabase.from('customers').select('id, name, email, phone, created_at'),
     supabase.from('rentals').select('customer_id, status, created_at, marketing_email_consent_at, marketing_sms_consent_at').neq('status', 'pending_payment'),

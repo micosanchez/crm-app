@@ -58,6 +58,9 @@ export async function POST(req: NextRequest) {
     id = existing.id;
     if (Array.isArray(existing.photos) && existing.photos.length) return NextResponse.json({ ok: true, id });
   } else {
+    // a junk-quote link in a tote rental message tags the form utm_campaign=rental_R-1013: tie the lead to that rental
+    const rentalNumber = lead.utm_campaign?.match(/^rental_(R-\d+)$/)?.[1];
+    const { data: rental } = rentalNumber ? await admin.from('rentals').select('id').eq('rental_number', rentalNumber).maybeSingle() : { data: null };
     const { data: row, error } = await admin
       .from('estimate_requests')
       .insert({
@@ -71,7 +74,8 @@ export async function POST(req: NextRequest) {
         state: lead.state,
         postal_code: lead.postal_code,
         description: lead.description,
-        lead_source: lead.lead_source,
+        lead_source: rental ? 'tote_rental_crosssell' : lead.lead_source,
+        rental_id: rental?.id ?? null,
         heard_about_us: lead.heard_about_us,
         utm_source: lead.utm_source,
         utm_medium: lead.utm_medium,
@@ -86,6 +90,7 @@ export async function POST(req: NextRequest) {
     // 500 → Netlify retries later, so the lead isn't lost on a transient failure.
     if (error || !row) return NextResponse.json({ error: 'Could not save.' }, { status: 500 });
     id = row.id;
+    if (rental) await admin.from('rentals').update({ junk_request_id: id }).eq('id', rental.id).is('junk_request_id', null);
   }
 
   const photos = await copyPhotos(admin, id, lead.photoUrls);
