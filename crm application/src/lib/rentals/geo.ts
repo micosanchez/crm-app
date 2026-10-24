@@ -45,3 +45,6 @@ export async function driveMinutes(g: Pick<Geo, 'lat' | 'lng' | 'miles'>): Promi
   driveCache.set(key, min);
   return min;
 }
+
+/** Zones are keyed on ZIP. If the customer left it off, borrow the ZIP the geocoder found. */
+export function withZip(addr: string, display: string | null | undefined) { if (/\d{5}(-\d{4})?\s*$/.test(addr.trim())) return addr.trim(); const z = ((display ?? '').match(/\b\d{5}\b/g) ?? []).pop(); return z ? `${addr.trim()}, ${z}` : addr.trim(); }   // last 5-digit group: the ZIP, not the house number

@@ -9,6 +9,7 @@ import { sendText } from '@/lib/quo';
 import { sendNotification, APP_URL } from '@/lib/notify';
 import { chargeOffSession, refundIntent, createHostedPaymentLink, cardInfo, stripe, StripeError } from './stripe';
 import { DEFAULT_TEMPLATES, mergedTemplates, renderRental, type RentalTemplateKey } from './templates';
+import { sendMetaEvent } from '@/lib/metaCapi';
 
 export const SITE_JUNK_QUOTE = 'https://sanchezhaulco.com/contact.html';
 export const REVIEW_LINK = 'https://g.page/r/sanchez-junk-haul/review'; // shortcut: swap for the real GBP short link in Settings when known
@@ -177,7 +178,7 @@ export async function attemptCharge(r: Rental, chargeId: string, db = admin()) {
   if (!ch) throw new Error('Charge not found');
   if (ch.status === 'succeeded') return { ok: true, charge: ch as Charge, already: true };
   const { customer, pm } = await ensureCard(r);
-  const res = await chargeOffSession({ cents: cents(ch.amount), customer, payment_method: pm, description: `${r.rental_number}: ${ch.description ?? ch.type}`, rental_id: r.id, rental_number: r.rental_number, charge_id: ch.id, charge_type: ch.type });
+  const res = await chargeOffSession({ cents: cents(ch.amount), customer, payment_method: pm, description: `${r.rental_number}: ${ch.description ?? ch.type}`, rental_id: r.id, rental_number: r.rental_number, charge_id: ch.id, charge_type: ch.type, attempt: Number(ch.retry_count ?? 0) });
   if (res.ok) {
     await db.from('rental_charges').update({ status: 'succeeded', stripe_payment_intent_id: res.payment_intent_id, failure_reason: null, next_retry_at: null }).eq('id', ch.id);
     await logEvent(r.id, 'charge:succeeded', { charge_id: ch.id, type: ch.type, amount: ch.amount, pi: res.payment_intent_id }, db);
@@ -390,7 +391,7 @@ export async function foundItem(rentalId: string, tag: string, db = admin()) {
 }
 export async function extendRental(rentalId: string, weeks: number, db = admin()) {
   const r = await getRental(rentalId, db);
-  if (weeks < 1) throw new Error('Extend by at least 1 week.');
+  if (!Number.isInteger(weeks) || weeks < 1 || weeks > 12) throw new Error('Extend by 1 to 12 whole weeks. Need longer? Call or text us.');
   const { data: pkg } = await db.from('rental_packages').select('extra_week_price').eq('id', r.package_id).single();
   const price = Number(pkg?.extra_week_price ?? 0);
   if (!price) throw new Error('No extra week price on this package.');
@@ -596,6 +597,55 @@ export async function runRentalCron(db = admin()) {
   return out;
 }
 
+/* ---------------- booking confirmation ---------------- */
+/**
+ * Turn a paid hold into a booking and run everything that follows. Both the browser (confirm route) and the Stripe webhook call this,
+ * so a customer who closes the tab right after paying still gets booked; whichever arrives first does the work, the other gets `already`.
+ * A hold that lapsed while the customer was paying is re-booked when the totes still fit; otherwise the owner is told to refund or reschedule.
+ */
+export async function confirmBooking(rentalId: string, intent: { id: string; kind: 'payment' | 'setup'; payment_method: string; customer?: string | null }, ctx: { ip?: string | null; user_agent?: string | null } = {}, db = admin()): Promise<{ ok: boolean; already?: boolean; error?: string; rental: Rental }> {
+  const r = await getRental(rentalId, db);
+  if (r.status !== 'pending_payment' && !(r.status === 'cancelled' && /Hold expired/.test(r.notes_internal ?? ''))) return { ok: r.status !== 'cancelled', already: true, rental: r };
+  if (r.status === 'cancelled') {
+    const s = await getSettings(db);
+    const end = new Date(`${r.pickup_date}T12:00:00Z`); end.setUTCDate(end.getUTCDate() + Number(s.turnaround_days ?? 0));
+    const { data: fit } = await db.rpc('rental_can_fit', { p_start: r.delivery_date, p_end: end.toISOString().slice(0, 10), p_totes: r.tote_count, p_dollies: r.dolly_count });
+    if (!fit) {
+      await sendNotification({ event: 'rental_paid_after_expiry', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `paid_after_expiry:${r.id}`, subject: `PAID but dates filled: ${r.rental_number} ${r.customers?.name ?? ''}`,
+        text: `${r.customers?.name ?? 'A customer'} (${r.customers?.phone ?? ''}) paid for ${r.rental_number} after the 30-minute hold lapsed, and the totes are no longer free for ${r.delivery_date}. Call them to reschedule, or refund the payment (${intent.id}) in Stripe.\n${APP_URL}/rentals/${r.id}` });
+      return { ok: false, error: 'We received your payment, but those dates just filled up. We will call you shortly to reschedule or refund you.', rental: r };
+    }
+  }
+  const ci = await cardInfo(intent.payment_method);
+  const dep = Number(r.deposit_amount);
+  // the status guard makes this the single winner when the browser and the webhook arrive together
+  const { data: won } = await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id).eq('status', r.status).select('id');
+  if (!won?.length) return { ok: true, already: true, rental: await getRental(r.id, db) };
+  if (intent.kind === 'payment') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
+  await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}`, rebooked_after_expiry: r.status === 'cancelled' }, db);
+  // Meta CAPI Purchase. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number), so Meta keeps one.
+  { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
+    await sendMetaEvent({ name: 'Purchase', event_id: r.rental_number, source_url: 'https://sanchezhaulco.com/tote-rental', custom: { value: Number(r.total), currency: 'USD', content_name: 'tote_rental', content_type: 'product', order_id: r.rental_number },
+      user: { email: c.email, phone: c.phone, first_name: fn, last_name: ln.join(' '), state: 'MI', zip: (r.delivery_address.match(/\b\d{5}\b/g) ?? []).pop(), ip: ctx.ip ?? tag('ip'), user_agent: ctx.user_agent ?? null, fbp: tag('fbp'), fbc: tag('fbc'), fbclid: tag('fbclid') } }); }
+  if (r.partner_id) await db.rpc('rental_partner_use', { p_partner: r.partner_id }).then(() => {}, () => {});
+  // "Will you have anything to get rid of?" Yes becomes a junk request in the pipeline right away (plan section 11).
+  if (r.junk_interest === 'yes' && !r.junk_request_id) {
+    const c = r.customers!; const [fname = '', ...rest] = (c.name ?? '').trim().split(/\s+/);
+    const { data: er } = await db.from('estimate_requests').insert({ status: 'new', first_name: fname, last_name: rest.join(' ') || '-', email: c.email ?? '', phone: c.phone ?? '', address: r.delivery_address, state: 'MI', description: `Tote renter said YES to junk removal at checkout (rental ${r.rental_number}). ${r.notes_customer ?? ''} Offer Tote renter: $25 off $250+, no code, during the rental or 7 days after pickup.`, lead_source: 'tote_rental_crosssell', rental_id: r.id, turnstile_verified: true }).select('id').single();
+    if (er) { await db.from('rentals').update({ junk_request_id: er.id }).eq('id', r.id); await db.from('lead_events').insert({ type: 'quote_form', rental_id: r.id, customer_id: c.id, detail: { source: 'checkout_yes', estimate_request_id: er.id } }); }
+  }
+  const fresh = await getRental(r.id, db);
+  await queueMessage(fresh, 'booking_confirmed', {}, { email: true }, db);
+  await scheduleLifecycle(fresh, db);
+  const s = await getSettings(db);
+  if (s.balance_charge_mode === 'booking') await chargeBalance(r.id, db).catch(() => {});
+  // items bought for this booking (supplies and on-demand gear) so the owner can shop before delivery day
+  const { data: lines } = await db.from('rental_addon_lines').select('qty, rental_addons(name, buy_on_demand)').eq('rental_id', r.id);
+  const toBuy = (lines ?? []).filter((l) => (l.rental_addons as unknown as { buy_on_demand?: boolean } | null)?.buy_on_demand).map((l) => `${l.qty} × ${(l.rental_addons as unknown as { name: string }).name}`);
+  await sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}${toBuy.length ? `\nBUY BEFORE DELIVERY (${fresh.delivery_date}): ${toBuy.join(', ')}` : ''}\n${APP_URL}/rentals/${fresh.id}` });
+  return { ok: true, rental: fresh };
+}
+
 /* ---------------- Stripe webhook handling for rentals ---------------- */
 export async function handleRentalWebhook(type: string, obj: Record<string, unknown>, db = admin()): Promise<string> {
   const md = (obj.metadata ?? {}) as Record<string, string>;
@@ -621,7 +671,12 @@ export async function handleRentalWebhook(type: string, obj: Record<string, unkn
         }
         return 'charge recorded';
       }
-      if (md.charge_type === 'booking' || md.charge_type === 'deposit') { await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', pi.id); return 'booking payment recorded'; }   // 'deposit' = intents created before 2026-10-14
+      if (md.charge_type === 'booking' || md.charge_type === 'deposit') {   // 'deposit' = intents created before 2026-10-14
+        await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', pi.id);
+        const pm = (obj as { payment_method?: string | null }).payment_method;
+        if (rentalId && pm) await confirmBooking(rentalId, { id: pi.id, kind: 'payment', payment_method: pm, customer: (obj as { customer?: string | null }).customer ?? null }, {}, db);   // books it even if the customer closed the tab
+        return 'booking payment recorded';
+      }
       return 'ignored';
     }
     case 'payment_intent.payment_failed': {
@@ -635,7 +690,12 @@ export async function handleRentalWebhook(type: string, obj: Record<string, unkn
     }
     case 'setup_intent.succeeded': {
       const si = obj as { payment_method?: string };
-      if (rentalId && si.payment_method) { const ci = await cardInfo(si.payment_method); await db.from('rentals').update({ stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp }).eq('id', rentalId); await logEvent(rentalId, 'card:updated', { brand: ci.brand, last4: ci.last4 }, db); }
+      if (rentalId && si.payment_method) {
+        const cur = await getRental(rentalId, db);
+        // a $0-due checkout saves the card with a SetupIntent: that is the booking
+        if (cur.status === 'pending_payment' || cur.status === 'cancelled') { await confirmBooking(rentalId, { id: (obj as { id: string }).id, kind: 'setup', payment_method: si.payment_method, customer: (obj as { customer?: string | null }).customer ?? null }, {}, db); return 'booking confirmed'; }
+        const ci = await cardInfo(si.payment_method); await db.from('rentals').update({ stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp }).eq('id', rentalId); await logEvent(rentalId, 'card:updated', { brand: ci.brand, last4: ci.last4 }, db);
+      }
       return 'card saved';
     }
     case 'charge.refunded': {

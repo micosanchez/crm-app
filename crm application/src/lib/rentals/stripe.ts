@@ -64,7 +64,7 @@ export function createDepositIntent(a: { cents: number; customer: string; rental
     automatic_payment_methods: { enabled: true }, receipt_email: a.receipt_email ?? undefined,
     description: `Tote rental ${a.rental_number}, paid in full`, statement_descriptor_suffix: 'TOTES',
     metadata: { rental_id: a.rental_id, rental_number: a.rental_number, charge_type: 'booking' },
-  }, { idempotencyKey: `booking:${a.rental_id}` });
+  }, { idempotencyKey: `booking:${a.rental_id}:${a.customer}:${a.cents}` });   // new payer or amount = new intent, not an idempotency error
 }
 
 /** $0 deposit: just save the card. */
@@ -75,13 +75,13 @@ export function createSetupIntent(a: { customer: string; rental_id: string }) {
 export interface OffSessionResult { ok: boolean; payment_intent_id: string; status: string; requires_action?: boolean; error?: string; decline_code?: string }
 
 /** Merchant-initiated charge on the saved card. Idempotency key must be unique per charge line. */
-export async function chargeOffSession(a: { cents: number; customer: string; payment_method: string; description: string; rental_id: string; rental_number: string; charge_id: string; charge_type: string }): Promise<OffSessionResult> {
+export async function chargeOffSession(a: { cents: number; customer: string; payment_method: string; description: string; rental_id: string; rental_number: string; charge_id: string; charge_type: string; attempt: number }): Promise<OffSessionResult> {
   try {
     const pi = await stripe<{ id: string; status: string }>('/payment_intents', {
       amount: a.cents, currency: 'usd', customer: a.customer, payment_method: a.payment_method, off_session: true, confirm: true,
       description: a.description, statement_descriptor_suffix: 'TOTES',
       metadata: { rental_id: a.rental_id, rental_number: a.rental_number, charge_id: a.charge_id, charge_type: a.charge_type },
-    }, { idempotencyKey: `charge:${a.charge_id}` });
+    }, { idempotencyKey: `charge:${a.charge_id}:${a.attempt}` });   // per attempt: a retry after a decline or a card update must really retry
     return { ok: pi.status === 'succeeded', payment_intent_id: pi.id, status: pi.status };
   } catch (e) {
     if (e instanceof StripeError) {

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { geocode, driveMinutes } from '@/lib/rentals/geo';
+import { geocode, driveMinutes, withZip } from '@/lib/rentals/geo';
 
-/** Zones are keyed on ZIP. If the customer left it off, borrow the ZIP the geocoder found. */
-function withZip(addr: string, display: string | null | undefined) { if (/\d{5}(-\d{4})?\s*$/.test(addr.trim())) return addr.trim(); const z = ((display ?? '').match(/\b\d{5}\b/g) ?? []).pop(); return z ? `${addr.trim()}, ${z}` : addr.trim(); }   // last 5-digit group: the ZIP, not the house number
 
 export const dynamic = 'force-dynamic';
 const CORS = { 'Access-Control-Allow-Origin': '*' };

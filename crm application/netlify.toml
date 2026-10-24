@@ -9,7 +9,7 @@
   ignore = "exit 1"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 # Next.js runtime plugin (Netlify installs automatically for Next.js sites,
 # declared explicitly for CI/CD reproducibility)
