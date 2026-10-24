@@ -4,11 +4,11 @@ import { TOTE_CSS } from '@/components/ToteBrand';
 
 const PHONE = '734-537-8061';
 export default function QuoteForm({ tag }: { tag: string }) {
-  const [info, setInfo] = useState<{ rental: { id: string; rental_number: string; name: string; phone: string; address: string } | null; offer: string | null } | null>(null);
+  const [info, setInfo] = useState<{ rental: { id: string; name: string } | null; offer: string | null } | null>(null);
   const [v, setV] = useState({ name: '', phone: '', details: '' });
   const [state, setState] = useState<'form' | 'busy' | 'done' | 'err'>('form');
   const [msg, setMsg] = useState('');
-  useEffect(() => { fetch(`/api/public/q?t=${encodeURIComponent(tag)}`).then((r) => r.json()).then((d) => { setInfo(d); if (d.rental) setV((x) => ({ ...x, name: d.rental.name, phone: d.rental.phone })); }).catch(() => setInfo({ rental: null, offer: null })); }, [tag]);
+  useEffect(() => { fetch(`/api/public/q?t=${encodeURIComponent(tag)}`).then((r) => r.json()).then((d) => { setInfo(d); if (d.rental) setV((x) => ({ ...x, name: d.rental.name })); }).catch(() => setInfo({ rental: null, offer: null })); }, [tag]);
   async function send() {
     setState('busy');
     const r = await fetch('/api/public/q', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...v, tag, rental_id: info?.rental?.id, website: '' }) }).then((x) => x.json()).catch(() => ({ error: 'network' }));
