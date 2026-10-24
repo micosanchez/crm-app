@@ -23,7 +23,8 @@ export default async function MarketingList({ searchParams }: { searchParams: { 
     supabase.from('sms_opt_outs').select('phone'),
   ]);
   const stopped = new Set((optOuts ?? []).map((o) => o.phone));
-  const byId = new Map((customers ?? []).map((c) => [c.id, c]));
+  const byId = new Map<string, { id: string; name: string; email: string | null; phone: string | null }>();
+  (customers ?? []).forEach((c) => byId.set(c.id, c));
   const people = new Map<string, Person>();
   const touch = (cid: string, at: string, f: (p: Person) => void) => {
     const c = byId.get(cid); if (!c) return;
@@ -33,8 +34,8 @@ export default async function MarketingList({ searchParams }: { searchParams: { 
   // live checkouts (pending_payment) are skipped; an abandoned checkout still counts, the person ticked the offers box
   for (const r of rentals ?? []) touch(r.customer_id, r.created_at, (p) => { p.tote = true; if (r.marketing_email_consent_at) p.emailOk = true; if (r.marketing_sms_consent_at) p.textOk = true; });
   for (const j of jobs ?? []) touch(j.customer_id, j.created_at, (p) => { p.junk = true; });
-  for (const p of people.values()) if (p.phone && stopped.has(p.phone)) p.textOk = false;
-  const all = [...people.values()].sort((a, b) => b.last.localeCompare(a.last));
+  const all = Array.from(people.values()).sort((a, b) => b.last.localeCompare(a.last));
+  for (const p of all) if (p.phone && stopped.has(p.phone)) p.textOk = false;
   const list = all.filter((p) => show === 'all' ? !!(p.email || p.phone) : show === 'email' ? p.emailOk && !!p.email : p.textOk && !!p.phone);
   const csv = ['name,email,phone,customer_type,last_activity,email_opt_in,text_opt_in', ...list.map((p) => [p.name, p.email ?? '', p.phone ?? '', [p.tote && 'tote rental', p.junk && 'junk removal'].filter(Boolean).join(' + '), p.last.slice(0, 10), p.emailOk ? 'yes' : 'no', p.textOk ? 'yes' : 'no'].map((v) => csvCell(String(v))).join(','))].join('\n');
   return (
