@@ -21,6 +21,13 @@ export async function GET(req: NextRequest) {
     }
   }
   await db.from('lead_events').insert({ type: 'qr_scan', rental_id: rental?.id ?? null, customer_id: rental?.customer_id ?? null, asset_tag: tag || null, detail: { active_rental: !!rental, ua: (req.headers.get('user-agent') ?? '').slice(0, 120) } });
+  if (rental) {
+    // a scan during a rental is a warm lead even without the form: log it on the rental and tell the owner once a day per rental
+    await db.from('rental_events').insert({ rental_id: rental.id, event: 'qr_scan', detail: { tag } });
+    const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+    const c = rental.customers;
+    sendNotification({ event: 'qr_scan', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `qr_scan:${rental.id}:${day}`, subject: `Tote ${tag} scanned: ${c?.name ?? rental.rental_number} may want junk removal`, text: `Someone scanned tote ${tag}, which is out on rental ${rental.rental_number}.\n\n${c?.name ?? ''}\n${c?.phone ?? ''}\n${c?.email ?? ''}\n${rental.delivery_address}\n\nIf no quote form comes in, follow up: ${APP_URL}/rentals/${rental.id}\n(Whoever scanned may be a helper at that address, not the renter.)` }).catch(() => {});
+  }
   const { data: s } = await db.from('rental_settings').select('junk_offer_text').eq('id', true).maybeSingle();
   return NextResponse.json({ tag, rental: rental ? { id: rental.id, rental_number: rental.rental_number, name: rental.customers?.name ?? '', phone: rental.customers?.phone ?? '', email: rental.customers?.email ?? '', address: rental.delivery_address } : null, offer: s?.junk_offer_text ?? null }, { headers: CORS });
 }

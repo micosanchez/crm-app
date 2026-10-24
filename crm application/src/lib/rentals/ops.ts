@@ -85,7 +85,9 @@ export async function queueMessage(r: Rental, key: RentalTemplateKey, extra: Rec
   const t = mergedTemplates(s.templates)[key] ?? DEFAULT_TEMPLATES[key];
   if (!t.enabled && !opts.force) return { skipped: 'disabled' };
   const c = r.customers ?? (await getRental(r.id, db)).customers!;
+  const { data: biz } = t.kind === 'promotional' && t.email ? await db.from('business_settings').select('mailing_address').eq('id', true).maybeSingle() : { data: null };
   const vars = {
+    unsubscribe_link: `${APP_URL}/api/public/unsubscribe?t=${r.public_token}`, mailing_address_line: biz?.mailing_address ? ` · ${biz.mailing_address}` : '',
     first_name: first(c?.name), rental_number: r.rental_number, delivery_date: fmtDate(r.delivery_date), delivery_window: r.delivery_window,
     pickup_date: fmtDate(r.pickup_date), pickup_window: r.pickup_window ?? r.delivery_window, link: rentalLink(r), receipt_link: `${rentalLink(r)}/receipt`,
     pay_link: '', card_link: `${rentalLink(r)}/card`, junk_link: junkQuoteLink(r, c), review_link: REVIEW_LINK, totes: r.tote_count, window: '',
@@ -119,17 +121,17 @@ export async function scheduleLifecycle(r: Rental, db = admin()) {
   const remindAt = detroitAt(dayBefore(r.delivery_date), 17);
   if (new Date(remindAt).getTime() - new Date(r.created_at).getTime() > 24 * 3600_000) await queueMessage(r, 'delivery_reminder', {}, { at: remindAt, dedupe: `${r.id}:delivery_reminder:${r.delivery_date}` }, db);
   // during the rental: move date plus two days, 6 pm. Promotional: needs marketing consent, not when they said no or already asked for a quote.
-  if (r.move_date && r.junk_interest !== 'no' && !r.junk_request_id) await queueMessage(r, 'during_rental', {}, { at: detroitAt(plus(r.move_date, 2), 18), dedupe: `${r.id}:during_rental` }, db);
+  if (r.junk_interest !== 'no' && !r.junk_request_id) await queueMessage(r, 'during_rental', {}, { at: detroitAt(r.move_date ? plus(r.move_date, 2) : plus(r.delivery_date, 3), 18), dedupe: `${r.id}:during_rental` }, db);
   await queueMessage(r, 'pickup_reminder', {}, { at: detroitAt(dayBefore(r.pickup_date), 17), dedupe: `${r.id}:pickup_reminder:${r.pickup_date}` }, db);
 }
 /** Drain due messages. Texts only inside 8am–8pm Detroit and only to customers who opted in; email any time. */
 export async function sendDueMessages(db = admin()) {
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hour12: false }).format(new Date())) % 24;
   const inQuiet = hour < 8 || hour >= 20;
-  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, status)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
+  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, marketing_email_consent_at, status)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
   let sent = 0, skipped = 0, failed = 0;
   for (const m of due ?? []) {
-    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; status: string } | null;
+    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; marketing_email_consent_at: string | null; status: string } | null;
     const kind = (DEFAULT_TEMPLATES[m.template as RentalTemplateKey]?.kind ?? 'transactional');
     if (r?.status === 'cancelled' && !['abandoned', 'receipt'].includes(m.template)) { await db.from('rental_messages').update({ status: 'cancelled' }).eq('id', m.id); continue; }
     if (m.channel === 'sms') {
@@ -142,6 +144,7 @@ export async function sendDueMessages(db = admin()) {
       if (res.ok) { sent++; await db.from('rental_messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', m.id); await logEvent(m.rental_id, `sms:${m.template}`, { to: m.to_phone }, db); }
       else { failed++; await db.from('rental_messages').update({ status: res.skipped ? 'skipped' : 'failed', error: res.error ?? res.skipped ?? null }).eq('id', m.id); }
     } else {
+      if (kind === 'promotional' && !r?.marketing_email_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no email marketing consent' }).eq('id', m.id); skipped++; continue; }
       const res = await sendNotification({ event: `rental_${m.template}`, to: m.to_email, subject: m.subject ?? 'Your tote rental', text: m.body, entityKind: 'estimate', entityId: undefined });
       if (res.ok) { sent++; await db.from('rental_messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', m.id); await logEvent(m.rental_id, `email:${m.template}`, { to: m.to_email }, db); }
       else { failed++; await db.from('rental_messages').update({ status: res.skipped ? 'skipped' : 'failed', error: res.error ?? res.skipped ?? null }).eq('id', m.id); }

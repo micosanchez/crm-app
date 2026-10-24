@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "check": "node --experimental-strip-types scripts/check-website-lead.mjs && node --experimental-strip-types scripts/check-money.mjs && node --experimental-strip-types scripts/check-meta-capi.mjs"
+    "check": "node --experimental-strip-types scripts/check-website-lead.mjs && node --experimental-strip-types scripts/check-money.mjs && node --experimental-strip-types scripts/check-meta-capi.mjs && node --experimental-strip-types scripts/check-rental-templates.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

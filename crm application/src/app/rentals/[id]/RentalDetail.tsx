@@ -31,6 +31,8 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
   const needTotes = r.tote_count - items.filter((i) => i.rental_assets?.asset_type === 'tote').length;
   const needDollies = r.dolly_count - items.filter((i) => i.rental_assets?.asset_type === 'dolly').length;
   const addTag = (t: string) => { const tag = t.trim().toUpperCase(); if (!tag) return; if (!freeAssets.some((a) => a.asset_tag === tag)) { setErr(`${tag} is not an available asset.`); return; } if (!tags.includes(tag)) setTags([...tags, tag]); setTagInput(''); setErr(null); };
+  // one tap: take the lowest-numbered available totes so the driver just loads those numbers
+  const fillTotes = () => { const have = tags.filter((t) => freeAssets.find((a) => a.asset_tag === t)?.asset_type === 'tote').length; const pick = freeAssets.filter((a) => a.asset_type === 'tote' && !tags.includes(a.asset_tag)).slice(0, Math.max(0, needTotes - have)).map((a) => a.asset_tag); setTags([...tags, ...pick]); setErr(null); };
   const scan = async () => {
     const BD = (window as any).BarcodeDetector;
     if (!BD) { setErr('Camera scanning needs Chrome on Android; on iPhone tap the tags instead.'); return; }
@@ -118,6 +120,7 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
         <p className="text-sm text-gray-500">Assign {needTotes > 0 ? `${needTotes} totes` : ''}{needTotes > 0 && needDollies > 0 ? ' and ' : ''}{needDollies > 0 ? `${needDollies} dolly` : ''}. Tap tags or scan their QR label.</p>
         <div className="flex flex-wrap gap-1">{tags.map((t) => <button key={t} className="badge bg-brand-50" onClick={() => setTags(tags.filter((x) => x !== t))}>{t} ✕</button>)}</div>
         <div className="flex gap-2"><input className="input" list="free-assets" placeholder="T-001" value={tagInput} onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(tagInput); } }} /><datalist id="free-assets">{freeAssets.map((a) => <option key={a.asset_tag} value={a.asset_tag}>{a.asset_type}</option>)}</datalist><button className="btn-ghost" onClick={() => addTag(tagInput)}>Add</button><button className="btn-ghost" onClick={scan}>Scan</button></div>
+        {needTotes > 0 && <button className="btn-ghost w-full" onClick={fillTotes}>Fill the next {needTotes} available totes</button>}
         <div className="flex flex-wrap gap-1">{freeAssets.slice(0, 48).map((a) => <button key={a.asset_tag} className={`badge ${tags.includes(a.asset_tag) ? 'bg-brand-500 text-white' : 'bg-gray-100'}`} onClick={() => addTag(a.asset_tag)}>{a.asset_tag}</button>)}</div>
         <label className="block text-sm">Delivery photos <input type="file" accept="image/*" multiple capture="environment" onChange={(e) => setDelPhotos(e.target.files)} /></label>
         <button className="btn-primary btn-big w-full" disabled={!!busy || tags.length === 0} onClick={() => run('deliver', async () => { const photo_urls = delPhotos?.length ? await uploadPhotos(r.id, delPhotos, 'delivery') : []; return act('record_delivery', { rental_id: r.id, tags, photo_urls }); }, (res: any) => `Delivered. ${res.balance_charge?.ok ? 'Balance charged.' : res.balance_charge?.error ? `Balance not charged: ${res.balance_charge.error}` : ''}`)}>✓ Mark delivered</button>
