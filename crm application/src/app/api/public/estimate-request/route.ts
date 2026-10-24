@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     user: { email: t(body.email), phone, first_name: t(body.first_name), last_name: t(body.last_name), city: t(body.city), state: t(body.state) || 'MI', zip: t(body.postal_code), ip, user_agent: req.headers.get('user-agent'), fbclid: t(body.fbclid) } });
 
   // Cross-sell: remember the junk request on the rental so the board can flag it.
-  if (/^[0-9a-f-]{36}$/.test(t(body.rental_id))) void admin.from('rentals').update({ junk_request_id: row.id }).eq('id', t(body.rental_id)).is('junk_request_id', null);
+  if (/^[0-9a-f-]{36}$/.test(t(body.rental_id))) await admin.from('rentals').update({ junk_request_id: row.id }).eq('id', t(body.rental_id)).is('junk_request_id', null);
 
   // Signed upload URLs — one per photo the browser says it has, capped.
   const wanted = Math.max(0, Math.min(Number(body.photo_count) || 0, MAX_PHOTOS));
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Tell Mico. A failure here must never fail the customer's submission.
-  if (wanted === 0) void notifyOwner(row.id, body, phone);
+  if (wanted === 0) await notifyOwner(row.id, body, phone);
 
   return NextResponse.json({ ok: true, id: row.id, uploads });
 }

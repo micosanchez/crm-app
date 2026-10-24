@@ -12,4 +12,9 @@ for (const k of ['during_rental', 'pickup_reminder', 'after_pickup']) {
 }
 // texts still collapse the double space an empty var leaves
 assert.equal(m.renderRental('Hi {first_name},  see {junk_offer} you', v), 'Hi Ana, see you');
-console.log('rental templates: ok');
+const f = await import('../src/lib/rentals/format.ts');
+assert.equal(f.csvCell('=HYPERLINK("http://x")'), `"'=HYPERLINK(""http://x"")"`);
+assert.equal(f.csvCell('@SUM(A1)'), "'@SUM(A1)");
+assert.equal(f.csvCell('+13135551234'), '+13135551234');   // phone numbers stay importable
+assert.equal(f.csvCell('Smith, Ana'), '"Smith, Ana"');
+console.log('rental templates + csv: ok');

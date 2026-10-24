@@ -128,12 +128,13 @@ export async function scheduleLifecycle(r: Rental, db = admin()) {
 export async function sendDueMessages(db = admin()) {
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hour12: false }).format(new Date())) % 24;
   const inQuiet = hour < 8 || hour >= 20;
-  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, marketing_email_consent_at, status)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
+  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, marketing_email_consent_at, status, junk_request_id)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
   let sent = 0, skipped = 0, failed = 0;
   for (const m of due ?? []) {
-    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; marketing_email_consent_at: string | null; status: string } | null;
+    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; marketing_email_consent_at: string | null; status: string; junk_request_id: string | null } | null;
     const kind = (DEFAULT_TEMPLATES[m.template as RentalTemplateKey]?.kind ?? 'transactional');
     if (r?.status === 'cancelled' && !['abandoned', 'receipt'].includes(m.template)) { await db.from('rental_messages').update({ status: 'cancelled' }).eq('id', m.id); continue; }
+    if (m.template === 'during_rental' && r?.junk_request_id) { await db.from('rental_messages').update({ status: 'cancelled', error: 'junk quote already requested' }).eq('id', m.id); continue; }
     if (m.channel === 'sms') {
       if (inQuiet) continue; // stays queued until the window opens
       if (kind === 'promotional' && !r?.marketing_sms_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no marketing consent' }).eq('id', m.id); skipped++; continue; }

@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
     await db.from('rental_events').insert({ rental_id: rental.id, event: 'qr_scan', detail: { tag } });
     const day = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
     const c = rental.customers;
-    sendNotification({ event: 'qr_scan', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `qr_scan:${rental.id}:${day}`, subject: `Tote ${tag} scanned: ${c?.name ?? rental.rental_number} may want junk removal`, text: `Someone scanned tote ${tag}, which is out on rental ${rental.rental_number}.\n\n${c?.name ?? ''}\n${c?.phone ?? ''}\n${c?.email ?? ''}\n${rental.delivery_address}\n\nIf no quote form comes in, follow up: ${APP_URL}/rentals/${rental.id}\n(Whoever scanned may be a helper at that address, not the renter.)` }).catch(() => {});
+    await sendNotification({ event: 'qr_scan', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `qr_scan:${rental.id}:${day}`, subject: `Tote ${tag} scanned: ${c?.name ?? rental.rental_number} may want junk removal`, text: `Someone scanned tote ${tag}, which is out on rental ${rental.rental_number}.\n\n${c?.name ?? ''}\n${c?.phone ?? ''}\n${c?.email ?? ''}\n${rental.delivery_address}\n\nIf no quote form comes in, follow up: ${APP_URL}/rentals/${rental.id}\n(Whoever scanned may be a helper at that address, not the renter.)` }).catch(() => {});
   }
   const { data: s } = await db.from('rental_settings').select('junk_offer_text').eq('id', true).maybeSingle();
-  return NextResponse.json({ tag, rental: rental ? { id: rental.id, rental_number: rental.rental_number, name: rental.customers?.name ?? '', phone: rental.customers?.phone ?? '', email: rental.customers?.email ?? '', address: rental.delivery_address } : null, offer: s?.junk_offer_text ?? null }, { headers: CORS });
+  return NextResponse.json({ tag, rental: rental ? { id: rental.id, name: (rental.customers?.name ?? '').split(' ')[0] } : null, offer: s?.junk_offer_text ?? null }, { headers: CORS });
 }
 
 /** POST {name, phone, details, tag?, rental_id?} → an estimate request tagged tote_qr; this is the lead. */
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (rentalId) await db.from('rentals').update({ junk_request_id: row.id }).eq('id', rentalId).is('junk_request_id', null);
   }
   await db.from('lead_events').insert({ type: 'quote_form', rental_id: rentalId, asset_tag: b.tag ?? null, detail: { source: 'qr', estimate_request_id: id, duplicate: !!dup } });
-  sendNotification({ event: 'estimate_request', to: process.env.NOTIFY_EMAIL ?? '', subject: `Junk quote from a tote sticker: ${name}`, text: `${name} ${phone}\n${description}\n${APP_URL}/requests/${id}` }).catch(() => {});
+  await sendNotification({ event: 'estimate_request', to: process.env.NOTIFY_EMAIL ?? '', subject: `Junk quote from a tote sticker: ${name}`, text: `${name} ${phone}\n${description}\n${APP_URL}/requests/${id}` }).catch(() => {});
   return NextResponse.json({ ok: true, id }, { headers: CORS });
 }
 export async function OPTIONS() { return new NextResponse(null, { headers: { ...CORS, 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }); }

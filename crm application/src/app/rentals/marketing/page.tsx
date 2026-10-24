@@ -2,14 +2,13 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { requireStaff } from '@/lib/auth';
 import { Cluster, Cell } from '@/components/Hud';
-import { prettyDate } from '@/lib/rentals/format';
+import { prettyDate, csvCell } from '@/lib/rentals/format';
 import RentalsNav from '../RentalsNav';
 
 export const dynamic = 'force-dynamic';
 
 type Person = { id: string; name: string; email: string | null; phone: string | null; tote: boolean; junk: boolean; last: string; emailOk: boolean; textOk: boolean };
 const VIEWS = [['email', 'Email opt-ins'], ['text', 'Text opt-ins'], ['all', 'All past customers']] as const;
-const csvCell = (v: string) => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 
 /** Everyone who rented totes or hired us, with the marketing opt-ins they gave at checkout. Export a CSV for any email or text tool. */
 export default async function MarketingList({ searchParams }: { searchParams: { show?: string } }) {
