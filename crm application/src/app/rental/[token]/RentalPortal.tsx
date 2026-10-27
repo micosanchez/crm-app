@@ -5,7 +5,7 @@ import { TOTE_CSS, JunkCallout, junkLink } from '@/components/ToteBrand';
 type View = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 const money = (n: number | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`;
 const pretty = (ymd: string | null) => ymd ? new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) : '';
-const STATUS: Record<string, string> = { pending_payment: 'Waiting for payment', booked: 'Booked', delivered: 'Totes delivered', out: 'Totes out', pickup_scheduled: 'Pickup scheduled', returned: 'Picked up', inspected: 'Checked in', closed: 'Closed', cancelled: 'Cancelled' };
+const STATUS: Record<string, string> = { pending_payment: 'Checkout not finished', awaiting_confirmation: 'Request received: we will text you delivery windows', expired: 'Request expired', booked: 'Booked', delivered: 'Totes delivered', out: 'Totes out', pickup_scheduled: 'Pickup scheduled', returned: 'Picked up', inspected: 'Checked in', closed: 'Closed', cancelled: 'Cancelled' };
 
 export default function RentalPortal({ token }: { token: string }) {
   const [r, setR] = useState<View | null>(null);
@@ -32,7 +32,7 @@ export default function RentalPortal({ token }: { token: string }) {
   if (!r) return <div className="tote"><style dangerouslySetInnerHTML={{ __html: TOTE_CSS }} /><div className="wrap"><div className="skel" /><div className="skel" /></div></div>;
   const active = ['booked', 'delivered', 'out', 'pickup_scheduled'].includes(r.status);
   const junk = junkLink({ rental: r.rental_number, name: r.customer?.name, phone: r.customer?.phone, email: r.customer?.email, address: r.pickup_address });
-  const canCancel = ['booked'].includes(r.status);
+  const canCancel = ['booked', 'awaiting_confirmation'].includes(r.status);
 
   return (
     <div className="tote"><style dangerouslySetInnerHTML={{ __html: TOTE_CSS }} />
@@ -42,8 +42,8 @@ export default function RentalPortal({ token }: { token: string }) {
         <p className="muted">{STATUS[r.status] ?? r.status} · {r.customer?.name}</p>
         {err && <div className="err">{err}</div>}{msg && <div className="ok">{msg}</div>}
         <div className="card"><table><tbody>
-          <tr><td>Delivery</td><td>{pretty(r.delivery_date)} {r.delivery_window}</td></tr>
-          <tr><td>Pickup</td><td>{pretty(r.pickup_date)} {r.pickup_window ?? ''}</td></tr>
+          <tr><td>Delivery</td><td>{r.delivery_date ? `${pretty(r.delivery_date)} ${r.delivery_window ?? ''}` : 'We text you delivery windows to pick from'}</td></tr>
+          <tr><td>Pickup</td><td>{r.pickup_date ? `${pretty(r.pickup_date)} ${r.pickup_window ?? ''}` : `${r.rental_days ?? 14} days after delivery`}</td></tr>
           <tr><td>Deliver to</td><td style={{ whiteSpace: 'normal' }}>{r.delivery_address}</td></tr>
           {r.pickup_address !== r.delivery_address && <tr><td>Pick up at</td><td style={{ whiteSpace: 'normal' }}>{r.pickup_address}</td></tr>}
           <tr><td>Totes</td><td>{r.tote_count}{r.dolly_count ? ` + ${r.dolly_count} dolly` : ''}</td></tr>

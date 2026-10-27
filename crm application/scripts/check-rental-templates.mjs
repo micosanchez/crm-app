@@ -12,6 +12,12 @@ for (const k of ['during_rental', 'pickup_reminder', 'after_pickup']) {
 }
 // texts still collapse the double space an empty var leaves
 assert.equal(m.renderRental('Hi {first_name},  see {junk_offer} you', v), 'Hi Ana, see you');
+// the request and confirmation messages fill every placeholder (package, total, dates) and never promise a charge today
+for (const k of ['request_received', 'booking_confirmed']) {
+  const t = m.DEFAULT_TEMPLATES[k], vv = { ...v, package: 'Home', total: '$149.00', delivery_date: 'Sat, Nov 7', delivery_window: '8am-noon' };
+  for (const body of [t.sms, t.email, t.email_subject]) assert.ok(!/\{\w+\}/.test(m.renderRental(body, vv)), k + ' unfilled var');
+  assert.ok(/pickup/i.test(m.renderRental(t.sms, vv)), k + ' says billed at pickup');
+}
 const f = await import('../src/lib/rentals/format.ts');
 assert.equal(f.csvCell('=HYPERLINK("http://x")'), `"'=HYPERLINK(""http://x"")"`);
 assert.equal(f.csvCell('@SUM(A1)'), "'@SUM(A1)");

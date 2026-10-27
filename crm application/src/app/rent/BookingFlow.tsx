@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SignaturePad from '@/components/SignaturePad';
 import { TOTE_CSS, JunkCallout, junkLink } from '@/components/ToteBrand';
 import { HEARD_ABOUT_US } from '@/lib/requests';
@@ -11,7 +11,6 @@ type Quote = { error?: string; gear?: string; free?: number; total?: number; dep
 
 const PHONE = '(734) 537-8061';
 const money = (n: number | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`;
-const addDays = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const pretty = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 // Meta pixel / Google Ads conversion. Fires in the parent site when embedded, locally when standalone.
@@ -42,19 +41,14 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [extraWeeks, setExtraWeeks] = useState(0);
   const [duration, setDuration] = useState<7 | 14>(14);
   const [moreAddons, setMoreAddons] = useState(false);
-  const [moveDate, setMoveDate] = useState('');
-  const [moveOpen, setMoveOpen] = useState(false);
-  const [moveMonth, setMoveMonth] = useState('');
+  const [moveDate, setMoveDate] = useState(initial.date ?? '');   // ?date= from the landing page now means moving day
+  const [timing, setTiming] = useState('');
   const [profile, setProfile] = useState({ home_size: '', move_reason: '', saved: false });
   const [addr, setAddr] = useState('');
   const [pickupDiff, setPickupDiff] = useState(false);
   const [pickupAddr, setPickupAddr] = useState('');
   const [promo, setPromo] = useState((initial.promo ?? '').toUpperCase());
   const [quote, setQuote] = useState<Quote | null>(null);
-  const [date, setDate] = useState<string | null>(initial.date);
-  const [win, setWin] = useState('');
-  const [pickupWin, setPickupWin] = useState('');
-  const [month, setMonth] = useState<string>(() => (initial.date ?? new Date().toISOString().slice(0, 10)).slice(0, 7));
   const [contact, setContact] = useState({ name: '', phone: '', email: '', heard: '', notes: '', junk: '' as '' | 'yes' | 'maybe' | 'no', mkt_sms: false, mkt_email: true, payer: false, payer_name: '', payer_email: '' });
   const [hold, setHold] = useState<{ rental_id: string; public_token: string; rental_number: string } | null>(null);
   const [terms, setTerms] = useState<{ text: string; version: number } | null>(null);
@@ -62,7 +56,6 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [signed, setSigned] = useState(false);
   const [pay, setPay] = useState<{ kind: 'payment' | 'setup'; client_secret: string; intent_id: string; amount: number; publishable_key: string } | null>(null);
   const [done, setDone] = useState<{ rental_number: string; token: string } | null>(null);
-  const [waitlist, setWaitlist] = useState(false);
   const stripeRef = useRef<{ stripe: any; elements: any } | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const leadSource = useMemo(() => {
@@ -78,14 +71,13 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     // resume an abandoned booking: prefill from the public view of the expired hold
     if (initial.resume) fetch(`/api/public/rentals/me?token=${initial.resume}`).then((r) => r.json()).then((d) => {
       if (!d || d.error) return;
-      // a hold Mico made over the phone is still live: skip straight to sign and pay
+      // a request Mico started over the phone is still open: skip straight to sign and save card
       if (d.status === 'pending_payment' && Date.now() - new Date(d.created_at).getTime() < 25 * 60_000) {
         setHold({ rental_id: d.id, public_token: initial.resume!, rental_number: d.rental_number });
         fetch(`/api/public/rentals/sign?token=${initial.resume}`).then((x) => x.json()).then(setTerms);
         setStep(6); return;
       }
       setAddr(d.delivery_address ?? ''); if (d.pickup_address && d.pickup_address !== d.delivery_address) { setPickupDiff(true); setPickupAddr(d.pickup_address); }
-      setDate(d.delivery_date); setWin(d.delivery_window ?? ''); setMonth(String(d.delivery_date).slice(0, 7));
       setContact((c) => ({ ...c, name: d.customer?.name ?? '', phone: d.customer?.phone ?? '', email: d.customer?.email ?? '', notes: d.notes_customer ?? '', junk: d.junk_interest ?? '', mkt_sms: !!d.marketing_sms, mkt_email: !!d.marketing_email })); if (d.move_date) setMoveDate(d.move_date);
     }).catch(() => {});
     // embedded on sanchezhaulco.com: tell the parent page how tall we are so the iframe never scrolls inside
@@ -106,30 +98,10 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 
   const pkg = cat?.packages.find((p) => p.id === pkgId) ?? null;
   const s = cat?.settings ?? {};
-  const totes = pkg?.tote_count ?? 0;
-  const gear = useMemo(() => { const g: Record<string, number> = {}; for (const [id, q] of Object.entries(addons)) { const a = cat?.addons.find((x) => x.id === id); if (!a || q <= 0) continue; for (const [t, n] of Object.entries(a.requires ?? {})) g[t] = (g[t] ?? 0) + n * q; } return g; }, [addons, cat]);
-  const dollies = gear.dolly ?? 0;
   const rentalDays = (duration === 7 && pkg?.week_price != null ? 7 : (pkg?.rental_days_included ?? 14)) + extraWeeks * 7;
-  const turnaround = Number(s.turnaround_days ?? 1);
-  const leadHours = Number(s.booking_lead_time_hours ?? 24);
-  const availMap = useMemo(() => new Map((cat?.availability ?? []).map((d) => [d.day, d])), [cat]);
-  const minDate = useMemo(() => { const d = new Date(Date.now() + leadHours * 3600_000); return new Date(d.toLocaleString('en-US', { timeZone: 'America/Detroit' })).toISOString().slice(0, 10); }, [leadHours]);
-
-  const dateOk = useCallback((ymd: string) => {
-    if (!cat || ymd < minDate) return false;
-    const dow = new Date(`${ymd}T12:00:00Z`).getUTCDay();
-    if (!(s.service_days ?? [0, 1, 2, 3, 4, 5, 6]).includes(dow)) return false;
-    if ((s.blackout_dates ?? []).includes(ymd)) return false;
-    for (let i = 0; i <= rentalDays + turnaround; i++) { const a = availMap.get(addDays(ymd, i)); if (!a) return i > 89; if (a.totes_free < totes || a.dollies_free < dollies) return false; }
-    return true;
-  }, [cat, minDate, s, rentalDays, turnaround, availMap, totes, dollies]);
-
-  const windowsFor = (ymd: string) => { const dow = new Date(`${ymd}T12:00:00Z`).getUTCDay(); const w = s.slot_windows ?? {}; return (dow === 0 || dow === 6 ? w.weekend : w.weekday) ?? []; };
-  const slotFull = (ymd: string, w: string) => (cat?.slot_counts?.[`${ymd}|${w}`] ?? 0) >= Number(s.max_bookings_per_slot ?? 3);
-
   async function getQuote() {
     setErr(null); setBusy(true);
-    const r = await fetch('/api/public/rentals/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : undefined, promo_code: promo || undefined, delivery_date: date ?? undefined }) }).then((x) => x.json() as Promise<Quote>);
+    const r = await fetch('/api/public/rentals/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : undefined, promo_code: promo || undefined }) }).then((x) => x.json() as Promise<Quote>);
     setBusy(false);
     if (r.error === 'address_not_found' || r.error === 'pickup_address_not_found') { setErr(`We couldn't find that ${r.error.startsWith('pickup') ? 'pickup ' : ''}address. Try adding the city and ZIP.`); return false; }
     if (r.error === 'out_of_area') { setErr(`That address is outside our delivery zones right now. Call or text ${PHONE} and we'll quote it.`); return false; }
@@ -141,13 +113,10 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   async function createHold() {
     setErr(null); setBusy(true);
     const body = { package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : null, promo_code: promo || null,
-      delivery_date: date, delivery_window: win, pickup_window: pickupWin || win, name: contact.name, phone: contact.phone, email: contact.email, lead_source: contact.heard ? heardToSource(contact.heard, leadSource) : leadSource,
-      notes_customer: contact.notes, move_date: moveDate || null, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
+      name: contact.name, phone: contact.phone, email: contact.email, lead_source: contact.heard ? heardToSource(contact.heard, leadSource) : leadSource,
+      notes_customer: [timing.trim() && `Timing: ${timing.trim()}`, contact.notes.trim()].filter(Boolean).join('\n'), move_date: moveDate || null, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
     const r = await fetch('/api/public/rentals/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
     setBusy(false);
-    if (r.error === 'sold_out') { setErr('Those dates just filled up. Pick another date, or join the waitlist and we will text you when totes free up.'); setWaitlist(true); setStep(3); return; }
-    if (r.error === 'slot_full') { setErr('That delivery window is full. Pick another window.'); setStep(3); return; }
-    if (r.error === 'gear_sold_out') { setErr(`Only ${r.free ?? 0} ${String(r.gear).replace('_', ' ')} left for those dates. Change the add-ons or the dates.`); setStep(1); return; }
     if (r.error) { setErr(r.error); return; }
     setHold(r);
     const t = await fetch(`/api/public/rentals/sign?token=${r.public_token}`).then((x) => x.json());
@@ -213,15 +182,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     setStep(8);
   }
 
-  async function joinWaitlist() {
-    if (!date || !contact.name || !contact.phone) { setErr('Add your name and phone so we can text you.'); return; }
-    setBusy(true);
-    const r = await fetch('/api/public/rentals/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: contact.name, phone: contact.phone, email: contact.email, start_date: date, end_date: addDays(date, rentalDays), tote_count: totes }) }).then((x) => x.json());
-    setBusy(false);
-    if (r.error) setErr(r.error); else { setWaitlist(false); setErr(null); alert("You're on the list. We'll text the first person when totes open up for those dates."); }
-  }
-
-  const steps = ['Package', 'Address', 'Dates', 'Contact', 'Review', 'Sign', 'Pay', 'Done'];
+  const steps = ['Package', 'Address', 'Moving day', 'Contact', 'Review', 'Sign', 'Save card', 'Done'];
   const junk = junkLink({ rental: hold?.rental_number ?? done?.rental_number, name: contact.name, phone: contact.phone, email: contact.email, address: pickupDiff ? pickupAddr : addr });
 
   return (
@@ -268,24 +229,18 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <label htmlFor="promo">Promo, realtor or property manager code (optional)</label>
           <input id="promo" placeholder="CODE" value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase())} />
           <div className="muted" style={{ fontSize: 15 }}>{(s.zones ?? []).map((z: { name: string; fee: number; label: string }) => <p key={z.name} style={{ margin: '2px 0' }}><b style={{ color: '#fff' }}>{z.fee ? money(z.fee) : 'Free'}</b> delivery and pickup: {z.label}</p>)}{s.far_zone_fee ? <p style={{ margin: '2px 0' }}><b style={{ color: '#fff' }}>{money(s.far_zone_fee)}</b> delivery and pickup: {s.far_zone_minutes ?? 45}+ minutes&apos; drive from Lincoln Park</p> : null}<p style={{ margin: '2px 0' }}>Somewhere else? Call or text <a href="sms:+17345378061">{PHONE}</a> for a quote.</p></div>
-          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(1)}>Back</button><button className="btn" disabled={busy || addr.trim().length < 8 || (pickupDiff && pickupAddr.trim().length < 8)} onClick={async () => { if (await getQuote()) setStep(3); }}>{busy ? 'Checking address…' : 'Next: pick dates'}</button></div></div>
+          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(1)}>Back</button><button className="btn" disabled={busy || addr.trim().length < 8 || (pickupDiff && pickupAddr.trim().length < 8)} onClick={async () => { if (await getQuote()) setStep(3); }}>{busy ? 'Checking address…' : 'Next: moving day'}</button></div></div>
         </section>)}
 
         {cat && step === 3 && (<section>
-          <h2>3. Delivery date and window</h2>
-          {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. Monday to Wednesday evenings and Saturday and Sunday daytime.</p>}
-          <Calendar month={month} setMonth={setMonth} selected={date} ok={dateOk} onPick={(d) => { setDate(d); setWin(''); setErr(null); }} />
-          {date && <><p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)}. Pickup {pretty(addDays(date, rentalDays))} ({rentalDays} days).</p>
-            <label>Delivery window</label>
-            <div className="row" style={{ flexWrap: 'wrap' }}>{windowsFor(date).map((w: string) => <button key={w} type="button" className={`btn ghost sm ${win === w ? 'sel' : ''}`} style={win === w ? { background: 'var(--grad)', borderColor: 'transparent' } : {}} disabled={slotFull(date, w)} onClick={() => setWin(w)}>{w}{slotFull(date, w) ? ' (full)' : ''}</button>)}</div>
-            <label htmlFor="movedate">When is moving day?</label>
-            <button id="movedate" type="button" className="card row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', margin: '4px 0', color: '#fff', font: 'inherit', fontSize: 18 }} aria-expanded={moveOpen} onClick={() => { setMoveMonth((moveDate || date).slice(0, 7)); setMoveOpen(!moveOpen); }}><span>{moveDate ? pretty(moveDate) : 'Pick your moving day'}</span><span aria-hidden="true" style={{ flex: '0 0 auto' }}>{moveOpen ? '▴' : '▾'}</span></button>
-            {moveOpen && <Calendar month={moveMonth} setMonth={setMoveMonth} selected={moveDate || null} ok={(d) => d >= date} onPick={(d) => { setMoveDate(d); setMoveOpen(false); }} note="Pick the day you move. It can be any day on or after delivery." />}
-            <label>Pickup window ({pretty(addDays(date, rentalDays))})</label>
-            <div className="row" style={{ flexWrap: 'wrap' }}>{windowsFor(addDays(date, rentalDays)).map((w: string) => <button key={w} type="button" className="btn ghost sm" style={pickupWin === w ? { background: 'var(--grad)', borderColor: 'transparent' } : {}} onClick={() => setPickupWin(w)}>{w}</button>)}</div>
-            {pkg?.extra_week_price ? <><label>Need longer? Add weeks ({money(pkg.extra_week_price)} each)</label><div className="stepper"><button type="button" onClick={() => setExtraWeeks(Math.max(0, extraWeeks - 1))}>−</button><span>{extraWeeks}</span><button type="button" onClick={() => setExtraWeeks(Math.min(8, extraWeeks + 1))}>+</button></div></> : null}</>}
-          {waitlist && <div className="card"><h3>Join the waitlist</h3><p className="muted">We text the first person on the list when totes open up for your dates.</p><input placeholder="Name" value={contact.name} onChange={(e) => setContact({ ...contact, name: e.target.value })} /><input type="tel" placeholder="Phone" value={contact.phone} onChange={(e) => setContact({ ...contact, phone: e.target.value })} style={{ marginTop: 8 }} /><button className="btn sm" style={{ marginTop: 8 }} disabled={busy} onClick={joinWaitlist}>Text me when it opens</button></div>}
-          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!date || !win || !dateOk(date) || busy} onClick={async () => { if (!moveDate) { setErr('Tell us your moving day so we can time the texts.'); return; } if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
+          <h2>3. Moving details</h2>
+          {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. We text you delivery windows after you book.</p>}
+          <label htmlFor="movedate">When are you moving?</label>
+          <input id="movedate" type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+          <label htmlFor="timing">Anything about timing we should know? (optional)</label>
+          <textarea id="timing" placeholder="Need morning if possible, apartment stairs" value={timing} onChange={(e) => setTiming(e.target.value)} />
+          {pkg?.extra_week_price ? <><label>Need longer than {rentalDays - extraWeeks * 7} days? Add weeks ({money(pkg.extra_week_price)} each)</label><div className="stepper"><button type="button" onClick={() => setExtraWeeks(Math.max(0, extraWeeks - 1))}>−</button><span>{extraWeeks}</span><button type="button" onClick={() => setExtraWeeks(Math.min(8, extraWeeks + 1))}>+</button></div></> : null}
+          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!moveDate || busy} onClick={async () => { if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
         </section>)}
 
         {cat && step === 4 && (<section>
@@ -307,7 +262,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(3)}>Back</button><button className="btn" disabled={!contact.name.trim() || contact.phone.replace(/\D/g, '').length < 10 || !/.+@.+\..+/.test(contact.email)} onClick={() => { setErr(null); setStep(5); }}>Next: review</button></div></div>
         </section>)}
 
-        {cat && step === 5 && quote && pkg && date && (<section>
+        {cat && step === 5 && quote && pkg && (<section>
           <h2>5. Review</h2>
           <div className="card"><table><tbody>
             <tr><td>{pkg.name} · {pkg.tote_count} totes · {rentalDays} days</td><td>{money(quote.subtotal)}</td></tr>
@@ -316,35 +271,42 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             {Number(quote.rush_fee) > 0 && <tr><td>Rush (booked under {s.rush_hours ?? 48} hours out)</td><td>{money(quote.rush_fee)}</td></tr>}
             {Number(quote.tax) > 0 && <tr><td>Michigan sales tax on supplies</td><td>{money(quote.tax)}</td></tr>}
             {Number(quote.discount) > 0 && <tr><td>Code {promo}</td><td>−{money(quote.discount)}</td></tr>}
-            <tr><td><b>Total due today</b></td><td><b>{money(quote.balance_charge_mode === 'booking' ? quote.total : quote.deposit)}</b></td></tr>
-            {quote.balance_charge_mode !== 'booking' && <tr><td>Balance {money(quote.balance)} charged to the same card {quote.balance_charge_mode === 'pickup' ? 'at pickup' : 'on delivery day'}</td><td /></tr>}
+            <tr><td><b>Total rental</b></td><td><b>{money(quote.total)}</b></td></tr>
+            <tr><td>Due today</td><td>{money(0)}</td></tr>
+            <tr><td>Due at pickup</td><td>{money(quote.total)}</td></tr>
           </tbody></table>
-          <p className="muted" style={{ marginTop: 8 }}>Delivery {pretty(date)} {win} · Pickup {pretty(addDays(date, rentalDays))} {pickupWin || win}<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
-          <p className="muted">Pickup is {pretty(addDays(date, rentalDays))}. There is no grace period: if the totes are not ready by then, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
-          <p className="muted">Next you&apos;ll sign the rental terms and pay. We save your card in case totes go missing or the rental runs late, and we text before charging. You get a receipt for every charge.</p>
-          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'Holding your totes…' : 'Continue to sign & pay'}</button></div></div>
+          <p className="muted" style={{ marginTop: 8 }}>Moving day {moveDate ? pretty(moveDate) : ''} · we text you delivery windows · pickup {rentalDays} days after delivery<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
+          <p className="muted">There is no grace period: if the totes are not ready at pickup, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
+          <p>You will not be charged today. Your card is saved at booking so we can bill you when we pick up the totes. We will text you the amount before charging. If you are not home for delivery, a second delivery trip is billed at your zone delivery rate.</p>
+          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'One moment…' : 'Continue'}</button></div></div>
         </section>)}
 
         {step === 6 && hold && (<section>
           <h2>6. Sign the rental agreement</h2>
-          <p className="muted">Rental {hold.rental_number}. Your totes are held for 30 minutes while you finish.</p>
+          <p className="muted">Rental request {hold.rental_number}.</p>
           {terms ? <div className="terms" tabIndex={0} aria-label="Rental terms">{terms.text}</div> : <div className="skel" />}
           <label style={{ textTransform: 'none', fontSize: 16, display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12 }}><input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} /><span>I agree to the rental terms and authorize future charges to my card as described.</span></label>
           {agreed && !signed && <div style={{ marginTop: 12 }}><SignaturePad onSign={sign} busy={busy} /></div>}
-          {signed && <div className="ok">Signed. Loading secure payment…</div>}
+          {signed && <div className="ok">Signed. Loading the secure card form…</div>}
           <div style={{ height: 80 }} />
         </section>)}
 
         {step === 7 && pay && (<section>
-          <h2>7. {pay.kind === 'setup' ? 'Save a card' : `Pay ${money(pay.amount)}`}</h2>
-          <p className="muted">{pay.kind === 'setup' ? 'Nothing due today. Your card is saved for any charges you authorized.' : 'Paid in full today. We save your card in case totes go missing or the rental runs late, and we text before charging. Cards, Apple Pay and Google Pay.'}</p>
+          <h2>7. Save your card</h2>
+          <p className="muted">You will not be charged today. Your card is saved so we can bill you when we pick up the totes. We will text you the amount before charging.</p>
           <div id="payment-element" className="card" style={{ minHeight: 120 }} />
-          <div className="sticky"><div className="inner"><button className="btn" disabled={busy} onClick={submitPayment}>{busy ? 'Processing…' : pay.kind === 'setup' ? 'Save card & book' : `Pay ${money(pay.amount)} & book`}</button></div></div>
+          <div className="sticky"><div className="inner"><button className="btn" disabled={busy} onClick={submitPayment}>{busy ? 'Saving…' : 'Save card & request booking'}</button></div></div>
         </section>)}
 
         {step === 8 && done && (<section>
-          <h2 className="grad-text">You&apos;re booked!</h2>
-          <div className="ok">Rental {done.rental_number}. We texted and emailed your confirmation. Delivery {date ? pretty(date) : ''} {win}.</div>
+          <h2 className="grad-text">Request received!</h2>
+          <div className="ok">Request received! We&apos;ll text you delivery windows within a few hours. Your totes are reserved once you confirm a date with us.</div>
+          {pkg && quote && <div className="card"><table><tbody>
+            <tr><td>{pkg.name} · {pkg.tote_count} totes</td><td /></tr>
+            <tr><td>Moving day</td><td>{moveDate ? pretty(moveDate) : ''}</td></tr>
+            <tr><td>Delivery and pickup · {quote.zone ?? ''}</td><td>{Number(quote.delivery_fee) > 0 ? money(quote.delivery_fee) : 'Free'}</td></tr>
+            <tr><td><b>Total due at pickup</b></td><td><b>{money(quote.total)}</b></td></tr>
+          </tbody></table><p className="muted">Questions? Call or text <a href="sms:+17345378061">{PHONE}</a>.</p></div>}
           <a className="btn" href={`/rental/${done.token}`} target={initial.embed ? '_blank' : undefined} rel="noreferrer">Open my rental page</a>
           <div className="card" style={{ marginTop: 12 }}><h3>Two quick questions (optional)</h3><p className="muted">They help us plan your delivery.</p>
             <label htmlFor="hs">Home type and size</label><select id="hs" value={profile.home_size} onChange={(e) => setProfile({ ...profile, home_size: e.target.value })}><option value="">Pick one</option>{['Studio', '1 bedroom apartment', '2 bedroom apartment', '3+ bedroom apartment', 'Small house', 'Large house', 'Office'].map((h) => <option key={h}>{h}</option>)}</select>
@@ -360,22 +322,4 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 function heardToSource(h: string, fallback: string) {
   const m: Record<string, string> = { Google: 'google_search_organic', Facebook: 'facebook_organic_page', Nextdoor: 'nextdoor', 'Referral / word of mouth': 'referral', 'Saw the truck or trailer': 'truck_trailer_signage', 'Yard sign / flyer': 'yard_sign_flyer', 'Repeat customer': 'repeat_customer' };
   return m[h] ?? fallback;
-}
-
-function Calendar({ month, setMonth, selected, ok, onPick, note = 'Greyed dates are full for your order or not a delivery day.' }: { month: string; setMonth: (m: string) => void; selected: string | null; ok: (d: string) => boolean; onPick: (d: string) => void; note?: string }) {
-  const [y, m] = month.split('-').map(Number);
-  const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
-  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
-  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-  const shift = (n: number) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
-  return (
-    <div className="card">
-      <div className="row" style={{ marginBottom: 8 }}><button type="button" className="btn ghost sm" style={{ flex: '0 0 auto' }} onClick={() => shift(-1)} aria-label="Previous month">‹</button><b style={{ textAlign: 'center', fontSize: 18 }}>{label}</b><button type="button" className="btn ghost sm" style={{ flex: '0 0 auto' }} onClick={() => shift(1)} aria-label="Next month">›</button></div>
-      <div className="cal">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="dow">{d}</div>)}
-        {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
-        {Array.from({ length: days }).map((_, i) => { const d = `${y}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`; const can = ok(d); return <button key={d} type="button" disabled={!can} className={selected === d ? 'sel' : ''} onClick={() => onPick(d)} aria-label={`${d}${can ? '' : ' unavailable'}`}>{i + 1}</button>; })}
-      </div>
-      <p className="muted" style={{ marginTop: 8 }}>{note}</p>
-    </div>
-  );
 }

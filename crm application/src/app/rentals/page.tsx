@@ -22,9 +22,10 @@ export default async function RentalsBoard() {
   await requireStaff();
   const supabase = createClient();
   const since = new Date(Date.now() - 30 * 86400_000).toISOString();
-  const [{ data: rows }, { count: pendingCount }] = await Promise.all([
+  const [{ data: rows }, { count: pendingCount }, { data: requests }] = await Promise.all([
     supabase.from('rentals').select('id,rental_number,status,delivery_address,pickup_address,delivery_date,delivery_window,pickup_date,pickup_window,tote_count,dolly_count,balance_due,card_exp,disputed_at,junk_request_id,customers(name,phone),rental_charges(status)').in('status', ['booked', 'delivered', 'out', 'pickup_scheduled', 'returned', 'inspected', 'closed']).gte('updated_at', since).order('delivery_date'),
     supabase.from('rentals').select('id', { count: 'exact', head: true }).eq('status', 'pending_payment'),
+    supabase.from('rentals').select('id, rental_number, move_date, zone, total, created_at, customers(name, phone), rental_packages(name)').eq('status', 'awaiting_confirmation').order('created_at'),
   ]);
   const all = (rows ?? []) as unknown as Row[];
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Detroit' })).toISOString().slice(0, 10);
@@ -54,6 +55,11 @@ export default async function RentalsBoard() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="panel-label">Rentals</p><h1 className="text-2xl">Tote rentals</h1></div><a className="btn-primary" href="/rent" target="_blank" rel="noreferrer">+ Book for a customer</a></div>
       <RentalsNav active="/rentals" />
+      {(requests ?? []).length > 0 && <section className="card space-y-2" style={{ border: '2px solid #f59e0b' }}>
+        <p className="panel-label">Awaiting date confirmation ({requests!.length}) · text delivery windows, then set the date</p>
+        <table className="w-full text-sm"><tbody>{(requests ?? []).map((q) => { const x = q as unknown as { id: string; rental_number: string; move_date: string | null; zone: string | null; total: number; customers: { name: string; phone: string | null } | null; rental_packages: { name: string } | null }; return (
+          <tr key={x.id} className="border-t"><td className="p-1"><Link className="underline" href={`/rentals/${x.id}`}>{x.rental_number}</Link></td><td className="p-1">{x.customers?.name}</td><td className="p-1">{x.customers?.phone && <a className="underline" href={`sms:${x.customers.phone}`}>{x.customers.phone}</a>}</td><td className="p-1">moving {prettyDate(x.move_date) || '?'}</td><td className="p-1">{x.rental_packages?.name}</td><td className="p-1">{x.zone}</td><td className="p-1 text-right">{money(x.total)} at pickup</td></tr>); })}</tbody></table>
+      </section>}
       <Cluster cols="grid-cols-2 sm:grid-cols-4">
         <Cell label="Out right now" value={String(all.filter((r) => ['delivered', 'out', 'pickup_scheduled'].includes(r.status)).length)} />
         <Cell label="Overdue" value={String(overdue.length)} tone={overdue.length ? 'var(--status-danger)' : undefined} />

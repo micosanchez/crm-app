@@ -56,6 +56,9 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
   const [resched, setResched] = useState({ delivery_date: r.delivery_date, delivery_window: r.delivery_window, pickup_date: r.pickup_date, pickup_window: r.pickup_window ?? '', customer_requested: false, expedited: false });
   const [tpl, setTpl] = useState('on_my_way'); const [custom, setCustom] = useState('');
   const windows = [...(settings?.slot_windows?.weekday ?? []), ...(settings?.slot_windows?.weekend ?? [])];
+  // a request has no date yet: text two windows, then set the one the customer picked
+  const [offer, setOffer] = useState('Hi, this is Mico with Sanchez Junk & Haul Co. For your tote rental, I can deliver [window 1] or [window 2]. Which works for you?');
+  const [conf, setConf] = useState({ delivery_date: '', delivery_window: '' });
 
   return (
     <div className="space-y-4">
@@ -72,6 +75,15 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
       {junk && <p className="badge bg-emerald-50 text-emerald-700">Junk quote requested · <Link href={`/estimates/requests/${junk.id}`} className="underline">request {junk.status}</Link></p>}
       {err && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{err}</p>}{msg && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-700">{msg}</p>}
 
+      {r.status === 'awaiting_confirmation' && <section className="card space-y-2" style={{ border: '2px solid #f59e0b' }}>
+        <p className="panel-label">Request · text delivery windows, then set the date</p>
+        <p className="text-sm">Moving day <b>{prettyDate(r.move_date) || 'not given'}</b> · total due at pickup <b>{money(r.total)}</b>{r.notes_customer ? <> · {r.notes_customer}</> : null}</p>
+        <textarea className="input" rows={2} value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Delivery windows text" />
+        <button className="btn-ghost" disabled={!!busy || /\[window/.test(offer) || !c.phone} onClick={() => run('offer', () => act('send_text', { rental_id: r.id, content: offer }), (res: any) => `Sent: ${res.sent}`)}>Text these windows</button>
+        <div className="grid grid-cols-2 gap-2"><input className="input" type="date" value={conf.delivery_date} onChange={(e) => setConf({ ...conf, delivery_date: e.target.value })} aria-label="Delivery date" /><select className="input" value={conf.delivery_window} onChange={(e) => setConf({ ...conf, delivery_window: e.target.value })} aria-label="Delivery window"><option value="">window</option>{windows.map((w: string) => <option key={w}>{w}</option>)}</select></div>
+        <button className="btn-primary" disabled={!!busy || !conf.delivery_date || !conf.delivery_window} onClick={() => run('confirm', () => act('confirm_date', { rental_id: r.id, ...conf }), () => `Booked. Pickup set ${r.rental_days ?? 14} days after delivery; confirmation text sent.`)}>Confirm date &amp; reserve totes</button>
+      </section>}
+
       <div className="grid gap-4 md:grid-cols-2">
         <section className="card space-y-2">
           <p className="panel-label">Schedule</p>
@@ -87,7 +99,7 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
               <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={!!resched.expedited} disabled={!resched.customer_requested} onChange={(e) => setResched({ ...resched, expedited: e.target.checked })} /> Expedited early pickup, special trip ({money(settings?.expedited_pickup_fee ?? 25)}). Leave off when it fits the normal route.</label>
               <button className="btn-primary col-span-2" disabled={!!busy} onClick={() => run('resched', async () => { const p: any = await act('reschedule', { rental_id: r.id, ...resched, preview: true }); const fee = Number(p?.preview?.total_fee ?? 0); if (!ask(fee > 0 ? `This charges the saved card ${money(fee)} (${p.preview.fees.map((f: any) => f.description).join('; ')}). Save?` : resched.customer_requested ? 'No fee for this change. Save?' : 'Company-side change: no fee, and any pending late weeks are voided. Save?')) return null; return act('reschedule', { rental_id: r.id, ...resched }); }, (res: any) => res ? 'Rescheduled. The customer gets a text with the new window.' : undefined)}>Save new dates</button></div></details>}
           {active && <div className="flex flex-wrap items-center gap-2 text-sm"><span>Extend</span><input className="input w-16" type="number" min={1} value={weeks} onChange={(e) => setWeeks(Number(e.target.value))} /><button className="btn-ghost" disabled={!!busy} onClick={() => run('extend', () => act('extend', { rental_id: r.id, weeks }), (res: any) => res.ok ? `Extended to ${prettyDate(res.pickup_date)}, ${money(res.amount)} charged.` : res.error)}>week(s) · {money((r.rental_packages?.extra_week_price ?? 0) * weeks)}</button></div>}
-          {r.status === 'booked' && <button className="btn-ghost text-red-700" disabled={!!busy} onClick={() => run('cancel', async () => { const p: any = await act('cancel', { rental_id: r.id }); if (!ask(`${p.preview.full_refund ? 'Free cancellation' : `${money(p.preview.kept)} kept per policy`} (${money(p.preview.refund_amount)} back). Cancel ${r.rental_number}?`)) return null; return act('cancel', { rental_id: r.id, confirm: true, reason: 'cancelled by staff' }); }, (res: any) => res ? 'Cancelled.' : undefined)}>Cancel rental</button>}
+          {['booked', 'awaiting_confirmation'].includes(r.status) && <button className="btn-ghost text-red-700" disabled={!!busy} onClick={() => run('cancel', async () => { const p: any = await act('cancel', { rental_id: r.id }); if (!ask(`${p.preview.full_refund ? 'Free cancellation' : `${money(p.preview.kept)} kept per policy`} (${money(p.preview.refund_amount)} back). Cancel ${r.rental_number}?`)) return null; return act('cancel', { rental_id: r.id, confirm: true, reason: 'cancelled by staff' }); }, (res: any) => res ? 'Cancelled.' : undefined)}>Cancel rental</button>}
         </section>
 
         <section className="card space-y-1 text-sm" id="move">

@@ -57,16 +57,6 @@ export async function ensureStripeCustomer(existingId: string | null, c: { name:
   return cust.id;
 }
 
-/** Booking payment (the rental is paid in full up front): also saves the card for later merchant-initiated charges. */
-export function createDepositIntent(a: { cents: number; customer: string; rental_id: string; rental_number: string; receipt_email?: string | null }) {
-  return stripe<{ id: string; client_secret: string }>('/payment_intents', {
-    amount: a.cents, currency: 'usd', customer: a.customer, setup_future_usage: 'off_session',
-    automatic_payment_methods: { enabled: true }, receipt_email: a.receipt_email ?? undefined,
-    description: `Tote rental ${a.rental_number}, paid in full`, statement_descriptor_suffix: 'TOTES',
-    metadata: { rental_id: a.rental_id, rental_number: a.rental_number, charge_type: 'booking' },
-  }, { idempotencyKey: `booking:${a.rental_id}:${a.customer}:${a.cents}` });   // new payer or amount = new intent, not an idempotency error
-}
-
 /** $0 deposit: just save the card. */
 export function createSetupIntent(a: { customer: string; rental_id: string }) {
   return stripe<{ id: string; client_secret: string }>('/setup_intents', { customer: a.customer, usage: 'off_session', automatic_payment_methods: { enabled: true }, metadata: { rental_id: a.rental_id } });
