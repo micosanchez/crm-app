@@ -7,7 +7,7 @@
  */
 export type RentalTemplateKey =
   | 'booking_confirmed' | 'delivery_reminder' | 'on_my_way' | 'delivered' | 'during_rental' | 'pickup_reminder' | 'after_pickup' | 'referral'
-  | 'overdue_1' | 'overdue_3' | 'receipt' | 'payment_failed' | 'card_expiring' | 'abandoned' | 'waitlist_open' | 'reschedule' | 'failed_trip' | 'failed_trip_free';
+  | 'overdue_1' | 'overdue_3' | 'receipt' | 'payment_failed' | 'card_expiring' | 'abandoned' | 'waitlist_open' | 'reschedule' | 'failed_trip' | 'failed_trip_free' | 'request_received';
 
 export interface TemplateDef { label: string; enabled: boolean; kind: 'transactional' | 'promotional'; sms: string; email_subject?: string; email?: string }
 
@@ -16,9 +16,12 @@ export const VARS = ['first_name', 'rental_number', 'totes', 'delivery_date', 'd
 const SIGN = 'Sanchez Junk & Haul Co.';
 
 export const DEFAULT_TEMPLATES: Record<RentalTemplateKey, TemplateDef> = {
-  booking_confirmed: { label: 'Booked (payment succeeded)', enabled: true, kind: 'transactional',
-    sms: `You're booked! {totes} totes arrive {delivery_date} between {delivery_window}. Your rental page: {link} {junk_offer} Reply STOP to opt out.`,
-    email_subject: 'Your tote rental {rental_number} is booked', email: `Hi {first_name},\n\nYou're booked. {totes} totes arrive {delivery_date} during {delivery_window}, and we pick them up {pickup_date}.\n\nEverything about your rental, including your signed agreement and receipts, lives here: {link}\n\nTote renters get $25 off any ${SIGN} junk removal job of $250 or more, booked during the rental or within 7 days after pickup. No code needed, we match it to your rental: {junk_link}\n\nQuestions? Reply to this email or text 734-537-8061.\n\n${SIGN}` },
+  request_received: { label: 'Request received (card saved, no date yet)', enabled: true, kind: 'transactional',
+    sms: `Request received! ${SIGN} will text you delivery windows within a few hours. Your totes are reserved once you confirm a date with us. Nothing is charged until pickup. Reply STOP to opt out.`,
+    email_subject: 'We got your tote rental request ({rental_number})', email: `Hi {first_name},\n\nRequest received! We'll text you delivery windows within a few hours. Your totes are reserved once you confirm a date with us.\n\nYou were not charged today. Your card is saved so we can bill you when we pick up the totes, and we will text you the amount before charging. Total due at pickup: {total}.\n\nYour rental page: {link}\n\nQuestions? Call or text (734) 537-8061.\n\n${SIGN}` },
+  booking_confirmed: { label: 'Date confirmed (totes reserved)', enabled: true, kind: 'transactional',
+    sms: `You're booked! {package}: delivery {delivery_date} between {delivery_window}, pickup {pickup_date}. Total due at pickup: {total}, and we text you before charging. Your rental page: {link} {junk_offer}`,
+    email_subject: 'Your tote rental {rental_number} is booked', email: `Hi {first_name},\n\nYou're booked. {package}: we deliver {delivery_date} between {delivery_window} and pick up {pickup_date}.\n\nTotal due at pickup: {total}. Your card is charged when we pick up the totes, and we text you the amount first.\n\nEverything about your rental, including your signed agreement and receipts, lives here: {link}\n\nTote renters get $25 off any ${SIGN} junk removal job of $250 or more, booked during the rental or within 7 days after pickup. No code needed, we match it to your rental: {junk_link}\n\nQuestions? Call or text (734) 537-8061.\n\n${SIGN}` },
   delivery_reminder: { label: 'Day before delivery (5 pm)', enabled: true, kind: 'transactional', sms: `See you tomorrow {delivery_window}. Please leave a clear spot by the door or garage. Questions? Just reply.` },
   on_my_way: { label: 'On my way', enabled: true, kind: 'transactional', sms: `Hi {first_name}, ${SIGN} here. We're on our way with your totes and should be there shortly.` },
   delivered: { label: 'Delivered', enabled: true, kind: 'transactional', sms: `Your totes are delivered! Pack heavy stuff on the bottom, lids snap shut, and stack them 4 high max. Pickup is {pickup_date}. {link}` },
@@ -38,8 +41,8 @@ export const DEFAULT_TEMPLATES: Record<RentalTemplateKey, TemplateDef> = {
   abandoned: { label: 'Abandoned booking (one text)', enabled: true, kind: 'promotional', sms: `Hi {first_name}, ${SIGN} here. Your tote booking didn't finish. Pick it back up here whenever you're ready: {link}` },
   waitlist_open: { label: 'Waitlist: dates opened', enabled: true, kind: 'transactional', sms: `Hi {first_name}, good news from ${SIGN}: totes just opened up for your dates. Book here before they go: {link}` },
   reschedule: { label: 'Rescheduled', enabled: true, kind: 'transactional', sms: `Hi {first_name}, your tote rental {rental_number} is rescheduled: {window}. Details: {link}` },
-  failed_trip_free: { label: 'Missed delivery, first one (no fee)', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by with your totes but couldn't complete the delivery. No charge this time. Pick a new time here or just reply with one that works: {link}` },
-  failed_trip: { label: 'Failed trip', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by for your totes but couldn't complete the stop. A trip fee applies per your agreement. Pick a new time here: {link}` },
+  failed_trip_free: { label: 'Missed pickup (no fee)', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by for your totes but couldn't pick them up. No charge for the missed trip. Reply with a time that works and we'll come back.` },
+  failed_trip: { label: 'Missed delivery (second trip billed)', enabled: true, kind: 'transactional', sms: `Hi {first_name}, we came by with your totes but no one was home. Per your agreement, the second delivery trip ({fee}) is added to your pickup charge. Reply with a time that works and we'll bring them.` },
 };
 
 export function renderRental(tpl: string, vars: Record<string, string | number | null | undefined>): string {

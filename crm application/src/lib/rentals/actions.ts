@@ -2,7 +2,7 @@
  * One dispatcher for every Rentals write, shared by the staff API (session auth) and the connector ops API
  * (service-key auth). Each action returns the updated record so callers echo what actually happened.
  */
-import { admin, getRental, chargeRental, refundCharge, settle, recordDelivery, recordPickup, chargesReview, extendRental, reschedule, cancelRental, failedTrip, foundItem, evidencePacket, queueMessage, chargeBalance, logEvent, maybeClose, rentalLink, first } from './ops';
+import { admin, getRental, chargeRental, refundCharge, settle, recordDelivery, recordPickup, chargesReview, extendRental, reschedule, cancelRental, failedTrip, foundItem, evidencePacket, queueMessage, chargeBalance, logEvent, maybeClose, rentalLink, first, confirmDate } from './ops';
 import { DEFAULT_TEMPLATES, mergedTemplates, renderRental, type RentalTemplateKey } from './templates';
 import { sendText } from '@/lib/quo';
 import { createHostedPaymentLink } from './stripe';
@@ -29,6 +29,7 @@ export async function runAction(action: string, a: Record<string, any>, actor: A
       await db.from('rental_charges').insert({ rental_id: id, type: a.type ?? 'adjustment', amount: Number(a.amount), description: a.description ?? 'Adjustment', status: 'pending', created_by: actor.by, photo_urls: a.photo_urls ?? [] });
       return chargesReview(id!, db);
     }
+    case 'confirm_date': return confirmDate(id!, { delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_window: a.pickup_window, by: actor.by }, db);
     case 'record_delivery': return recordDelivery(id!, { tags: a.tags ?? [], photo_urls: a.photo_urls, created_by: actor.by }, db);
     case 'record_pickup': return recordPickup(id!, { items: a.items ?? [], missing_lids: Number(a.missing_lids ?? 0), created_by: actor.by }, db);
     case 'extend': return extendRental(id!, Number(a.weeks ?? 1), db);

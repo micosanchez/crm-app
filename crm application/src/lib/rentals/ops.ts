@@ -245,6 +245,12 @@ export async function settle(rentalId: string, db = admin()) {
   // pending fee rows are covered by the settlement; mark them so they stop counting as collected elsewhere
   const feeIds = (pend ?? []).filter((c) => c.type !== 'balance').map((c) => c.id);
   if (remaining > 0) {
+    const c = r.customers;
+    const lines = [`rental ${money(Number(r.total))}`, ...(pend ?? []).filter((x) => x.type !== 'balance').map((x) => `${x.description ?? x.type} ${money(Number(x.amount))}`), ...(Number(r.deposit_applied ?? 0) > 0 ? [`deposit applied -${money(Number(r.deposit_applied))}`] : [])];
+    if (c?.phone) {
+      const notice = await sendText({ to: c.phone, content: `Hi ${first(c.name)}, Sanchez Junk & Haul Co. here. Your totes are picked up. Total for rental ${r.rental_number}: ${money(remaining)} (${lines.join(', ')}). We're charging your ${r.card_brand ?? 'card'} ending ${r.card_last4 ?? ''} now; a receipt follows.`, event: 'sms:rental_pickup_total', entityKind: 'rental', entityId: r.id });
+      await logEvent(r.id, 'sms:pickup_total', { ok: notice.ok, amount: remaining, error: notice.error ?? null }, db);
+    }
     const { data: row, error } = await db.from('rental_charges').insert({ rental_id: r.id, type: 'balance', amount: remaining, description: `Settlement after check-in${feeIds.length ? ` (${feeIds.length} line${feeIds.length === 1 ? '' : 's'})` : ''}` , status: 'pending' }).select('id').single();
     if (error) throw new Error(error.message);
     for (const c of pend ?? []) await db.from('rental_charges').update({ status: c.type === 'balance' ? 'void' : 'succeeded', description: `${c.description ?? c.type} (in settlement)` }).eq('id', c.id);
@@ -403,8 +409,8 @@ export async function extendRental(rentalId: string, weeks: number, db = admin()
   const { data: fit } = await db.rpc('rental_can_fit', { p_start: from.toISOString().slice(0, 10), p_end: end.toISOString().slice(0, 10), p_totes: r.tote_count, p_dollies: r.dolly_count });
   if (!fit) return { ok: false, error: 'Those extra days are not available. Call or text us and we will work something out.' };
   const amount = Math.round(price * weeks * 100) / 100;
-  const res = await chargeRental(r.id, { type: 'extension', amount, description: `Extension: ${weeks} week${weeks === 1 ? '' : 's'}` }, db);
-  if (!res.ok) return { ok: false, error: 'requires_action' in res && res.requires_action ? 'Your bank needs to confirm this charge. Check your texts for the secure link, then we will extend the dates.' : `The card on file was declined (${(res as { error?: string }).error ?? 'declined'}).` };
+  await db.from('rental_charges').insert({ rental_id: r.id, type: 'extension', amount, description: `Extension: ${weeks} week${weeks === 1 ? '' : 's'}`, status: 'pending' });   // billed with the pickup charge
+  await db.rpc('rental_recompute_balance', { p_rental: r.id });
   await db.from('rentals').update({ pickup_date: np, extra_weeks: r.extra_weeks + weeks, total: Number(r.total) }).eq('id', r.id);
   const { data: lateRows } = await db.from('rental_charges').select('id, description').eq('rental_id', r.id).eq('type', 'late_fee').eq('status', 'pending').order('created_at').limit(weeks);
   for (const l of lateRows ?? []) await db.from('rental_charges').update({ status: 'void', description: `${l.description ?? 'Late week'} (covered by extension)` }).eq('id', l.id);
@@ -466,12 +472,13 @@ export async function reschedule(rentalId: string, a: { delivery_date?: string; 
 export async function cancelRental(rentalId: string, a: { reason?: string; by?: string; preview?: boolean }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
-  const hoursOut = hoursBeforeDelivery(r);
+  const hoursOut = r.delivery_date ? hoursBeforeDelivery(r) : Infinity;   // a request has no delivery date yet
   const delivered = !!r.actual_delivered_at || ['delivered', 'out', 'pickup_scheduled'].includes(r.status);
   const { data: paid } = await db.from('rental_charges').select('*').eq('rental_id', r.id).eq('status', 'succeeded').in('type', ['deposit', 'balance', 'rental_payment']);
   const paidTotal = (paid ?? []).reduce((sum, c) => sum + Number(c.amount), 0);
   const pkgPrice = Number(r.subtotal); // package price including any extra weeks
-  const fullRefund = !delivered && hoursOut >= s.cancel_full_refund_hours;
+  const request = ['pending_payment', 'awaiting_confirmation'].includes(r.status);   // no date confirmed yet: free
+  const fullRefund = request || (!delivered && hoursOut >= s.cancel_full_refund_hours);
   const kept = delivered ? Math.round(pkgPrice * (Number(s.cancel_after_delivery_pct ?? 50) / 100) * 100) / 100 : fullRefund ? 0 : Number(s.cancel_fee_inside_window ?? 0);
   const refundable = Math.max(Math.round((paidTotal - kept) * 100) / 100, 0);
   const policy = `Free with ${s.cancel_full_refund_hours}+ hours' notice before the delivery window; ${money(s.cancel_fee_inside_window ?? 0)} fee with less notice; after delivery ${Number(s.cancel_after_delivery_pct ?? 50)}% of the package price is kept.`;
@@ -486,6 +493,9 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
     await refundCharge(c.id, amt, `Cancellation (${fullRefund ? 'full refund' : `${money(kept)} kept per policy`})`, db).catch((e: Error) => logEvent(r.id, 'refund:failed', { charge_id: c.id, error: e.message }, db));
     left = Math.round((left - amt) * 100) / 100;
   }
+  // pay at pickup: little or nothing is paid up front, so the fee kept per policy is charged to the saved card
+  const owe = Math.round((kept - paidTotal) * 100) / 100;
+  if (owe > 0 && r.stripe_payment_method_id) await chargeRental(r.id, { type: 'adjustment', amount: owe, description: `Cancellation fee per policy (${delivered ? 'after delivery' : `under ${s.cancel_full_refund_hours} hours' notice`})` }, db).catch((e: Error) => logEvent(r.id, 'cancel_fee:failed', { error: e.message }, db));
   const { data: items } = await db.from('rental_items').select('asset_id').eq('rental_id', r.id).is('checked_in_at', null);
   for (const it of items ?? []) await db.from('rental_assets').update({ status: 'available' }).eq('id', it.asset_id);
   await db.from('rentals').update({ status: 'cancelled', notes_internal: [r.notes_internal, `Cancelled ${todayDetroit()}: ${a.reason ?? ''} (kept ${money(kept)}, refunded ${money(refundable)})`].filter(Boolean).join('\n') }).eq('id', r.id);
@@ -495,19 +505,15 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
 }
 export async function failedTrip(rentalId: string, a: { kind: 'delivery' | 'pickup'; photo_urls?: string[]; note?: string; by?: string }, db = admin()) {
   const r = await getRental(rentalId, db);
-  const s = await getSettings(db);
-  // terms: the first missed delivery is retried free; a second one, and any missed pickup, costs the trip fee
-  let free = false;
-  if (a.kind === 'delivery') {
-    const { count } = await db.from('rental_events').select('id', { count: 'exact', head: true }).eq('rental_id', r.id).eq('event', 'failed_trip').contains('detail', { kind: 'delivery' });
-    free = (count ?? 0) === 0;
-  }
-  await logEvent(r.id, 'failed_trip', { ...a, free }, db);
-  let charge: unknown = null;
-  if (!free && s.failed_trip_fee && Number(s.failed_trip_fee) > 0) charge = await chargeRental(r.id, { type: 'failed_trip', amount: Number(s.failed_trip_fee), description: `Failed ${a.kind} trip: ${a.note ?? 'no one home / totes not ready'}`, photo_urls: a.photo_urls }, db).catch((e: Error) => ({ ok: false, error: e.message }));
-  await queueMessage(r, free ? 'failed_trip_free' : 'failed_trip', {}, { dedupe: `${r.id}:failed_trip:${Date.now()}` }, db);
-  return { ok: true, charge, free };
+  // terms: every missed delivery adds a second trip at the zone delivery rate to the pickup charge; a missed pickup is rescheduled with no fee
+  const fee = a.kind === 'delivery' ? Number(r.delivery_fee) : 0;
+  await logEvent(r.id, 'failed_trip', { ...a, fee }, db);
+  if (fee > 0) await db.from('rental_charges').insert({ rental_id: r.id, type: 'failed_trip', amount: fee, description: `Second delivery trip (${r.zone ?? 'zone'} rate): ${a.note ?? 'no one home'}`, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.by ?? null });
+  await db.rpc('rental_recompute_balance', { p_rental: r.id });
+  await queueMessage(r, fee > 0 ? 'failed_trip' : 'failed_trip_free', { fee: money(fee) }, { dedupe: `${r.id}:failed_trip:${Date.now()}` }, db);
+  return { ok: true, fee, free: fee === 0 };
 }
+
 export async function evidencePacket(rentalId: string, db = admin()) {
   const r = await getRental(rentalId, db);
   const [{ data: agreement }, { data: items }, { data: charges }, { data: events }, { data: msgs }] = await Promise.all([
@@ -567,12 +573,11 @@ export async function runRentalCron(db = admin()) {
   let retried = 0;
   for (const c of retries ?? []) { try { await attemptCharge(await getRental(c.rental_id, db), c.id, db); retried++; } catch { /* keep going */ } }
   out.retried = retried;
-  // 5. balance at pickup mode
+  // 5. requests nobody confirmed in 7 days expire; nothing was ever charged on them
+  const { data: stale } = await db.from('rentals').update({ status: 'expired' }).eq('status', 'awaiting_confirmation').lt('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).select('id');
+  for (const x of stale ?? []) await logEvent(x.id, 'expired', { reason: 'no date confirmed within 7 days' }, db);
+  out.requests_expired = stale?.length ?? 0;
   const s = await getSettings(db);
-  if (s.balance_charge_mode === 'pickup') {
-    const { data: due } = await db.from('rentals').select('id').in('status', ['delivered', 'out', 'pickup_scheduled']).lte('pickup_date', today).gt('balance_due', 0);
-    for (const r of due ?? []) await chargeBalance(r.id, db).catch(() => {});
-  }
   // 6. waitlist: text the first person whose dates now fit
   const { data: wl } = await db.from('rental_waitlist').select('*').is('notified_at', null).gte('start_date', today).order('created_at').limit(20);
   let notified = 0;
@@ -597,33 +602,21 @@ export async function runRentalCron(db = admin()) {
   return out;
 }
 
-/* ---------------- booking confirmation ---------------- */
+/* ---------------- booking request + date confirmation ---------------- */
 /**
- * Turn a paid hold into a booking and run everything that follows. Both the browser (confirm route) and the Stripe webhook call this,
- * so a customer who closes the tab right after paying still gets booked; whichever arrives first does the work, the other gets `already`.
- * A hold that lapsed while the customer was paying is re-booked when the totes still fit; otherwise the owner is told to refund or reschedule.
+ * Card saved at checkout: the checkout becomes a REQUEST ('awaiting_confirmation'). Nothing is charged and no totes are reserved;
+ * Mico texts delivery windows and sets the date with confirmDate(). Both the browser (confirm route) and the Stripe webhook call this;
+ * the status guard makes exactly one of them do the work. A checkout auto-cancelled after 30 minutes without a card is revived.
  */
 export async function confirmBooking(rentalId: string, intent: { id: string; kind: 'payment' | 'setup'; payment_method: string; customer?: string | null }, ctx: { ip?: string | null; user_agent?: string | null } = {}, db = admin()): Promise<{ ok: boolean; already?: boolean; error?: string; rental: Rental }> {
   const r = await getRental(rentalId, db);
   if (r.status !== 'pending_payment' && !(r.status === 'cancelled' && /Hold expired/.test(r.notes_internal ?? ''))) return { ok: r.status !== 'cancelled', already: true, rental: r };
-  if (r.status === 'cancelled') {
-    const s = await getSettings(db);
-    const end = new Date(`${r.pickup_date}T12:00:00Z`); end.setUTCDate(end.getUTCDate() + Number(s.turnaround_days ?? 0));
-    const { data: fit } = await db.rpc('rental_can_fit', { p_start: r.delivery_date, p_end: end.toISOString().slice(0, 10), p_totes: r.tote_count, p_dollies: r.dolly_count });
-    if (!fit) {
-      await sendNotification({ event: 'rental_paid_after_expiry', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `paid_after_expiry:${r.id}`, subject: `PAID but dates filled: ${r.rental_number} ${r.customers?.name ?? ''}`,
-        text: `${r.customers?.name ?? 'A customer'} (${r.customers?.phone ?? ''}) paid for ${r.rental_number} after the 30-minute hold lapsed, and the totes are no longer free for ${r.delivery_date}. Call them to reschedule, or refund the payment (${intent.id}) in Stripe.\n${APP_URL}/rentals/${r.id}` });
-      return { ok: false, error: 'We received your payment, but those dates just filled up. We will call you shortly to reschedule or refund you.', rental: r };
-    }
-  }
   const ci = await cardInfo(intent.payment_method);
-  const dep = Number(r.deposit_amount);
-  // the status guard makes this the single winner when the browser and the webhook arrive together
-  const { data: won } = await db.from('rentals').update({ status: 'booked', deposit_status: dep > 0 ? 'held' : 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id).eq('status', r.status).select('id');
+  const { data: won } = await db.from('rentals').update({ status: 'awaiting_confirmation', deposit_status: 'none', stripe_payment_method_id: ci.payment_method_id, card_brand: ci.brand, card_last4: ci.last4, card_exp: ci.exp, stripe_customer_id: intent.customer ?? r.stripe_customer_id }).eq('id', r.id).eq('status', r.status).select('id');
   if (!won?.length) return { ok: true, already: true, rental: await getRental(r.id, db) };
-  if (intent.kind === 'payment') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);
-  await logEvent(r.id, 'booked', { intent: intent.id, deposit: dep, card: `${ci.brand} ${ci.last4}`, rebooked_after_expiry: r.status === 'cancelled' }, db);
-  // Meta CAPI Purchase. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number), so Meta keeps one.
+  if (intent.kind === 'payment') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);   // checkouts started before the redesign
+  await logEvent(r.id, 'requested', { intent: intent.id, card: `${ci.brand} ${ci.last4}` }, db);
+  // Meta CAPI Purchase: the request is the conversion. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number).
   { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
     await sendMetaEvent({ name: 'Purchase', event_id: r.rental_number, source_url: 'https://sanchezhaulco.com/tote-rental', custom: { value: Number(r.total), currency: 'USD', content_name: 'tote_rental', content_type: 'product', order_id: r.rental_number },
       user: { email: c.email, phone: c.phone, first_name: fn, last_name: ln.join(' '), state: 'MI', zip: (r.delivery_address.match(/\b\d{5}\b/g) ?? []).pop(), ip: ctx.ip ?? tag('ip'), user_agent: ctx.user_agent ?? null, fbp: tag('fbp'), fbc: tag('fbc'), fbclid: tag('fbclid') } }); }
@@ -635,14 +628,32 @@ export async function confirmBooking(rentalId: string, intent: { id: string; kin
     if (er) { await db.from('rentals').update({ junk_request_id: er.id }).eq('id', r.id); await db.from('lead_events').insert({ type: 'quote_form', rental_id: r.id, customer_id: c.id, detail: { source: 'checkout_yes', estimate_request_id: er.id } }); }
   }
   const fresh = await getRental(r.id, db);
-  await queueMessage(fresh, 'booking_confirmed', {}, { email: true }, db);
-  await scheduleLifecycle(fresh, db);
+  await queueMessage(fresh, 'request_received', { total: money(Number(fresh.total)) }, { email: true }, db);
+  const { data: lines } = await db.from('rental_addon_lines').select('qty, rental_addons(name)').eq('rental_id', r.id);
+  const gear = (lines ?? []).map((l) => `${l.qty} × ${(l.rental_addons as unknown as { name: string }).name}`);
+  await sendNotification({ event: 'rental_requested', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote request ${fresh.rental_number}: ${fresh.customers?.name} (text delivery windows)`,
+    text: `${fresh.customers?.name} ${fresh.customers?.phone ?? ''}\n${fresh.tote_count} totes${gear.length ? ` + ${gear.join(', ')}` : ''} · ${fresh.zone ?? ''} · due at pickup ${money(Number(fresh.total))}\nMoving day: ${fresh.move_date ?? '?'}\n${fresh.notes_customer ?? ''}\n${fresh.delivery_address}\n\nText them two delivery windows, then set the date: ${APP_URL}/rentals/${fresh.id}` });
+  return { ok: true, rental: fresh };
+}
+
+/** Mico sets the delivery date the customer picked: totes are reserved now, pickup is delivery + the rental days, the customer gets the confirmation. */
+export async function confirmDate(rentalId: string, a: { delivery_date: string; delivery_window: string; pickup_window?: string | null; by?: string | null }, db = admin()) {
+  const r = await getRental(rentalId, db);
+  if (r.status !== 'awaiting_confirmation') throw new Error(`Rental is ${r.status}; only a request awaiting a date can be confirmed.`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(a.delivery_date ?? '') || !a.delivery_window) throw new Error('Pick a delivery date and window.');
   const s = await getSettings(db);
-  if (s.balance_charge_mode === 'booking') await chargeBalance(r.id, db).catch(() => {});
-  // items bought for this booking (supplies and on-demand gear) so the owner can shop before delivery day
-  const { data: lines } = await db.from('rental_addon_lines').select('qty, rental_addons(name, buy_on_demand)').eq('rental_id', r.id);
-  const toBuy = (lines ?? []).filter((l) => (l.rental_addons as unknown as { buy_on_demand?: boolean } | null)?.buy_on_demand).map((l) => `${l.qty} × ${(l.rental_addons as unknown as { name: string }).name}`);
-  await sendNotification({ event: 'rental_booked', to: process.env.NOTIFY_EMAIL ?? '', subject: `Tote rental booked: ${fresh.rental_number} ${fresh.customers?.name}${(fresh.lead_score ?? 0) >= 7 ? ' (HOT junk lead, text within the hour)' : ''}`, text: `${fresh.tote_count} totes · ${fresh.zone ?? ''} · delivery ${fresh.delivery_date} ${fresh.delivery_window} · pickup ${fresh.pickup_date}\n${fresh.delivery_address}\nMoving ${fresh.move_date ?? '?'} · junk: ${fresh.junk_interest ?? '?'} · lead score ${fresh.lead_score ?? 0}/10 · total ${money(Number(fresh.total))}${toBuy.length ? `\nBUY BEFORE DELIVERY (${fresh.delivery_date}): ${toBuy.join(', ')}` : ''}\n${APP_URL}/rentals/${fresh.id}` });
+  const days = Number(r.rental_days ?? 14);
+  const plus = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const pickup = plus(a.delivery_date, days);
+  const { data: fit } = await db.rpc('rental_can_fit', { p_start: a.delivery_date, p_end: plus(pickup, Number(s.turnaround_days ?? 0)), p_totes: r.tote_count, p_dollies: r.dolly_count });
+  if (!fit) throw new Error(`Not enough free totes from ${fmtDate(a.delivery_date)} to ${fmtDate(pickup)}. Offer other dates.`);
+  const { data: won } = await db.from('rentals').update({ status: 'booked', delivery_date: a.delivery_date, delivery_window: a.delivery_window, pickup_date: pickup, pickup_window: a.pickup_window || a.delivery_window }).eq('id', r.id).eq('status', 'awaiting_confirmation').select('id');
+  if (!won?.length) throw new Error('This request was already confirmed.');
+  await logEvent(r.id, 'date_confirmed', { delivery_date: a.delivery_date, window: a.delivery_window, pickup_date: pickup, by: a.by ?? null }, db);
+  const fresh = await getRental(r.id, db);
+  const { data: pkg } = await db.from('rental_packages').select('name').eq('id', r.package_id).maybeSingle();
+  await queueMessage(fresh, 'booking_confirmed', { package: pkg?.name ?? `${fresh.tote_count} totes`, total: money(Number(fresh.total)) }, { email: true }, db);
+  await scheduleLifecycle(fresh, db);
   return { ok: true, rental: fresh };
 }
 
