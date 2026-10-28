@@ -188,7 +188,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   return (
     <div className="tote">
       <style dangerouslySetInnerHTML={{ __html: TOTE_CSS }} />
-      {initial.embed && <style>{`html,body{height:auto!important;min-height:0!important;background:#2a0712!important}.tote{min-height:0}.tote .wrap{padding-bottom:24px}.tote .sticky{position:static;padding:12px 0;background:none;border:0;backdrop-filter:none}`}</style>}
+      {/* embed: the layout's <main> padding sat outside the measured .tote, so the iframe was ~88px short and scrolled inside itself, trapping the thumb; no padding + no inner scroll */}
+      {initial.embed && <style>{`html,body{height:auto!important;min-height:0!important;overflow:hidden!important;background:#2a0712!important}main{padding-top:0!important;padding-bottom:0!important}.tote{min-height:0}.tote .wrap{padding-bottom:24px}.tote .sticky{position:static;padding:12px 0;background:none;border:0;backdrop-filter:none}`}</style>}
       <div className="wrap">
         {!initial.embed && (<header style={{ marginBottom: 8 }}><p className="pill">Sanchez Junk &amp; Haul Co.</p><h1 className="grad-text">Rent moving totes</h1><p className="muted">Delivered to your door. Picked up when you&apos;re done. {cat?.stripe.test_mode ? <span className="pill">test mode</span> : null}</p></header>)}
         <div className="progress" aria-label={`Step ${step} of 8: ${steps[step - 1]}`}>{steps.map((_, i) => <i key={i} className={i < step ? 'on' : ''} />)}</div>
