@@ -1,6 +1,6 @@
 -- 0063: owner 2026-10-29.
--- 1. Customers pick a preferred delivery date (a calendar on the booking page). It is a request: Mico still confirms the date
---    and time window by text, so delivery_date stays empty until confirmDate() and nothing is reserved.
+-- 1. rentals.preferred_delivery_date: added for a delivery-date picker the owner reversed the same day (customers pick only their
+--    moving day; Mico schedules drop-off by text). The column is unused.
 -- 2. A hidden $1 "Test booking" package for running a real booking end to end on the owner's card. It never shows on the public
 --    package list (the catalog route only returns it for /rent?package=<id>), has no delivery fee, and rentals made with it are
 --    is_test: no Meta Purchase (pixel or CAPI) and left out of rental_report, rental_revenue and weekly_scorecard.

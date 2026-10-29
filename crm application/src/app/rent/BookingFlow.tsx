@@ -50,7 +50,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [moreAddons, setMoreAddons] = useState(false);
   const [moveDate, setMoveDate] = useState(initial.date ?? '');   // ?date= from the landing page now means moving day
   const [timing, setTiming] = useState('');
-  const [deliverDate, setDeliverDate] = useState('');   // the customer's pick; Mico confirms it (and the time window) by text
+  const [ios, setIos] = useState(false);   // iOS shows an empty date field as a blank box (Android/desktop show mm/dd/yyyy)
+  useEffect(() => setIos(/iPhone|iPad|iPod/.test(navigator.userAgent)), []);
   const [profile, setProfile] = useState({ home_size: '', move_reason: '', saved: false });
   const [addr, setAddr] = useState('');
   const [pickupDiff, setPickupDiff] = useState(false);
@@ -108,8 +109,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const pkg = cat?.packages.find((p) => p.id === pkgId) ?? null;
   const s = cat?.settings ?? {};
   const rentalDays = (duration === 7 && pkg?.week_price != null ? 7 : (pkg?.rental_days_included ?? 14)) + extraWeeks * 7;
-  const plusDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
-  const tomorrow = plusDays(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }), 1);
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
   async function getQuote() {
     setErr(null); setBusy(true);
     const r = await fetch('/api/public/rentals/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : undefined, promo_code: promo || undefined }) }).then((x) => x.json() as Promise<Quote>);
@@ -125,7 +125,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     setErr(null); setBusy(true);
     const body = { package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : null, promo_code: promo || null,
       name: contact.name, phone: contact.phone, email: contact.email, lead_source: contact.heard ? heardToSource(contact.heard, leadSource) : leadSource,
-      notes_customer: [timing.trim() && `Timing: ${timing.trim()}`, contact.notes.trim()].filter(Boolean).join('\n'), move_date: moveDate || null, preferred_delivery_date: deliverDate || null, resume: initial.resume, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
+      notes_customer: [timing.trim() && `Timing: ${timing.trim()}`, contact.notes.trim()].filter(Boolean).join('\n'), move_date: moveDate || null, resume: initial.resume, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
     const r = await fetch('/api/public/rentals/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
     setBusy(false);
     if (r.error) { setErr(r.error); return; }
@@ -158,20 +158,30 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   useEffect(() => {
     if (step !== 7 || !pay) return;
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const mount = () => {
       const w = window as unknown as { Stripe?: (k: string) => any }; // eslint-disable-line @typescript-eslint/no-explicit-any
       if (!w.Stripe || cancelled) return;
       const stripe = w.Stripe(pay.publishable_key);
       const elements = stripe.elements({ clientSecret: pay.client_secret, appearance: { theme: 'night', variables: { colorPrimary: '#c81d3c', fontFamily: 'Barlow Condensed, system-ui, sans-serif', borderRadius: '10px' } } });
-      const el = elements.create('payment', { layout: 'tabs' });
-      el.on('ready', () => setCardReady(true));
-      el.on('loaderror', () => setErr(`The card form didn't load. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`));
-      el.mount('#payment-element');
+      let ready = false;
+      const make = (retry: boolean) => {
+        const el = elements.create('payment', { layout: 'tabs' });
+        el.on('ready', () => { ready = true; setCardReady(true); });
+        el.on('loaderror', () => setErr(`The card form didn't load. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`));
+        el.mount('#payment-element');
+        // Stripe sometimes sits on its loader without a loaderror: remount once, then tell the customer instead of a dead button
+        timer = setTimeout(() => {
+          if (ready || cancelled) return;
+          if (retry) { el.destroy(); make(false); } else setErr(`The card form is taking too long. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`);
+        }, 15000);
+      };
+      make(true);
       stripeRef.current = { stripe, elements };
     };
     if ((window as unknown as { Stripe?: unknown }).Stripe) mount();
     else { const sc = document.createElement('script'); sc.src = 'https://js.stripe.com/v3/'; sc.onload = mount; sc.onerror = () => setErr(`The card form didn't load. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`); document.head.appendChild(sc); }
-    return () => { cancelled = true; };
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [step, pay]);
 
   async function submitPayment() {
@@ -253,14 +263,15 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <h2>3. Moving details</h2>
           {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. We text you delivery windows after you book.</p>}
           <label htmlFor="movedate">When are you moving?</label>
-          <input id="movedate" type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
-          <label htmlFor="deliverdate">When do you want the totes delivered?</label>
-          <input id="deliverdate" type="date" min={tomorrow} value={deliverDate} onChange={(e) => setDeliverDate(e.target.value)} />
-          {deliverDate && <p className="muted">Delivery {pretty(deliverDate)}, pickup {pretty(plusDays(deliverDate, rentalDays))}. We text you to confirm the date and a time window.</p>}
+          <div style={{ position: 'relative' }}>
+            <input id="movedate" type="date" min={today} value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+            {ios && !moveDate && <span aria-hidden style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none', color: 'var(--silver)' }}>📅 Tap to pick your moving day</span>}
+          </div>
+          <p className="muted">We text you to schedule delivery and pickup around your move.</p>
           <label htmlFor="timing">Anything about timing we should know? (optional)</label>
           <textarea id="timing" placeholder="Need morning if possible, apartment stairs" value={timing} onChange={(e) => setTiming(e.target.value)} />
           {pkg?.extra_week_price ? <><label>Need longer than {rentalDays - extraWeeks * 7} days? Add weeks ({money(pkg.extra_week_price)} each)</label><div className="stepper"><button type="button" onClick={() => setExtraWeeks(Math.max(0, extraWeeks - 1))}>−</button><span>{extraWeeks}</span><button type="button" onClick={() => setExtraWeeks(Math.min(8, extraWeeks + 1))}>+</button></div></> : null}
-          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!moveDate || !deliverDate || busy} onClick={async () => { if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
+          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!moveDate || busy} onClick={async () => { if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
         </section>)}
 
         {cat && step === 4 && (<section>
@@ -295,7 +306,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             <tr><td>Due today</td><td>{money(0)}</td></tr>
             <tr><td>Due at pickup</td><td>{money(quote.total)}</td></tr>
           </tbody></table>
-          <p className="muted" style={{ marginTop: 8 }}>Delivery {deliverDate ? pretty(deliverDate) : ''} · pickup {deliverDate ? pretty(plusDays(deliverDate, rentalDays)) : `${rentalDays} days after delivery`} · we text you to confirm<br />Moving day {moveDate ? pretty(moveDate) : ''}<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
+          <p className="muted" style={{ marginTop: 8 }}>Moving day {moveDate ? pretty(moveDate) : ''} · we text you to schedule delivery · pickup {rentalDays} days after delivery<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
           <p className="muted">There is no grace period: if the totes are not ready at pickup, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
           <p>You will not be charged today. Your card is saved at booking so we can bill you when we pick up the totes. We will text you the amount before charging. If you are not home for delivery, a second delivery trip is billed at your zone delivery rate.</p>
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'One moment…' : 'Continue'}</button></div></div>
@@ -323,8 +334,6 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <div className="ok">Request received! We&apos;ll text you delivery windows within a few hours. Your totes are reserved once you confirm a date with us.</div>
           {pkg && quote && <div className="card"><table><tbody>
             <tr><td>{pkg.name} · {pkg.tote_count} totes</td><td /></tr>
-            <tr><td>Delivery</td><td>{deliverDate ? pretty(deliverDate) : ''} (we text you to confirm)</td></tr>
-            <tr><td>Pickup</td><td>{deliverDate ? pretty(plusDays(deliverDate, rentalDays)) : ''}</td></tr>
             <tr><td>Moving day</td><td>{moveDate ? pretty(moveDate) : ''}</td></tr>
             <tr><td>Delivery and pickup · {quote.zone ?? ''}</td><td>{Number(quote.delivery_fee) > 0 ? money(quote.delivery_fee) : 'Free'}</td></tr>
             <tr><td><b>Total due at pickup</b></td><td><b>{money(quote.total)}</b></td></tr>

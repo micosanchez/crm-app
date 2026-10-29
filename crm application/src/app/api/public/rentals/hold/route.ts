@@ -39,8 +39,7 @@ export async function POST(req: NextRequest) {
   if (d.rental_id) {
     // the hidden $1 test package marks the rental as a test: no Meta Purchase, left out of rental reports
     const { data: pk } = b.package_id ? await admin.from('rental_packages').select('is_test').eq('id', String(b.package_id)).maybeSingle() : { data: null };
-    const pref = typeof b.preferred_delivery_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.preferred_delivery_date) ? b.preferred_delivery_date : null;
-    await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}${fb}`, is_test: !!pk?.is_test, preferred_delivery_date: pref }).eq('id', d.rental_id);
+    await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}${fb}`, is_test: !!pk?.is_test }).eq('id', d.rental_id);
   }
   return NextResponse.json(data, { headers: CORS });
 }
