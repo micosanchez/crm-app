@@ -50,8 +50,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [moreAddons, setMoreAddons] = useState(false);
   const [moveDate, setMoveDate] = useState(initial.date ?? '');   // ?date= from the landing page now means moving day
   const [timing, setTiming] = useState('');
-  const [ios, setIos] = useState(false);   // iOS shows an empty date field as a blank box (Android/desktop show mm/dd/yyyy)
-  useEffect(() => setIos(/iPhone|iPad|iPod/.test(navigator.userAgent)), []);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveMonth, setMoveMonth] = useState('');
   const [profile, setProfile] = useState({ home_size: '', move_reason: '', saved: false });
   const [addr, setAddr] = useState('');
   const [pickupDiff, setPickupDiff] = useState(false);
@@ -261,12 +261,10 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 
         {cat && step === 3 && (<section>
           <h2>3. Moving details</h2>
-          {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. We text you delivery windows after you book.</p>}
+          {quote?.delivery_geo && <p className="muted">Delivering to {addr}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. We text you delivery windows after you book.</p>}
           <label htmlFor="movedate">When are you moving?</label>
-          <div style={{ position: 'relative' }}>
-            <input id="movedate" type="date" min={today} value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
-            {ios && !moveDate && <span aria-hidden style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none', color: 'var(--silver)' }}>📅 Tap to pick your moving day</span>}
-          </div>
+          <button id="movedate" type="button" className="card row" style={{ width: '100%', textAlign: 'left', cursor: 'pointer', margin: '4px 0', color: '#fff', font: 'inherit', fontSize: 18 }} aria-expanded={moveOpen} onClick={() => { setMoveMonth((moveDate || today).slice(0, 7)); setMoveOpen(!moveOpen); }}><span>📅 {moveDate ? pretty(moveDate) : 'Pick your moving day'}</span><span aria-hidden="true" style={{ flex: '0 0 auto' }}>{moveOpen ? '▴' : '▾'}</span></button>
+          {moveOpen && <Calendar month={moveMonth} setMonth={setMoveMonth} selected={moveDate || null} ok={(d) => d >= today} onPick={(d) => { setMoveDate(d); setMoveOpen(false); }} />}
           <p className="muted">We text you to schedule delivery and pickup around your move.</p>
           <label htmlFor="timing">Anything about timing we should know? (optional)</label>
           <textarea id="timing" placeholder="Need morning if possible, apartment stairs" value={timing} onChange={(e) => setTiming(e.target.value)} />
@@ -307,7 +305,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             <tr><td>Due at pickup</td><td>{money(quote.total)}</td></tr>
           </tbody></table>
           <p className="muted" style={{ marginTop: 8 }}>Moving day {moveDate ? pretty(moveDate) : ''} · we text you to schedule delivery · pickup {rentalDays} days after delivery<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
-          <p className="muted">There is no grace period: if the totes are not ready at pickup, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
+          <p className="muted">There is no grace period: if the totes are not ready at pickup, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. A tote damaged beyond use is {money(s.damage_fee_per_tote ?? 10)}, and one returned excessively dirty is {money(s.cleaning_fee_per_tote ?? 10)}; normal wear is free.</p>
           <p>You will not be charged today. Your card is saved at booking so we can bill you when we pick up the totes. We will text you the amount before charging. If you are not home for delivery, a second delivery trip is billed at your zone delivery rate.</p>
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'One moment…' : 'Continue'}</button></div></div>
         </section>)}
@@ -353,4 +351,21 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 function heardToSource(h: string, fallback: string) {
   const m: Record<string, string> = { Google: 'google_search_organic', Facebook: 'facebook_organic_page', Nextdoor: 'nextdoor', 'Referral / word of mouth': 'referral', 'Saw the truck or trailer': 'truck_trailer_signage', 'Yard sign / flyer': 'yard_sign_flyer', 'Repeat customer': 'repeat_customer' };
   return m[h] ?? fallback;
+}
+
+function Calendar({ month, setMonth, selected, ok, onPick }: { month: string; setMonth: (m: string) => void; selected: string | null; ok: (d: string) => boolean; onPick: (d: string) => void }) {
+  const [y, m] = month.split('-').map(Number);
+  const firstDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const shift = (n: number) => { const d = new Date(Date.UTC(y, m - 1 + n, 1)); setMonth(d.toISOString().slice(0, 7)); };
+  return (
+    <div className="card">
+      <div className="row" style={{ marginBottom: 8 }}><button type="button" className="btn ghost sm" style={{ flex: '0 0 auto' }} onClick={() => shift(-1)} aria-label="Previous month">‹</button><b style={{ textAlign: 'center', fontSize: 18 }}>{label}</b><button type="button" className="btn ghost sm" style={{ flex: '0 0 auto' }} onClick={() => shift(1)} aria-label="Next month">›</button></div>
+      <div className="cal">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="dow">{d}</div>)}
+        {Array.from({ length: firstDow }).map((_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: days }).map((_, i) => { const d = `${y}-${String(m).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`; const can = ok(d); return <button key={d} type="button" disabled={!can} className={selected === d ? 'sel' : ''} onClick={() => onPick(d)} aria-label={`${d}${can ? '' : ' unavailable'}`}>{i + 1}</button>; })}
+      </div>
+    </div>
+  );
 }

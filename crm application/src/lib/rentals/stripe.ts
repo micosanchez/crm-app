@@ -46,8 +46,8 @@ export const isTestMode = () => (process.env.STRIPE_SECRET_KEY ?? '').startsWith
 export interface CardInfo { payment_method_id: string; brand: string | null; last4: string | null; exp: string | null; }
 
 export async function cardInfo(paymentMethodId: string): Promise<CardInfo> {
-  const pm = await stripe<{ id: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } }>(`/payment_methods/${paymentMethodId}`);
-  return { payment_method_id: pm.id, brand: pm.card?.brand ?? null, last4: pm.card?.last4 ?? null, exp: pm.card ? `${String(pm.card.exp_month).padStart(2, '0')}/${String(pm.card.exp_year).slice(-2)}` : null };
+  const pm = await stripe<{ id: string; type: string; card?: { brand: string; last4: string; exp_month: number; exp_year: number } }>(`/payment_methods/${paymentMethodId}`);
+  return { payment_method_id: pm.id, brand: pm.card?.brand ?? pm.type ?? null, last4: pm.card?.last4 ?? null, exp: pm.card ? `${String(pm.card.exp_month).padStart(2, '0')}/${String(pm.card.exp_year).slice(-2)}` : null };
 }
 
 /** Find or create the Stripe Customer for a CRM customer. */
@@ -59,7 +59,8 @@ export async function ensureStripeCustomer(existingId: string | null, c: { name:
 
 /** $0 deposit: just save the card. */
 export function createSetupIntent(a: { customer: string; rental_id: string }) {
-  return stripe<{ id: string; client_secret: string }>('/setup_intents', { customer: a.customer, usage: 'off_session', automatic_payment_methods: { enabled: true }, metadata: { rental_id: a.rental_id } });
+  // cards only (Apple Pay and Google Pay are cards): Link, Cash App or a bank account left no card details in the CRM, and a bank debit sits 'processing' for days at pickup
+  return stripe<{ id: string; client_secret: string }>('/setup_intents', { customer: a.customer, usage: 'off_session', payment_method_types: ['card'], metadata: { rental_id: a.rental_id } });
 }
 
 export interface OffSessionResult { ok: boolean; payment_intent_id: string; status: string; requires_action?: boolean; error?: string; decline_code?: string }
