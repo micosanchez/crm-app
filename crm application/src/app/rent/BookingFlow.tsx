@@ -191,7 +191,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     const return_url = `${window.location.origin}/rent?token=${hold.public_token}${initial.embed ? '&embed=1' : ''}`;
     const fn = pay.kind === 'setup' ? stripe.confirmSetup : stripe.confirmPayment;
     let res;
-    try { res = await fn.call(stripe, { elements, confirmParams: { return_url, receipt_email: contact.email || undefined }, redirect: 'if_required' }); }
+    try { res = await fn.call(stripe, { elements, confirmParams: pay.kind === 'setup' ? { return_url } : { return_url, receipt_email: contact.email || undefined }, redirect: 'if_required' }); }
     catch { setBusy(false); setErr(`Something went wrong saving the card. Try again, or call or text ${PHONE}.`); return; }
     if (res.error) { setBusy(false); setErr(res.error.message ?? 'The card was declined. Try another card.'); return; }
     const intent = res.paymentIntent ?? res.setupIntent;
