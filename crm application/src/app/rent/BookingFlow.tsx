@@ -4,7 +4,7 @@ import SignaturePad from '@/components/SignaturePad';
 import { TOTE_CSS, JunkCallout, junkLink } from '@/components/ToteBrand';
 import { HEARD_ABOUT_US } from '@/lib/requests';
 
-type Pkg = { id: string; name: string; description: string | null; best_for: string | null; badge: string | null; tote_count: number; rental_days_included: number; price: number; week_price: number | null; extra_week_price: number | null };
+type Pkg = { id: string; name: string; description: string | null; best_for: string | null; badge: string | null; tote_count: number; rental_days_included: number; price: number; week_price: number | null; extra_week_price: number | null; is_test?: boolean };
 type Addon = { id: string; name: string; asset_type: string; kind: 'rent' | 'sell' | 'bundle'; price: number; per: string; max_qty: number; taxable: boolean; description: string | null; requires: Record<string, number>; featured: boolean; stock: number };
 type Catalog = { packages: Pkg[]; addons: Addon[]; settings: Record<string, any>; slot_counts: Record<string, number>; availability: { day: string; totes_free: number; dollies_free: number }[]; today: string; stripe: { publishable_key: string; test_mode: boolean } }; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Quote = { error?: string; gear?: string; free?: number; total?: number; deposit?: number; balance?: number; subtotal?: number; addons_total?: number; delivery_fee?: number; zone?: string | null; rush_fee?: number; tax?: number; duration?: number; discount?: number; delivery_miles?: number; pickup_miles?: number; rental_days?: number; tote_count?: number; dolly_count?: number; delivery_geo?: string; pickup_geo?: string; balance_charge_mode?: string; addons?: { name: string; qty: number; line: number }[] };
@@ -50,6 +50,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [moreAddons, setMoreAddons] = useState(false);
   const [moveDate, setMoveDate] = useState(initial.date ?? '');   // ?date= from the landing page now means moving day
   const [timing, setTiming] = useState('');
+  const [deliverDate, setDeliverDate] = useState('');   // the customer's pick; Mico confirms it (and the time window) by text
   const [profile, setProfile] = useState({ home_size: '', move_reason: '', saved: false });
   const [addr, setAddr] = useState('');
   const [pickupDiff, setPickupDiff] = useState(false);
@@ -75,7 +76,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   }, [initial.utm]);
 
   useEffect(() => {
-    fetch('/api/public/rentals/catalog').then((r) => r.json()).then((c: Catalog) => { setCat(c); if (!pkgId && c.packages?.length === 1) setPkgId(c.packages[0].id); }).catch(() => setErr('Could not load packages. Please refresh.'));
+    fetch(`/api/public/rentals/catalog${initial.package ? `?package=${encodeURIComponent(initial.package)}` : ''}`).then((r) => r.json()).then((c: Catalog) => { setCat(c); if (!pkgId && c.packages?.length === 1) setPkgId(c.packages[0].id); }).catch(() => setErr('Could not load packages. Please refresh.'));
     // resume an abandoned booking: prefill from the public view of the expired hold
     if (initial.resume) fetch(`/api/public/rentals/me?token=${initial.resume}`).then((r) => r.json()).then((d) => {
       if (!d || d.error) return;
@@ -107,6 +108,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const pkg = cat?.packages.find((p) => p.id === pkgId) ?? null;
   const s = cat?.settings ?? {};
   const rentalDays = (duration === 7 && pkg?.week_price != null ? 7 : (pkg?.rental_days_included ?? 14)) + extraWeeks * 7;
+  const plusDays = (ymd: string, n: number) => new Date(Date.parse(`${ymd}T12:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
+  const tomorrow = plusDays(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }), 1);
   async function getQuote() {
     setErr(null); setBusy(true);
     const r = await fetch('/api/public/rentals/quote', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : undefined, promo_code: promo || undefined }) }).then((x) => x.json() as Promise<Quote>);
@@ -122,7 +125,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     setErr(null); setBusy(true);
     const body = { package_id: pkgId, duration, extra_weeks: extraWeeks, addons: Object.entries(addons).filter(([, q]) => q > 0).map(([addon_id, qty]) => ({ addon_id, qty })), delivery_address: addr, pickup_address: pickupDiff ? pickupAddr : null, promo_code: promo || null,
       name: contact.name, phone: contact.phone, email: contact.email, lead_source: contact.heard ? heardToSource(contact.heard, leadSource) : leadSource,
-      notes_customer: [timing.trim() && `Timing: ${timing.trim()}`, contact.notes.trim()].filter(Boolean).join('\n'), move_date: moveDate || null, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
+      notes_customer: [timing.trim() && `Timing: ${timing.trim()}`, contact.notes.trim()].filter(Boolean).join('\n'), move_date: moveDate || null, preferred_delivery_date: deliverDate || null, resume: initial.resume, junk_interest: contact.junk || null, marketing_sms: contact.mkt_sms, marketing_email: contact.mkt_email, payer_name: contact.payer ? contact.payer_name : null, payer_email: contact.payer ? contact.payer_email : null, fbp: initial.utm.fbp, fbc: initial.utm.fbc, fbclid: initial.utm.fbclid, website: '' };
     const r = await fetch('/api/public/rentals/hold', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
     setBusy(false);
     if (r.error) { setErr(r.error); return; }
@@ -191,7 +194,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     setBusy(false);
     if (r.error) { setErr(r.error); setStep(7); return; }
     setDone({ rental_number: r.rental_number, token: r.token });
-    if (!r.already) fireConversion({ rental_number: r.rental_number, value: Number(r.total ?? 0), currency: 'USD' });
+    if (!r.already && !r.is_test) fireConversion({ rental_number: r.rental_number, value: Number(r.total ?? 0), currency: 'USD' });
     setStep(8);
   }
 
@@ -251,10 +254,13 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           {quote?.delivery_geo && <p className="muted">Delivering to {quote.delivery_geo.split(',').slice(0, 3).join(',')}{quote.pickup_geo ? ', pickup at your new place' : ''}. {quote.zone ?? ''}: {Number(quote.delivery_fee) > 0 ? `${money(quote.delivery_fee)} delivery and pickup` : 'free delivery and pickup'}. We text you delivery windows after you book.</p>}
           <label htmlFor="movedate">When are you moving?</label>
           <input id="movedate" type="date" value={moveDate} onChange={(e) => setMoveDate(e.target.value)} />
+          <label htmlFor="deliverdate">When do you want the totes delivered?</label>
+          <input id="deliverdate" type="date" min={tomorrow} value={deliverDate} onChange={(e) => setDeliverDate(e.target.value)} />
+          {deliverDate && <p className="muted">Delivery {pretty(deliverDate)}, pickup {pretty(plusDays(deliverDate, rentalDays))}. We text you to confirm the date and a time window.</p>}
           <label htmlFor="timing">Anything about timing we should know? (optional)</label>
           <textarea id="timing" placeholder="Need morning if possible, apartment stairs" value={timing} onChange={(e) => setTiming(e.target.value)} />
           {pkg?.extra_week_price ? <><label>Need longer than {rentalDays - extraWeeks * 7} days? Add weeks ({money(pkg.extra_week_price)} each)</label><div className="stepper"><button type="button" onClick={() => setExtraWeeks(Math.max(0, extraWeeks - 1))}>−</button><span>{extraWeeks}</span><button type="button" onClick={() => setExtraWeeks(Math.min(8, extraWeeks + 1))}>+</button></div></> : null}
-          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!moveDate || busy} onClick={async () => { if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
+          <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(2)}>Back</button><button className="btn" disabled={!moveDate || !deliverDate || busy} onClick={async () => { if (await getQuote()) setStep(4); }}>Next: your info</button></div></div>
         </section>)}
 
         {cat && step === 4 && (<section>
@@ -289,7 +295,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
             <tr><td>Due today</td><td>{money(0)}</td></tr>
             <tr><td>Due at pickup</td><td>{money(quote.total)}</td></tr>
           </tbody></table>
-          <p className="muted" style={{ marginTop: 8 }}>Moving day {moveDate ? pretty(moveDate) : ''} · we text you delivery windows · pickup {rentalDays} days after delivery<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
+          <p className="muted" style={{ marginTop: 8 }}>Delivery {deliverDate ? pretty(deliverDate) : ''} · pickup {deliverDate ? pretty(plusDays(deliverDate, rentalDays)) : `${rentalDays} days after delivery`} · we text you to confirm<br />Moving day {moveDate ? pretty(moveDate) : ''}<br />{addr}{pickupDiff ? ` → ${pickupAddr}` : ''}</p></div>
           <p className="muted">There is no grace period: if the totes are not ready at pickup, the next week is billed at {money(pkg.extra_week_price ?? 0)}. Cancel or change the delivery date free with {s.cancel_full_refund_hours ?? 48}+ hours&apos; notice, {money(s.cancel_fee_inside_window ?? 25)} with less. Totes damaged beyond use or returned excessively dirty are {money(s.damage_fee_per_tote ?? 10)} and {money(s.cleaning_fee_per_tote ?? 10)} each; normal wear is free.</p>
           <p>You will not be charged today. Your card is saved at booking so we can bill you when we pick up the totes. We will text you the amount before charging. If you are not home for delivery, a second delivery trip is billed at your zone delivery rate.</p>
           <div className="sticky"><div className="inner"><button className="btn ghost sm" onClick={() => setStep(4)}>Back</button><button className="btn" disabled={busy} onClick={createHold}>{busy ? 'One moment…' : 'Continue'}</button></div></div>
@@ -317,6 +323,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <div className="ok">Request received! We&apos;ll text you delivery windows within a few hours. Your totes are reserved once you confirm a date with us.</div>
           {pkg && quote && <div className="card"><table><tbody>
             <tr><td>{pkg.name} · {pkg.tote_count} totes</td><td /></tr>
+            <tr><td>Delivery</td><td>{deliverDate ? pretty(deliverDate) : ''} (we text you to confirm)</td></tr>
+            <tr><td>Pickup</td><td>{deliverDate ? pretty(plusDays(deliverDate, rentalDays)) : ''}</td></tr>
             <tr><td>Moving day</td><td>{moveDate ? pretty(moveDate) : ''}</td></tr>
             <tr><td>Delivery and pickup · {quote.zone ?? ''}</td><td>{Number(quote.delivery_fee) > 0 ? money(quote.delivery_fee) : 'Free'}</td></tr>
             <tr><td><b>Total due at pickup</b></td><td><b>{money(quote.total)}</b></td></tr>

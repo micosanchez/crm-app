@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (!intent.payment_method) return NextResponse.json({ error: 'No card was saved. Please try again.' }, { status: 402, headers: CORS });
     const res = await confirmBooking(r.id, { id: intent.id, kind, payment_method: intent.payment_method, customer: intent.customer ?? null }, { ip: clientIp(req.headers), user_agent: req.headers.get('user-agent') }, db);
     if (!res.ok) return NextResponse.json({ error: res.error ?? 'This booking expired. Please start again.' }, { status: 409, headers: CORS });
-    return NextResponse.json({ ok: true, already: res.already, rental_number: res.rental.rental_number, token: res.rental.public_token, total: res.rental.total, deposit: Number(res.rental.deposit_amount) }, { headers: CORS });
+    return NextResponse.json({ ok: true, already: res.already, rental_number: res.rental.rental_number, token: res.rental.public_token, total: res.rental.total, is_test: !!res.rental.is_test, deposit: Number(res.rental.deposit_amount) }, { headers: CORS });
   } catch (e) { return NextResponse.json({ error: (e as Error).message }, { status: 500, headers: CORS }); }
 }
 export async function OPTIONS() { return new NextResponse(null, { headers: { ...CORS, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }); }

@@ -58,10 +58,11 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
   const windows = [...(settings?.slot_windows?.weekday ?? []), ...(settings?.slot_windows?.weekend ?? [])];
   // a request has no date yet: text two windows, then set the one the customer picked
   const [offer, setOffer] = useState('Hi, this is Mico with Sanchez Junk & Haul Co. For your tote rental, I can deliver [window 1] or [window 2]. Which works for you?');
-  const [conf, setConf] = useState({ delivery_date: '', delivery_window: '' });
+  const [conf, setConf] = useState({ delivery_date: r.preferred_delivery_date ?? '', delivery_window: '' });
 
   return (
     <div className="space-y-4">
+      <Link href="/rentals" className="btn-ghost inline-flex">← Back to rentals</Link>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div><p className="panel-label">Rental · <Link href="/rentals" className="underline">board</Link></p><h1 className="text-2xl">{r.rental_number} · {c.name}</h1>
           <p className="text-sm text-gray-500">{STATUS_LABEL[r.status] ?? r.status}{r.rental_packages?.name ? ` · ${r.rental_packages.name}` : ''} · {r.tote_count} totes{r.dolly_count ? ` + ${r.dolly_count} dolly` : ''}{r.rental_partners ? ` · partner ${r.rental_partners.name} (${r.rental_partners.referral_code})` : ''}{r.lead_source ? ` · ${r.lead_source}` : ''}</p></div>
@@ -77,7 +78,7 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
 
       {r.status === 'awaiting_confirmation' && <section className="card space-y-2" style={{ border: '2px solid #f59e0b' }}>
         <p className="panel-label">Request · text delivery windows, then set the date</p>
-        <p className="text-sm">Moving day <b>{prettyDate(r.move_date) || 'not given'}</b> · total due at pickup <b>{money(r.total)}</b>{r.notes_customer ? <> · {r.notes_customer}</> : null}</p>
+        <p className="text-sm">Wants delivery <b>{prettyDate(r.preferred_delivery_date) || 'any day'}</b> · moving day <b>{prettyDate(r.move_date) || 'not given'}</b> · total due at pickup <b>{money(r.total)}</b>{r.notes_customer ? <> · {r.notes_customer}</> : null}</p>
         <textarea className="input" rows={2} value={offer} onChange={(e) => setOffer(e.target.value)} aria-label="Delivery windows text" />
         <button className="btn-ghost" disabled={!!busy || /\[window/.test(offer) || !c.phone} onClick={() => run('offer', () => act('send_text', { rental_id: r.id, content: offer }), (res: any) => `Sent: ${res.sent}`)}>Text these windows</button>
         <div className="grid grid-cols-2 gap-2"><input className="input" type="date" value={conf.delivery_date} onChange={(e) => setConf({ ...conf, delivery_date: e.target.value })} aria-label="Delivery date" /><select className="input" value={conf.delivery_window} onChange={(e) => setConf({ ...conf, delivery_window: e.target.value })} aria-label="Delivery window"><option value="">window</option>{windows.map((w: string) => <option key={w}>{w}</option>)}</select></div>

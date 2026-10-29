@@ -30,8 +30,18 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: CORS });
   const d = data as { rental_id?: string; error?: string };
   // fbp/fbc/fbclid ride along for the Meta CAPI Purchase at confirm time (same key:value bag as ip/ua; no column)
-  const fb = (['fbp', 'fbc', 'fbclid'] as const).map((k) => (typeof b[k] === 'string' && /^[\w.-]{1,200}$/.test(b[k] as string) ? ` ${k}:${b[k]}` : '')).join('');
-  if (d.rental_id) await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}${fb}` }).eq('id', d.rental_id);
+  let fb = (['fbp', 'fbc', 'fbclid'] as const).map((k) => (typeof b[k] === 'string' && /^[\w.-]{1,200}$/.test(b[k] as string) ? ` ${k}:${b[k]}` : '')).join('');
+  // finishing an expired request from the "finish booking" link: keep the original ad click so the Purchase is credited to the ad
+  if (!fb && typeof b.resume === 'string' && /^[0-9a-f-]{36}$/.test(b.resume)) {
+    const { data: old } = await admin.from('rentals').select('notes_internal').eq('public_token', b.resume).maybeSingle();
+    fb = ((old?.notes_internal as string | null) ?? '').match(/ (fbp|fbc|fbclid):\S+/g)?.join('') ?? '';
+  }
+  if (d.rental_id) {
+    // the hidden $1 test package marks the rental as a test: no Meta Purchase, left out of rental reports
+    const { data: pk } = b.package_id ? await admin.from('rental_packages').select('is_test').eq('id', String(b.package_id)).maybeSingle() : { data: null };
+    const pref = typeof b.preferred_delivery_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.preferred_delivery_date) ? b.preferred_delivery_date : null;
+    await admin.from('rentals').update({ notes_internal: `ip:${ip} ua:${(req.headers.get('user-agent') ?? '').slice(0, 120)}${fb}`, is_test: !!pk?.is_test, preferred_delivery_date: pref }).eq('id', d.rental_id);
+  }
   return NextResponse.json(data, { headers: CORS });
 }
 export async function OPTIONS() { return new NextResponse(null, { headers: { ...CORS, 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' } }); }

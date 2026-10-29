@@ -54,7 +54,7 @@ export type Rental = {
   stripe_customer_id: string | null; stripe_payment_method_id: string | null; card_brand: string | null; card_last4: string | null; card_exp: string | null;
   lead_source: string | null; partner_id: string | null; promo_code: string | null; payer_name: string | null; payer_email: string | null; sms_consent_at: string | null;
   abandoned_text_sent_at: string | null; junk_request_id: string | null; disputed_at: string | null; notes_internal: string | null; notes_customer: string | null; created_at: string;
-  move_date?: string | null; move_reason?: string | null; home_size?: string | null; junk_interest?: 'yes' | 'maybe' | 'no' | null; lead_score?: number; marketing_sms_consent_at?: string | null; marketing_email_consent_at?: string | null; tax_amount?: number; rush_fee?: number; zone?: string | null; gear?: Record<string, number>; rental_days?: number | null;
+  move_date?: string | null; preferred_delivery_date?: string | null; is_test?: boolean; move_reason?: string | null; home_size?: string | null; junk_interest?: 'yes' | 'maybe' | 'no' | null; lead_score?: number; marketing_sms_consent_at?: string | null; marketing_email_consent_at?: string | null; tax_amount?: number; rush_fee?: number; zone?: string | null; gear?: Record<string, number>; rental_days?: number | null;
   customers?: { id: string; name: string; phone: string | null; email: string | null };
 };
 export type Charge = { id: string; rental_id: string; type: string; amount: number; description: string | null; stripe_payment_intent_id: string | null; stripe_refund_id: string | null; status: string; failure_reason: string | null; photo_urls: string[]; retry_count: number; next_retry_at: string | null; payment_link_url: string | null; created_at: string };
@@ -616,8 +616,8 @@ export async function confirmBooking(rentalId: string, intent: { id: string; kin
   if (!won?.length) return { ok: true, already: true, rental: await getRental(r.id, db) };
   if (intent.kind === 'payment') await db.from('rental_charges').update({ status: 'succeeded' }).eq('stripe_payment_intent_id', intent.id);   // checkouts started before the redesign
   await logEvent(r.id, 'requested', { intent: intent.id, card: `${ci.brand} ${ci.last4}` }, db);
-  // Meta CAPI Purchase: the request is the conversion. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number).
-  { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
+  // Meta CAPI Purchase: the request is the conversion. Same event_id as the pixel on sanchezhaulco.com/tote-rental (the rental number). Never for a $1 test booking.
+  if (!r.is_test) { const c = r.customers!; const [fn = '', ...ln] = (c.name ?? '').trim().split(/\s+/); const tag = (k: string) => (r.notes_internal ?? '').match(new RegExp(`\\b${k}:(\\S+)`))?.[1] ?? null;
     await sendMetaEvent({ name: 'Purchase', event_id: r.rental_number, source_url: 'https://sanchezhaulco.com/tote-rental', custom: { value: Number(r.total), currency: 'USD', content_name: 'tote_rental', content_type: 'product', order_id: r.rental_number },
       user: { email: c.email, phone: c.phone, first_name: fn, last_name: ln.join(' '), state: 'MI', zip: (r.delivery_address.match(/\b\d{5}\b/g) ?? []).pop(), ip: ctx.ip ?? tag('ip'), user_agent: ctx.user_agent ?? null, fbp: tag('fbp'), fbc: tag('fbc'), fbclid: tag('fbclid') } }); }
   if (r.partner_id) await db.rpc('rental_partner_use', { p_partner: r.partner_id }).then(() => {}, () => {});
