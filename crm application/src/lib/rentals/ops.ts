@@ -544,7 +544,7 @@ export async function runRentalCron(db = admin()) {
     const c = r.customers;
     await sendNotification({ event: 'rental_abandoned', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `rental_abandoned:${r.id}`,
       subject: `Unfinished tote booking: ${c?.name ?? 'someone'} ${c?.phone ?? ''}`.trim(),
-      text: `${c?.name ?? 'A customer'} started booking ${r.tote_count} totes for delivery ${fmtDate(r.delivery_date)} ${r.delivery_window} (${money(Number(r.total))}, ${r.zone ?? ''}) but did not pay within 30 minutes, so the hold was released.\n\nPhone: ${c?.phone ?? '-'}\nEmail: ${c?.email ?? '-'}\nAddress: ${r.delivery_address}\n${h.opted_in && h.phone ? 'They will get one automatic text with a link to finish.' : 'No automatic text was sent.'}\n\nTheir link to finish booking: ${APP_URL}/rent?resume=${r.public_token}\nIn the CRM: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
+      text: `${c?.name ?? 'A customer'} started booking ${r.tote_count} totes (${r.delivery_date ? `delivery ${fmtDate(r.delivery_date)} ${r.delivery_window ?? ''}` : `moving day ${r.move_date ? fmtDate(r.move_date) : 'not given'}`}, ${money(Number(r.total))}, ${r.zone ?? ''}) but did not save a card within 30 minutes, so the request was cancelled.\n\nPhone: ${c?.phone ?? '-'}\nEmail: ${c?.email ?? '-'}\nAddress: ${r.delivery_address}\n${h.opted_in && h.phone ? 'They will get one automatic text with a link to finish.' : 'No automatic text was sent.'}\n\nTheir link to finish booking: ${APP_URL}/rent?resume=${r.public_token}\nIn the CRM: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
   }
   out.holds_expired = list.length;
   // 2. late fees + overdue texts

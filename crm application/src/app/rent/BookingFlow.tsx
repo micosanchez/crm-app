@@ -35,6 +35,13 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
   const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!err) return;
+    // the error box is at the top of the form; on a phone the customer is down at the button and never saw it
+    if (initial.embed && window.parent !== window) window.parent.postMessage({ type: 'sjhc_rent_step', step }, '*');
+    else window.scrollTo({ top: 0, behavior: 'smooth' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [err]);
   const [busy, setBusy] = useState(false);
   const [pkgId, setPkgId] = useState<string | null>(initial.package);
   const [addons, setAddons] = useState<Record<string, number>>({});
@@ -56,6 +63,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [signed, setSigned] = useState(false);
   const [pay, setPay] = useState<{ kind: 'payment' | 'setup'; client_secret: string; intent_id: string; amount: number; publishable_key: string } | null>(null);
   const [done, setDone] = useState<{ rental_number: string; token: string } | null>(null);
+  const [cardReady, setCardReady] = useState(false);
   const stripeRef = useRef<{ stripe: any; elements: any } | null>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const leadSource = useMemo(() => {
@@ -152,21 +160,26 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
       if (!w.Stripe || cancelled) return;
       const stripe = w.Stripe(pay.publishable_key);
       const elements = stripe.elements({ clientSecret: pay.client_secret, appearance: { theme: 'night', variables: { colorPrimary: '#c81d3c', fontFamily: 'Barlow Condensed, system-ui, sans-serif', borderRadius: '10px' } } });
-      elements.create('payment', { layout: 'tabs' }).mount('#payment-element');
+      const el = elements.create('payment', { layout: 'tabs' });
+      el.on('ready', () => setCardReady(true));
+      el.on('loaderror', () => setErr(`The card form didn't load. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`));
+      el.mount('#payment-element');
       stripeRef.current = { stripe, elements };
     };
     if ((window as unknown as { Stripe?: unknown }).Stripe) mount();
-    else { const sc = document.createElement('script'); sc.src = 'https://js.stripe.com/v3/'; sc.onload = mount; document.head.appendChild(sc); }
+    else { const sc = document.createElement('script'); sc.src = 'https://js.stripe.com/v3/'; sc.onload = mount; sc.onerror = () => setErr(`The card form didn't load. Refresh the page, or call or text ${PHONE} and we'll finish it with you.`); document.head.appendChild(sc); }
     return () => { cancelled = true; };
   }, [step, pay]);
 
   async function submitPayment() {
-    if (!stripeRef.current || !pay || !hold) return;
+    if (!stripeRef.current || !pay || !hold) { setErr('The card form is still loading. Give it a second and try again.'); return; }
     setErr(null); setBusy(true);
     const { stripe, elements } = stripeRef.current;
     const return_url = `${window.location.origin}/rent?token=${hold.public_token}${initial.embed ? '&embed=1' : ''}`;
     const fn = pay.kind === 'setup' ? stripe.confirmSetup : stripe.confirmPayment;
-    const res = await fn.call(stripe, { elements, confirmParams: { return_url, receipt_email: contact.email || undefined }, redirect: 'if_required' });
+    let res;
+    try { res = await fn.call(stripe, { elements, confirmParams: { return_url, receipt_email: contact.email || undefined }, redirect: 'if_required' }); }
+    catch { setBusy(false); setErr(`Something went wrong saving the card. Try again, or call or text ${PHONE}.`); return; }
     if (res.error) { setBusy(false); setErr(res.error.message ?? 'The card was declined. Try another card.'); return; }
     const intent = res.paymentIntent ?? res.setupIntent;
     await confirmWith(hold.public_token, intent?.id ?? pay.intent_id, pay.kind);
@@ -174,7 +187,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
 
   async function confirmWith(token: string, intentId: string, kind: 'payment' | 'setup') {
     setBusy(true);
-    const r = await fetch('/api/public/rentals/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, intent_id: intentId, kind }) }).then((x) => x.json());
+    const r = await fetch('/api/public/rentals/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, intent_id: intentId, kind }) }).then((x) => x.json()).catch(() => ({ error: `Your card was saved but we couldn't finish the request. Tap the button again, or call or text ${PHONE}.` }));
     setBusy(false);
     if (r.error) { setErr(r.error); setStep(7); return; }
     setDone({ rental_number: r.rental_number, token: r.token });
@@ -296,7 +309,7 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
           <h2>7. Save your card</h2>
           <p className="muted">You will not be charged today. Your card is saved so we can bill you when we pick up the totes. We will text you the amount before charging.</p>
           <div id="payment-element" className="card" style={{ minHeight: 120 }} />
-          <div className="sticky"><div className="inner"><button className="btn" disabled={busy} onClick={submitPayment}>{busy ? 'Saving…' : 'Save card & request booking'}</button></div></div>
+          <div className="sticky"><div className="inner"><button className="btn" disabled={busy || !cardReady} onClick={submitPayment}>{busy ? 'Saving…' : !cardReady ? 'Loading card form…' : 'Save card & request booking'}</button></div></div>
         </section>)}
 
         {step === 8 && done && (<section>
