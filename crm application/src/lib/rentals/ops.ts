@@ -12,6 +12,8 @@ import { DEFAULT_TEMPLATES, mergedTemplates, renderRental, type RentalTemplateKe
 import { sendMetaEvent } from '@/lib/metaCapi';
 
 export const SITE_JUNK_QUOTE = 'https://sanchezhaulco.com/contact.html';
+// finish an unfinished booking on the website (not the bare CRM page) so the browser pixel sees the Purchase; the form refills from the token
+export const finishLink = (r: Pick<Rental, 'public_token'>) => `https://sanchezhaulco.com/tote-rental?resume=${r.public_token}#book`;
 export const REVIEW_LINK = 'https://g.page/r/sanchez-junk-haul/review'; // shortcut: swap for the real GBP short link in Settings when known
 const FEE_TYPES = ['late_fee', 'missing_item', 'damage', 'cleaning', 'adjustment', 'failed_trip', 'extension', 'reschedule_fee', 'expedited_pickup'] as const;
 const SOFT_DECLINES = new Set(['insufficient_funds', 'try_again_later', 'processing_error', 'issuer_not_available', 'card_velocity_exceeded']);
@@ -44,6 +46,7 @@ export function detroitAt(dateYmd: string, hour: number): string {
   const offsetMs = probe.getTime() - local.getTime();
   return new Date(new Date(`${dateYmd}T${String(hour).padStart(2, '0')}:00:00Z`).getTime() + offsetMs).toISOString();
 }
+const plusDays = (ymd: string, n: number) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const fmtDate = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 export type Rental = {
@@ -125,17 +128,28 @@ export async function scheduleLifecycle(r: Rental, db = admin()) {
   if (r.junk_interest !== 'no' && !r.junk_request_id) await queueMessage(r, 'during_rental', {}, { at: detroitAt(r.move_date ? plus(r.move_date, 2) : plus(r.delivery_date, 3), 18), dedupe: `${r.id}:during_rental` }, db);
   await queueMessage(r, 'pickup_reminder', {}, { at: detroitAt(dayBefore(r.pickup_date), 17), dedupe: `${r.id}:pickup_reminder:${r.pickup_date}` }, db);
 }
+/** The unsubscribe page only clears marketing consent, which a customer who never opted in does not have; its event is the record. */
+async function emailUnsubscribed(customerId: string, db: SupabaseClient) {
+  const { data: rs } = await db.from('rentals').select('id').eq('customer_id', customerId);
+  const { count } = await db.from('rental_events').select('id', { count: 'exact', head: true }).eq('event', 'email_unsubscribed').in('rental_id', (rs ?? []).map((x) => x.id));
+  return !!count;
+}
 /** Drain due messages. Texts only inside 8am–8pm Detroit and only to customers who opted in; email any time. */
 export async function sendDueMessages(db = admin()) {
   const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hour12: false }).format(new Date())) % 24;
   const inQuiet = hour < 8 || hour >= 20;
-  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, marketing_email_consent_at, status, junk_request_id)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
+  const { data: due } = await db.from('rental_messages').select('*, rentals(sms_consent_at, marketing_sms_consent_at, marketing_email_consent_at, status, junk_request_id, customer_id, created_at)').eq('status', 'queued').lte('scheduled_at', new Date().toISOString()).order('scheduled_at').limit(50);
   let sent = 0, skipped = 0, failed = 0;
   for (const m of due ?? []) {
-    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; marketing_email_consent_at: string | null; status: string; junk_request_id: string | null } | null;
+    const r = m.rentals as { sms_consent_at: string | null; marketing_sms_consent_at: string | null; marketing_email_consent_at: string | null; status: string; junk_request_id: string | null; customer_id: string; created_at: string } | null;
     const kind = (DEFAULT_TEMPLATES[m.template as RentalTemplateKey]?.kind ?? 'transactional');
     if (r?.status === 'cancelled' && !['abandoned', 'receipt'].includes(m.template)) { await db.from('rental_messages').update({ status: 'cancelled' }).eq('id', m.id); continue; }
     if (m.template === 'during_rental' && r?.junk_request_id) { await db.from('rental_messages').update({ status: 'cancelled', error: 'junk quote already requested' }).eq('id', m.id); continue; }
+    // finish-your-booking: the newest attempt owns the reminder (they booked again, or that one sends its own)
+    if (m.template === 'abandoned' && r) {
+      const { count } = await db.from('rentals').select('id', { count: 'exact', head: true }).eq('customer_id', r.customer_id).gt('created_at', r.created_at);
+      if (count) { await db.from('rental_messages').update({ status: 'cancelled', error: 'customer started a newer booking' }).eq('id', m.id); continue; }
+    }
     if (m.channel === 'sms') {
       if (inQuiet) continue; // stays queued until the window opens
       if (kind === 'promotional' && !r?.marketing_sms_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no marketing consent' }).eq('id', m.id); skipped++; continue; }
@@ -146,7 +160,9 @@ export async function sendDueMessages(db = admin()) {
       if (res.ok) { sent++; await db.from('rental_messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', m.id); await logEvent(m.rental_id, `sms:${m.template}`, { to: m.to_phone }, db); }
       else { failed++; await db.from('rental_messages').update({ status: res.skipped ? 'skipped' : 'failed', error: res.error ?? res.skipped ?? null }).eq('id', m.id); }
     } else {
-      if (kind === 'promotional' && !r?.marketing_email_consent_at) { await db.from('rental_messages').update({ status: 'skipped', error: 'no email marketing consent' }).eq('id', m.id); skipped++; continue; }
+      // the one finish-your-booking email goes to everyone who gave an email (it carries the unsubscribe link and mailing address), unless they unsubscribed
+      const abandonedOk = m.template === 'abandoned' && r && !(await emailUnsubscribed(r.customer_id, db));
+      if (kind === 'promotional' && !r?.marketing_email_consent_at && !abandonedOk) { await db.from('rental_messages').update({ status: 'skipped', error: 'no email marketing consent' }).eq('id', m.id); skipped++; continue; }
       const res = await sendNotification({ event: `rental_${m.template}`, to: m.to_email, subject: m.subject ?? 'Your tote rental', text: m.body, entityKind: 'estimate', entityId: undefined });
       if (res.ok) { sent++; await db.from('rental_messages').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', m.id); await logEvent(m.rental_id, `email:${m.template}`, { to: m.to_email }, db); }
       else { failed++; await db.from('rental_messages').update({ status: res.skipped ? 'skipped' : 'failed', error: res.error ?? res.skipped ?? null }).eq('id', m.id); }
@@ -529,22 +545,24 @@ export async function evidencePacket(rentalId: string, db = admin()) {
 /* ---------------- cron ---------------- */
 export async function runRentalCron(db = admin()) {
   const out: Record<string, unknown> = {};
-  // 1. expire holds; one abandoned text per opted-in customer
+  // 1. expire holds; one finish-your-booking reminder an hour later: the text only to customers who opted in to offers
+  //    (sendDueMessages skips it otherwise), the email to everyone who gave one
   const { data: expired } = await db.rpc('rental_expire_holds');
   const list = (expired ?? []) as { rental_id: string; public_token: string; phone: string | null; name: string | null; opted_in: boolean }[];
-  for (const h of list.filter((x) => x.opted_in && x.phone)) {
+  for (const h of list) {
     const r = await getRental(h.rental_id, db);
-    await queueMessage(r, 'abandoned', { link: `${APP_URL}/rent?resume=${r.public_token}` }, { at: new Date(Date.now() + 3600_000).toISOString(), dedupe: `${r.id}:abandoned`, force: false }, db);
-    await db.from('rentals').update({ abandoned_text_sent_at: new Date().toISOString() }).eq('id', r.id);
+    await queueMessage(r, 'abandoned', { link: finishLink(r) }, { at: new Date(Date.now() + 3600_000).toISOString(), dedupe: `${r.id}:abandoned`, force: false }, db);
+    if (h.opted_in && h.phone) await db.from('rentals').update({ abandoned_text_sent_at: new Date().toISOString() }).eq('id', r.id);
   }
   // owner heads-up for every checkout that expired unpaid, so the lead can be called back
   for (const h of list) {
     const r = await getRental(h.rental_id, db).catch(() => null);
     if (!r) continue;
     const c = r.customers;
+    const auto = [h.opted_in && h.phone && r.marketing_sms_consent_at && 'a text', c?.email && 'an email'].filter(Boolean).join(' and ');
     await sendNotification({ event: 'rental_abandoned', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `rental_abandoned:${r.id}`,
       subject: `Unfinished tote booking: ${c?.name ?? 'someone'} ${c?.phone ?? ''}`.trim(),
-      text: `${c?.name ?? 'A customer'} started booking ${r.tote_count} totes (${r.delivery_date ? `delivery ${fmtDate(r.delivery_date)} ${r.delivery_window ?? ''}` : `moving day ${r.move_date ? fmtDate(r.move_date) : 'not given'}`}, ${money(Number(r.total))}, ${r.zone ?? ''}) but did not save a card within 30 minutes, so the request was cancelled.\n\nPhone: ${c?.phone ?? '-'}\nEmail: ${c?.email ?? '-'}\nAddress: ${r.delivery_address}\n${h.opted_in && h.phone && r.marketing_sms_consent_at ? 'They will get one automatic text with a link to finish.' : 'No automatic text goes out (the reminder is a marketing text and they did not opt in to offers), so text or call them with the link below.'}\n\nTheir link to finish booking: ${APP_URL}/rent?resume=${r.public_token}\nIn the CRM: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
+      text: `${c?.name ?? 'A customer'} started booking ${r.tote_count} totes (${r.delivery_date ? `delivery ${fmtDate(r.delivery_date)} ${r.delivery_window ?? ''}` : `moving day ${r.move_date ? fmtDate(r.move_date) : 'not given'}`}, ${money(Number(r.total))}, ${r.zone ?? ''}) but did not save a card within 30 minutes, so the request was cancelled.\n\nPhone: ${c?.phone ?? '-'}\nEmail: ${c?.email ?? '-'}\nAddress: ${r.delivery_address}\n${auto ? `In an hour they get ${auto} with their link to finish (not if they book again first). A call or text from you still helps.` : 'Nothing automatic goes out (no email, and no opt-in for texts), so text or call them with the link below.'}\n\nTheir link to finish booking: ${finishLink(r)}\nIn the CRM: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
   }
   out.holds_expired = list.length;
   // 2. late fees + overdue texts
@@ -577,6 +595,21 @@ export async function runRentalCron(db = admin()) {
   const { data: stale } = await db.from('rentals').update({ status: 'expired' }).eq('status', 'awaiting_confirmation').lt('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).select('id');
   for (const x of stale ?? []) await logEvent(x.id, 'expired', { reason: 'no date confirmed within 7 days' }, db);
   out.requests_expired = stale?.length ?? 0;
+  // 5b. once a day from 8 am: email the owner every request still waiting for a delivery date, soonest moving day first
+  const hourNow = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', hour12: false }).format(new Date())) % 24;
+  if (hourNow >= 8) {
+    const { data: waiting } = await db.from('rentals').select('id, rental_number, move_date, created_at, is_test, customers(name, phone)').eq('status', 'awaiting_confirmation').order('move_date', { ascending: true, nullsFirst: false });
+    const rows = (waiting ?? []) as unknown as { id: string; rental_number: string; move_date: string | null; created_at: string; is_test: boolean | null; customers: { name: string | null; phone: string | null } | null }[];
+    const soon = plusDays(today, 2);
+    const urgent = rows.filter((w) => w.move_date && w.move_date <= soon);
+    if (rows.length) await sendNotification({ event: 'rental_unconfirmed', to: process.env.NOTIFY_EMAIL ?? '', dedupeKey: `rental_unconfirmed:${today}`,
+      subject: `${rows.length} tote request${rows.length > 1 ? 's' : ''} waiting for a delivery date${urgent.length ? ` (${urgent.length} moving in the next 2 days)` : ''}`,
+      text: `These customers saved a card and are waiting for you to text delivery windows and confirm a date. A request expires 7 days after it came in.\n\n${rows.map((w) => {
+        const exp = plusDays(new Date(w.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }), 7);
+        return `${urgent.includes(w) ? 'URGENT: ' : ''}${w.rental_number}${w.is_test ? ' (test)' : ''} ${w.customers?.name ?? ''} ${w.customers?.phone ?? ''}\nMoving day: ${w.move_date ? fmtDate(w.move_date) : 'not given'}. Expires ${fmtDate(exp)}.\n${APP_URL}/rentals/${w.id}`;
+      }).join('\n\n')}` }).catch(() => {});
+    out.unconfirmed = rows.length;
+  }
   const s = await getSettings(db);
   // 6. waitlist: text the first person whose dates now fit
   const { data: wl } = await db.from('rental_waitlist').select('*').is('notified_at', null).gte('start_date', today).order('created_at').limit(20);
