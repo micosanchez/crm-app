@@ -48,6 +48,18 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
   const [extraWeeks, setExtraWeeks] = useState(0);
   const [duration, setDuration] = useState<7 | 14>(14);
   const [moreAddons, setMoreAddons] = useState(false);
+  // resume: the public view names the package and add-ons (no ids), so match them to the catalog once both have loaded
+  const [resumed, setResumed] = useState<{ pkg?: string; addons?: { name: string; qty: number }[] } | null>(null);
+  useEffect(() => {
+    if (!cat || !resumed) return;
+    const p = cat.packages.find((x) => x.name === resumed.pkg);
+    if (p && !initial.package) setPkgId(p.id);
+    const picked: Record<string, number> = {};
+    for (const l of resumed.addons ?? []) { const a = cat.addons.find((x) => x.name === l.name); if (a) picked[a.id] = Math.min(l.qty, a.max_qty); }
+    setAddons(picked);
+    if (Object.keys(picked).some((id) => !cat.addons.find((a) => a.id === id)?.featured)) setMoreAddons(true);   // supplies are folded away; show what she picked
+    setResumed(null);
+  }, [cat, resumed, initial.package]);
   const [moveDate, setMoveDate] = useState(initial.date ?? '');   // ?date= from the landing page now means moving day
   const [timing, setTiming] = useState('');
   const [moveOpen, setMoveOpen] = useState(false);
@@ -89,6 +101,8 @@ export default function BookingFlow({ initial }: { initial: { package: string | 
       }
       setAddr(d.delivery_address ?? ''); if (d.pickup_address && d.pickup_address !== d.delivery_address) { setPickupDiff(true); setPickupAddr(d.pickup_address); }
       setContact((c) => ({ ...c, name: d.customer?.name ?? '', phone: d.customer?.phone ?? '', email: d.customer?.email ?? '', notes: d.notes_customer ?? '', junk: d.junk_interest ?? '', mkt_sms: !!d.marketing_sms, mkt_email: !!d.marketing_email })); if (d.move_date) setMoveDate(d.move_date);
+      setExtraWeeks(d.extra_weeks ?? 0); if (d.rental_days - 7 * (d.extra_weeks ?? 0) === 7) setDuration(7);
+      setResumed({ pkg: d.package?.name, addons: d.addons });
     }).catch(() => {});
     // embedded on sanchezhaulco.com: tell the parent page how tall we are so the iframe never scrolls inside
     if (initial.embed && window.parent !== window) {
