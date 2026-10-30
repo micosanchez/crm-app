@@ -31,10 +31,12 @@ export async function POST(req: NextRequest) {
   const d = data as { rental_id?: string; error?: string };
   // fbp/fbc/fbclid ride along for the Meta CAPI Purchase at confirm time (same key:value bag as ip/ua; no column)
   let fb = (['fbp', 'fbc', 'fbclid'] as const).map((k) => (typeof b[k] === 'string' && /^[\w.-]{1,200}$/.test(b[k] as string) ? ` ${k}:${b[k]}` : '')).join('');
-  // finishing an expired request from the "finish booking" link: keep the original ad click so the Purchase is credited to the ad
-  if (!fb && typeof b.resume === 'string' && /^[0-9a-f-]{36}$/.test(b.resume)) {
+  // finishing an expired request from the "finish booking" link: keep the original ad click so the Purchase is credited to the ad.
+  // Per key: a new browser (Safari after the Facebook app) brings a fresh _fbp but no fbc, which must not drop the old click.
+  if (typeof b.resume === 'string' && /^[0-9a-f-]{36}$/.test(b.resume)) {
     const { data: old } = await admin.from('rentals').select('notes_internal').eq('public_token', b.resume).maybeSingle();
-    fb = ((old?.notes_internal as string | null) ?? '').match(/ (fbp|fbc|fbclid):\S+/g)?.join('') ?? '';
+    const prev = ((old?.notes_internal as string | null) ?? '').match(/ (fbp|fbc|fbclid):\S+/g) ?? [];
+    fb += prev.filter((t) => !fb.includes(t.slice(0, t.indexOf(':') + 1))).join('');
   }
   if (d.rental_id) {
     // the hidden $1 test package marks the rental as a test: no Meta Purchase, left out of rental reports
