@@ -25,7 +25,8 @@ export function admin(): SupabaseClient {
 }
 export const cents = (n: number) => Math.round(Number(n) * 100);
 export const money = (n: number | string | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`;
-export const todayDetroit = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Detroit' })).toISOString().slice(0, 10);
+// en-CA formats as YYYY-MM-DD; the old toLocaleString round trip was a day ahead from 8 pm when the server itself runs on Detroit time
+export const todayDetroit = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(new Date());
 /** First hour of a delivery window like "6-10pm", "8am-12pm" or "12-4pm" (24h clock). Unknown text = midnight, the strictest reading. */
 export function windowStartHour(w: string | null | undefined): number {
   const m = /^\s*(\d{1,2})(?::\d{2})?\s*(am|pm)?\s*-\s*(\d{1,2})(?::\d{2})?\s*(am|pm)?/i.exec(w ?? '');
