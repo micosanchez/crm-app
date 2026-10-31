@@ -62,7 +62,6 @@ export default function RentalDetail({ rental: r, items, charges, agreement, eve
 
   return (
     <div className="space-y-4">
-      <Link href="/rentals" className="btn-ghost inline-flex">← Back to rentals</Link>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div><p className="panel-label">Rental · <Link href="/rentals" className="underline">board</Link></p><h1 className="text-2xl">{r.rental_number} · {c.name}</h1>
           <p className="text-sm text-gray-500">{STATUS_LABEL[r.status] ?? r.status}{r.rental_packages?.name ? ` · ${r.rental_packages.name}` : ''} · {r.tote_count} totes{r.dolly_count ? ` + ${r.dolly_count} dolly` : ''}{r.rental_partners ? ` · partner ${r.rental_partners.name} (${r.rental_partners.referral_code})` : ''}{r.lead_source ? ` · ${r.lead_source}` : ''}</p></div>
