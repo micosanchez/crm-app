@@ -178,13 +178,13 @@ async function ensureCard(r: Rental): Promise<{ customer: string; pm: string }> 
   return { customer: r.stripe_customer_id, pm: r.stripe_payment_method_id };
 }
 /** Create a charge row of any type and try the saved card. Handles requires_action → hosted link + text, soft declines → retry schedule. */
-export async function chargeRental(rentalId: string, a: { type: typeof FEE_TYPES[number] | 'balance' | 'rental_payment'; amount: number; description: string; photo_urls?: string[]; created_by?: string | null; charge_id?: string }, db = admin()) {
+export async function chargeRental(rentalId: string, a: { type: typeof FEE_TYPES[number] | 'balance' | 'rental_payment'; amount: number; description: string; photo_urls?: string[]; created_by?: string | null; source?: string | null; charge_id?: string }, db = admin()) {
   const r = await getRental(rentalId, db);
   const amt = Math.round(Number(a.amount) * 100) / 100;
   if (amt <= 0) throw new Error('Amount must be more than $0.');
   let chargeId = a.charge_id;
   if (!chargeId) {
-    const { data, error } = await db.from('rental_charges').insert({ rental_id: r.id, type: a.type, amount: amt, description: a.description, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.created_by ?? null }).select('id').single();
+    const { data, error } = await db.from('rental_charges').insert({ rental_id: r.id, type: a.type, amount: amt, description: a.description, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.created_by ?? null, source: a.source ?? null }).select('id').single();
     if (error) throw new Error(error.message);
     chargeId = data.id as string;
   }
@@ -332,14 +332,16 @@ export async function recordDelivery(rentalId: string, a: { tags: string[]; phot
   if (s.balance_charge_mode === 'delivery') charge = await chargeBalance(r.id, db).catch((e: Error) => ({ ok: false, error: e.message }));
   return { ok: true, rental: await getRental(r.id, db), balance_charge: charge };
 }
-export async function recordPickup(rentalId: string, a: { items: { tag: string; condition: 'good' | 'dirty' | 'damaged' | 'missing'; photo_urls?: string[] }[]; missing_lids?: number; created_by?: string | null }, db = admin()) {
+export async function recordPickup(rentalId: string, a: { items?: { tag: string; condition: 'good' | 'dirty' | 'damaged' | 'missing'; photo_urls?: string[] }[]; all_good?: boolean; missing_lids?: number; created_by?: string | null; source?: string | null }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
-  const { data: items } = await db.from('rental_items').select('id, asset_id, rental_assets(asset_tag, asset_type)').eq('rental_id', r.id);
+  const { data: items } = await db.from('rental_items').select('id, asset_id, checked_in_at, rental_assets(asset_tag, asset_type)').eq('rental_id', r.id);
+  // all_good with no item list: every tag still out comes back good; with no tags at all (none recorded at delivery) the whole tote_count does
+  const list = a.items?.length ? a.items : a.all_good ? (items ?? []).filter((x) => !x.checked_in_at).map((x) => ({ tag: (x.rental_assets as unknown as { asset_tag: string }).asset_tag, condition: 'good' as const, photo_urls: [] as string[] })) : [];
   const now = new Date().toISOString();
   const counts = { missing_tote: 0, damaged: 0, dirty: 0 };
   const gearOut: { tag: string; type: string; condition: string }[] = [];
-  for (const it of a.items) {
+  for (const it of list) {
     const row = (items ?? []).find((x) => (x.rental_assets as unknown as { asset_tag: string })?.asset_tag === it.tag);
     if (!row) throw new Error(`${it.tag} is not on this rental.`);
     if (it.condition !== 'good' && !(it.photo_urls?.length)) throw new Error(`${it.tag}: a photo is required for ${it.condition}.`);
@@ -352,7 +354,7 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
     if (it.condition === 'damaged') counts.damaged++;
     if (it.condition === 'dirty') counts.dirty++;
   }
-  const photos = a.items.flatMap((i) => i.photo_urls ?? []);
+  const photos = list.flatMap((i) => i.photo_urls ?? []);
   const lines: { type: string; amount: number; description: string }[] = [];
   const add = (n: number, fee: number | null, type: string, label: string) => { if (n > 0 && fee) lines.push({ type, amount: Math.round(n * fee * 100) / 100, description: `${n} × ${label} at ${money(fee)}` }); };
   add(counts.missing_tote, s.replacement_fee_per_tote, 'missing_item', 'missing tote');
@@ -367,10 +369,10 @@ export async function recordPickup(rentalId: string, a: { items: { tag: string; 
   }
   add(counts.damaged, s.damage_fee_per_tote, 'damage', 'damaged tote');
   add(counts.dirty, s.cleaning_fee_per_tote, 'cleaning', 'cleaning');
-  for (const l of lines) await db.from('rental_charges').insert({ rental_id: r.id, ...l, status: 'pending', photo_urls: photos, created_by: a.created_by ?? null });
+  for (const l of lines) await db.from('rental_charges').insert({ rental_id: r.id, ...l, status: 'pending', photo_urls: photos, created_by: a.created_by ?? null, source: a.source ?? null });
   await db.rpc('rental_accrue_late_fees');
   await db.from('rentals').update({ status: 'returned', actual_picked_up_at: now }).eq('id', r.id);
-  await logEvent(r.id, 'picked_up', { ...counts, gear: gearOut, lines: lines.length, by: a.created_by ?? null }, db);
+  await logEvent(r.id, 'picked_up', { ...counts, gear: gearOut, lines: lines.length, ...(a.all_good ? { all_good: true, good: list.length || r.tote_count } : {}), by: a.created_by ?? a.source ?? null }, db);
   await cancelQueued(r.id, ['pickup_reminder', 'during_rental', 'overdue_1', 'overdue_3'], db);
   const plus = (n: number) => { const d = new Date(`${todayDetroit()}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   await queueMessage(r, 'after_pickup', {}, { at: detroitAt(plus(1), 10), dedupe: `${r.id}:after_pickup` }, db);
@@ -455,7 +457,7 @@ export function rescheduleFees(r: Rental, s: Settings, a: { delivery_date?: stri
   if (np < r.pickup_date && a.expedited && Number(s.expedited_pickup_fee ?? 0) > 0) lines.push({ type: 'expedited_pickup', amount: Number(s.expedited_pickup_fee), description: `Expedited early pickup ${fmtDate(np)}` });
   return { lines, deliveryMoved, laterPickup: false, earlierPickup: np < r.pickup_date };
 }
-export async function reschedule(rentalId: string, a: { delivery_date?: string; delivery_window?: string; pickup_date?: string; pickup_window?: string; by?: string; customer_requested?: boolean; expedited?: boolean; preview?: boolean }, db = admin()) {
+export async function reschedule(rentalId: string, a: { delivery_date?: string; delivery_window?: string; pickup_date?: string; pickup_window?: string; by?: string; source?: string | null; customer_requested?: boolean; expedited?: boolean; preview?: boolean }, db = admin()) {
   const r = await getRental(rentalId, db);
   const s = await getSettings(db);
   const nd = a.delivery_date ?? r.delivery_date, np = a.pickup_date ?? r.pickup_date;
@@ -480,7 +482,7 @@ export async function reschedule(rentalId: string, a: { delivery_date?: string; 
     if (late?.length) await logEvent(r.id, 'late_fees_voided', { count: late.length, reason: 'company delay' }, db);
   }
   const charges = [];
-  for (const l of fees.lines) charges.push(await chargeRental(r.id, { ...l, created_by: a.by ?? null }, db).catch((e: Error) => ({ ok: false, error: e.message })));
+  for (const l of fees.lines) charges.push(await chargeRental(r.id, { ...l, created_by: a.by ?? null, source: a.source ?? null }, db).catch((e: Error) => ({ ok: false, error: e.message })));
   const fresh = await getRental(r.id, db);
   await scheduleLifecycle(fresh, db);
   await queueMessage(fresh, 'reschedule', { window: `delivery ${fmtDate(nd)} ${fresh.delivery_window}, pickup ${fmtDate(np)} ${fresh.pickup_window ?? ''}` }, { dedupe: `${r.id}:reschedule:${Date.now()}` }, db);
@@ -520,12 +522,12 @@ export async function cancelRental(rentalId: string, a: { reason?: string; by?: 
   await logEvent(r.id, 'cancelled', { ...preview, by: a.by ?? null }, db);
   return { ok: true, preview };
 }
-export async function failedTrip(rentalId: string, a: { kind: 'delivery' | 'pickup'; photo_urls?: string[]; note?: string; by?: string }, db = admin()) {
+export async function failedTrip(rentalId: string, a: { kind: 'delivery' | 'pickup'; photo_urls?: string[]; note?: string; by?: string; source?: string | null }, db = admin()) {
   const r = await getRental(rentalId, db);
   // terms: every missed delivery adds a second trip at the zone delivery rate to the pickup charge; a missed pickup is rescheduled with no fee
   const fee = a.kind === 'delivery' ? Number(r.delivery_fee) : 0;
   await logEvent(r.id, 'failed_trip', { ...a, fee }, db);
-  if (fee > 0) await db.from('rental_charges').insert({ rental_id: r.id, type: 'failed_trip', amount: fee, description: `Second delivery trip (${r.zone ?? 'zone'} rate): ${a.note ?? 'no one home'}`, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.by ?? null });
+  if (fee > 0) await db.from('rental_charges').insert({ rental_id: r.id, type: 'failed_trip', amount: fee, description: `Second delivery trip (${r.zone ?? 'zone'} rate): ${a.note ?? 'no one home'}`, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.by ?? null, source: a.source ?? null });
   await db.rpc('rental_recompute_balance', { p_rental: r.id });
   await queueMessage(r, fee > 0 ? 'failed_trip' : 'failed_trip_free', { fee: money(fee) }, { dedupe: `${r.id}:failed_trip:${Date.now()}` }, db);
   return { ok: true, fee, free: fee === 0 };
@@ -770,4 +772,100 @@ export async function handleRentalWebhook(type: string, obj: Record<string, unkn
     default: return 'ignored';
   }
 }
+/* ---------------- charge edits and pickup address ---------------- */
+const OPEN_STATUSES = ['pending', 'failed', 'requires_action'];
+type Who = { by?: string | null; source?: string | null };
+const whoBy = (w: Who) => w.by ?? w.source ?? null;
+const round2 = (n: number) => Math.round(Number(n) * 100) / 100;
+const sameAddress = (x: string | null | undefined, y: string | null | undefined) => (x ?? '').trim().replace(/\s+/g, ' ').toLowerCase() === (y ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/** Every charge on the rental except removed ones, plus the recomputed balance. */
+export async function chargeList(rentalId: string, db = admin()) {
+  const balance_due = Number((await db.rpc('rental_recompute_balance', { p_rental: rentalId })).data ?? (await getRental(rentalId, db)).balance_due);
+  const { data } = await db.from('rental_charges').select('*').eq('rental_id', rentalId).not('status', 'in', '(void,voided)').order('created_at');
+  return { charges: (data ?? []) as Charge[], balance_due };
+}
+export async function pickupChangeFee(db = admin()) {
+  const { data } = await db.from('app_settings').select('value').eq('key', 'pickup_location_change_fee').maybeSingle();
+  const v = Number(data?.value ?? 25);
+  return Number.isFinite(v) ? v : 25;
+}
+/** A fee left pending and collected at settle_rental (charge_rental charges the card now instead). */
+export async function addPendingCharge(rentalId: string, a: Who & { type: string; amount: number; description?: string | null; photo_urls?: string[] }, db = admin()) {
+  const r = await getRental(rentalId, db);
+  if (!(FEE_TYPES as readonly string[]).includes(a.type)) throw new Error(`type must be one of ${FEE_TYPES.join(', ')}.`);
+  const amt = round2(a.amount);
+  if (!(amt > 0)) throw new Error('Amount must be more than $0.');
+  const { data, error } = await db.from('rental_charges').insert({ rental_id: r.id, type: a.type, amount: amt, description: a.description ?? a.type, status: 'pending', photo_urls: a.photo_urls ?? [], created_by: a.by ?? null, source: a.source ?? null }).select('*').single();
+  if (error) throw new Error(error.message);
+  return { ok: true, charge: data as Charge, ...(await chargeList(r.id, db)) };
+}
+/** Set or clear the pickup address (blank = same as delivery). A real change the customer asked for adds the pending location fee. */
+export async function changePickupAddress(rentalId: string, a: Who & { address: string | null | undefined; customer_requested?: boolean }, db = admin()) {
+  const r = await getRental(rentalId, db);
+  const to = (a.address ?? '').trim() || null;
+  if (sameAddress(to ?? r.delivery_address, r.pickup_address ?? r.delivery_address)) return { ok: true, changed: false, charge: null, rental: r };
+  const { error } = await db.from('rentals').update({ pickup_address: to }).eq('id', r.id);
+  if (error) throw new Error(error.message);
+  const fee = a.customer_requested ? await pickupChangeFee(db) : 0;
+  const charge = fee > 0 ? (await addPendingCharge(r.id, { type: 'reschedule_fee', amount: fee, description: 'Pickup location change', by: a.by, source: a.source }, db)).charge : null;
+  await logEvent(r.id, 'pickup_address_changed', { from: r.pickup_address, to, by: whoBy(a), customer_requested: !!a.customer_requested }, db);
+  return { ok: true, changed: true, charge, rental: await getRental(r.id, db) };
+}
+async function openCharge(chargeId: string, verb: string, db: SupabaseClient) {
+  const { data: ch } = await db.from('rental_charges').select('*').eq('id', chargeId).maybeSingle();
+  if (!ch) throw new Error('Charge not found.');
+  if (!OPEN_STATUSES.includes(ch.status)) throw new Error(ch.status === 'succeeded' ? `This charge already went through, so it can't be ${verb}. Refund it instead.` : `Only a pending charge can be ${verb} (this one is ${ch.status}).`);
+  return ch as Charge;
+}
+/** Change a pending charge's amount and/or description. preview (the connector's confirm: false) changes nothing. */
+export async function editCharge(chargeId: string, a: Who & { amount?: number | null; description?: string | null; preview?: boolean }, db = admin()) {
+  const ch = await openCharge(chargeId, 'edited', db);
+  const from = { amount: Number(ch.amount), description: ch.description };
+  const to = { ...from };
+  if (a.amount != null) { to.amount = round2(a.amount); if (!(to.amount > 0)) throw new Error('Amount must be more than $0. Use remove to drop the charge.'); }
+  if (a.description != null) to.description = a.description;
+  const changed = to.amount !== from.amount || to.description !== from.description;
+  if (a.preview) return { ok: true, preview: { charge_id: ch.id, from, to, changed }, ...(await chargeList(ch.rental_id, db)) };
+  if (changed) {
+    const { error } = await db.from('rental_charges').update({ amount: to.amount, description: to.description }).eq('id', ch.id).in('status', OPEN_STATUSES);
+    if (error) throw new Error(error.message);
+    await logEvent(ch.rental_id, 'charge_edited', { charge_id: ch.id, from, to, by: whoBy(a) }, db);
+  }
+  return { ok: true, changed, ...(await chargeList(ch.rental_id, db)) };
+}
+/** Void a pending charge (kept as status 'voided'). Removing an extension also takes its weeks back off the pickup date, with no customer text. */
+export async function removeCharge(chargeId: string, a: Who & { reason: string; preview?: boolean }, db = admin()) {
+  const ch = await openCharge(chargeId, 'removed', db);
+  const reason = (a.reason ?? '').trim();
+  if (!reason) throw new Error('A reason is required to remove a charge.');
+  const r = await getRental(ch.rental_id, db);
+  let ext: { weeks: number; from: string; to: string; extra_weeks: number } | null = null;
+  if (ch.type === 'extension' && r.pickup_date) {
+    let weeks = Number(/Extension:\s*(\d+)\s*week/i.exec(ch.description ?? '')?.[1] ?? 0);
+    if (!weeks) { // description was edited: fall back to amount ÷ the package's weekly price
+      const { data: pkg } = await db.from('rental_packages').select('extra_week_price').eq('id', r.package_id).maybeSingle();
+      const price = Number(pkg?.extra_week_price ?? 0);
+      weeks = price > 0 ? Math.max(1, Math.round(Number(ch.amount) / price)) : 1;
+    }
+    const to = plusDays(r.pickup_date, -7 * weeks);
+    if (r.delivery_date && to < r.delivery_date) throw new Error(`Removing this extension would put pickup (${to}) before delivery (${r.delivery_date}).`);
+    ext = { weeks, from: r.pickup_date, to, extra_weeks: Math.max(0, Number(r.extra_weeks ?? 0) - weeks) };
+  }
+  if (a.preview) return { ok: true, preview: { charge_id: ch.id, type: ch.type, amount: Number(ch.amount), reason, extension_reversed: ext }, ...(await chargeList(ch.rental_id, db)) };
+  const { error } = await db.from('rental_charges').update({ status: 'voided' }).eq('id', ch.id).in('status', OPEN_STATUSES);
+  if (error) throw new Error(error.message);
+  await logEvent(r.id, 'charge_removed', { charge_id: ch.id, type: ch.type, amount: Number(ch.amount), reason, by: whoBy(a) }, db);
+  if (ext) {
+    const { error: e2 } = await db.from('rentals').update({ pickup_date: ext.to, extra_weeks: ext.extra_weeks }).eq('id', r.id);
+    if (e2) throw new Error(e2.message);
+    await logEvent(r.id, 'extension_reversed', { charge_id: ch.id, weeks: ext.weeks, from: ext.from, to: ext.to, by: whoBy(a) }, db);
+    // move the queued pickup reminder only (never a reschedule text, never a reminder whose time has passed)
+    await cancelQueued(r.id, ['pickup_reminder'], db);
+    const remindAt = detroitAt(plusDays(ext.to, -1), 17);
+    if (new Date(remindAt).getTime() > Date.now()) await queueMessage(await getRental(r.id, db), 'pickup_reminder', {}, { at: remindAt, dedupe: `${r.id}:pickup_reminder:${ext.to}` }, db);
+  }
+  return { ok: true, extension_reversed: ext, ...(await chargeList(r.id, db)) };
+}
+
 export { StripeError };
