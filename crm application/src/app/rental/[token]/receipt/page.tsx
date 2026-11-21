@@ -15,7 +15,7 @@ export default async function RentalReceipt({ params }: { params: { token: strin
   const { data: r } = db ? await db.rpc('rental_by_token', { p_token: params.token }) : { data: null };
   if (!db || !r) return <p style={{ padding: 24 }}>This receipt link is not valid.</p>;
   const [{ data: rows }, { data: bs }] = await Promise.all([
-    db.from('rental_charges').select('id, type, amount, description, status, created_at, photo_urls, stripe_payment_intent_id, stripe_refund_id').eq('rental_id', r.id).neq('status', 'void').order('created_at'),
+    db.from('rental_charges').select('id, type, amount, description, status, created_at, photo_urls, stripe_payment_intent_id, stripe_refund_id').eq('rental_id', r.id).not('status', 'in', '(void,voided)').order('created_at'),
     db.from('business_settings').select('business_name, tagline, phone, email, website, service_area, licensed_insured, ein').eq('id', true).maybeSingle(),
   ]);
   const b = resolveBiz(bs ? { name: bs.business_name, tagline: bs.tagline, phone: bs.phone, email: bs.email, website: bs.website, area: bs.service_area, licensed_insured: bs.licensed_insured, ein: bs.ein } : null);

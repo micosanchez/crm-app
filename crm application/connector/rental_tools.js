@@ -125,7 +125,7 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("update_rental", {
     title: "Update a tote rental",
-    description: "Change addresses, windows, notes, lead source, or move delivery/pickup dates (availability is re-checked and the customer gets a reschedule text). Set customer_requested=true when the customer asked: a delivery change under 48 hours before the window charges $25, expedited=true on an earlier pickup charges $25, and a later pickup is refused (use extend_rental). A company-side move is free and voids pending late weeks.",
+    description: "Change addresses, windows, notes, lead source, or move delivery/pickup dates (availability is re-checked and the customer gets a reschedule text). Set customer_requested=true when the customer asked: a pickup address change adds a pending pickup-location fee (business setting pickup_location_change_fee, $25) collected at settle_rental and returned as new_charge; a blank pickup_address means same as delivery; a delivery change under 48 hours before the window charges $25, expedited=true on an earlier pickup charges $25, and a later pickup is refused (use extend_rental). A company-side move is free and voids pending late weeks.",
     inputSchema: { rental: ref, delivery_address: external_exports.string().optional(), pickup_address: external_exports.string().optional(), delivery_date: DATE3.optional(), delivery_window: external_exports.string().optional(), pickup_date: DATE3.optional(), pickup_window: external_exports.string().optional(), customer_requested: external_exports.boolean().default(false), expedited: external_exports.boolean().default(false), notes_internal: external_exports.string().optional(), notes_customer: external_exports.string().optional(), lead_source: external_exports.enum(LEAD_SOURCES_V2).optional() }
   }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; const { rental, ...rest } = a; return rentalOp(env, "update", { rental_id: f.row.id, ...rest }); }));
 
@@ -149,13 +149,13 @@ function registerRentalTools(server, dbc, env) {
 
   server.registerTool("record_pickup", {
     title: "Record a tote pickup",
-    description: "Check the totes back in with a condition per tag (good, dirty, damaged, missing). The CRM requires a photo for anything not good, so record those from the rental page in the CRM; use this tool for all-good pickups. Fees ($10 dirty, $10 damaged, $20 missing tote, $6 per missing lid) and any late weeks are added as pending charges for review; nothing is charged until settle_rental.",
-    inputSchema: { rental: ref, items: external_exports.array(external_exports.object({ tag: external_exports.string(), condition: external_exports.enum(RENTAL_CONDITIONS).default("good"), note: external_exports.string().optional() })).min(1), all_good: external_exports.boolean().default(false).describe("Shortcut: every item on the rental came back good"), missing_lids: external_exports.number().int().min(0).default(0).describe("Number of lids not returned ($6 each)") }
+    description: "Check the totes back in with a condition per tag (good, dirty, damaged, missing). The CRM requires a photo for anything not good, so record those from the rental page in the CRM; use this tool for all-good pickups. With all_good=true, items are optional: every item on the rental is marked good, or the whole tote count when no tags were recorded at delivery. Fees ($10 dirty, $10 damaged, $20 missing tote, $6 per missing lid) and any late weeks are added as pending charges for review; nothing is charged until settle_rental.",
+    inputSchema: { rental: ref, items: external_exports.array(external_exports.object({ tag: external_exports.string(), condition: external_exports.enum(RENTAL_CONDITIONS).default("good"), note: external_exports.string().optional() })).optional(), all_good: external_exports.boolean().default(false).describe("Shortcut: every item on the rental came back good"), missing_lids: external_exports.number().int().min(0).default(0).describe("Number of lids not returned ($6 each)") }
   }, guarded(async (a) => {
     const f = await findRental(dbc, a.rental); if (f.err) return f.err; const row = f.row;
-    let items = a.items ?? [];
-    if (a.all_good) { const { data } = await dbc.from("rental_items").select("rental_assets(asset_tag)").eq("rental_id", row.id).is("checked_in_at", null); items = (data ?? []).map((i) => ({ tag: i.rental_assets?.asset_tag, condition: "good" })); }
-    return rentalOp(env, "record_pickup", { rental_id: row.id, items, missing_lids: a.missing_lids ?? 0 });
+    const items = a.items ?? [];
+    if (!items.length && !a.all_good) return fail("items_required", "List the items with their condition, or set all_good=true.");
+    return rentalOp(env, "record_pickup", { rental_id: row.id, items, all_good: a.all_good === true, missing_lids: a.missing_lids ?? 0 });
   }));
 
   server.registerTool("charge_rental", {
@@ -175,6 +175,24 @@ function registerRentalTools(server, dbc, env) {
     description: "Refunds a succeeded charge (full, or a partial amount) through Stripe and texts the customer. confirm must be true.",
     inputSchema: { charge_id: external_exports.string().uuid(), amount: external_exports.number().positive().optional(), reason: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
   }, guarded(async (a) => { if (!a.confirm) return fail("confirm_required", "Set confirm=true to refund."); return rentalOp(env, "refund", { charge_id: a.charge_id, amount: a.amount ?? null, reason: a.reason }); }));
+
+  server.registerTool("add_pending_charge", {
+    title: "Add a pending rental fee",
+    description: "Adds a fee to a rental WITHOUT charging the card: it stays pending and is collected at settle_rental. Use charge_rental instead to charge the card now. Returns the new charge, every charge on the rental and balance_due.",
+    inputSchema: { rental: ref, type: external_exports.enum(RENTAL_CHARGE_TYPES), amount: external_exports.number().positive(), description: external_exports.string().optional() }
+  }, guarded(async (a) => { const f = await findRental(dbc, a.rental); if (f.err) return f.err; return rentalOp(env, "add_pending_charge", { rental_id: f.row.id, type: a.type, amount: a.amount, description: a.description }); }));
+
+  server.registerTool("edit_rental_charge", {
+    title: "Edit a pending rental charge",
+    description: "Changes the amount and/or description of a charge that is still pending (not yet charged). confirm=false previews; confirm=true saves and logs a charge_edited event. A charge that already went through can only be refunded (refund_rental_charge). Returns every charge on the rental and balance_due.",
+    inputSchema: { charge_id: external_exports.string().uuid(), amount: external_exports.number().positive().optional(), description: external_exports.string().optional(), confirm: external_exports.boolean().default(false) }
+  }, guarded((a) => rentalOp(env, "edit_charge", { charge_id: a.charge_id, amount: a.amount ?? null, description: a.description ?? null, confirm: a.confirm === true })));
+
+  server.registerTool("remove_rental_charge", {
+    title: "Remove a pending rental charge",
+    description: "Voids a charge that is still pending (kept on file as voided, never deleted) and logs a charge_removed event with the reason. Removing an extension charge also undoes the extension: pickup moves back 7 days per week and extra_weeks drops, with no text to the customer. confirm=false previews; confirm=true removes. A charge that already went through can only be refunded (refund_rental_charge). Returns every charge on the rental and balance_due.",
+    inputSchema: { charge_id: external_exports.string().uuid(), reason: external_exports.string().min(1), confirm: external_exports.boolean().default(false) }
+  }, guarded((a) => rentalOp(env, "remove_charge", { charge_id: a.charge_id, reason: a.reason, confirm: a.confirm === true })));
 
   server.registerTool("send_rental_payment_link", {
     title: "Text a rental payment link",

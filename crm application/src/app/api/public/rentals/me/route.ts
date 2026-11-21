@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { admin, getRentalByToken, extendRental, cancelRental, logEvent, getSettings, hoursBeforeDelivery, money, fmtDate } from '@/lib/rentals/ops';
+import { admin, getRentalByToken, extendRental, cancelRental, logEvent, getSettings, hoursBeforeDelivery, money, fmtDate, changePickupAddress, pickupChangeFee, detroitAt, windowStartHour, type Rental } from '@/lib/rentals/ops';
+import { sendText } from '@/lib/quo';
 import { sendNotification, APP_URL } from '@/lib/notify';
 import { ensureStripeCustomer, createSetupIntent, publishableKey, cardInfo, stripe } from '@/lib/rentals/stripe';
 
 export const dynamic = 'force-dynamic';
 const CORS = { 'Access-Control-Allow-Origin': '*' };
+/** The customer can move the pickup location until the pickup window starts. */
+const pickupChangeOpen = (r: Pick<Rental, 'status' | 'pickup_date' | 'pickup_window' | 'delivery_window'>) =>
+  ['booked', 'delivered', 'out', 'pickup_scheduled'].includes(r.status) && !!r.pickup_date && Date.now() < new Date(detroitAt(r.pickup_date, windowStartHour(r.pickup_window ?? r.delivery_window))).getTime();
 
 /** GET ?token= → the customer's view of their rental. */
 export async function GET(req: NextRequest) {
@@ -18,12 +22,13 @@ export async function GET(req: NextRequest) {
   const sign = async (path: string) => (await db.storage.from('documents').createSignedUrl(path, 3600)).data?.signedUrl ?? null;
   if (d.agreement?.pdf_url) d.agreement.pdf_url = await sign(d.agreement.pdf_url);
   for (const c of d.charges ?? []) if (c.photo_urls?.length) c.photo_urls = (await Promise.all(c.photo_urls.map(sign))).filter((u): u is string => !!u);
-  return NextResponse.json(data, { headers: CORS });
+  const v = data as Pick<Rental, 'status' | 'pickup_date' | 'pickup_window' | 'delivery_window'>;
+  return NextResponse.json({ ...(data as object), pickup_change_open: pickupChangeOpen(v), pickup_change_fee: await pickupChangeFee(db) }, { headers: CORS });
 }
 
-/** POST {token, action, ...} → extend | request_early_pickup | request_delivery_change | cancel (preview or confirm) | card_setup | card_confirm. */
+/** POST {token, action, ...} → extend | request_early_pickup | request_delivery_change | change_pickup_address | cancel (preview or confirm) | card_setup | card_confirm. */
 export async function POST(req: NextRequest) {
-  let b: { token?: string; action?: string; weeks?: number; pickup_date?: string; pickup_window?: string; delivery_date?: string; note?: string; confirm?: boolean; intent_id?: string; home_size?: string; move_reason?: string };
+  let b: { token?: string; action?: string; weeks?: number; pickup_date?: string; pickup_window?: string; pickup_address?: string; delivery_date?: string; note?: string; confirm?: boolean; intent_id?: string; home_size?: string; move_reason?: string };
   try { b = await req.json(); } catch { return NextResponse.json({ error: 'bad body' }, { status: 400, headers: CORS }); }
   if (!b.token || !b.action) return NextResponse.json({ error: 'missing' }, { status: 400, headers: CORS });
   try {
@@ -52,6 +57,20 @@ export async function POST(req: NextRequest) {
         await sendNotification({ event: 'rental_change_request', to: process.env.NOTIFY_EMAIL ?? '', subject: `${r.rental_number}: ${early ? 'early pickup' : 'new delivery date'} requested for ${fmtDate(day)}`,
           text: `${r.customers?.name ?? 'Customer'} asked to ${early ? `have the totes picked up early on ${fmtDate(day)} (now ${fmtDate(r.pickup_date)})` : `move delivery to ${fmtDate(day)} (now ${fmtDate(r.delivery_date)} ${r.delivery_window})`}.\n${note ? `Note: ${note}\n` : ''}${early ? `If it fits the normal route there is no charge. A special expedited trip is ${money(fee)}: tick "Expedited" when you save the new date.` : fee > 0 ? `Inside the ${s.cancel_full_refund_hours} hour window: tick "Customer asked" and the ${money(fee)} change fee is charged.` : 'With 48+ hours notice: free. Tick "Customer asked" when you save.'}\nConfirm with the customer, then reschedule here: ${APP_URL}/rentals/${r.id}` }).catch(() => {});
         return NextResponse.json({ ok: true, fee, early }, { headers: CORS });
+      }
+      case 'change_pickup_address': {
+        if (!pickupChangeOpen(r)) throw new Error('The pickup location can only be changed before your pickup window starts. Call or text us.');
+        const to = String(b.pickup_address ?? '').trim().slice(0, 300);
+        if (to.length < 6) throw new Error('Enter the full pickup address.');
+        const res = await changePickupAddress(r.id, { address: to, customer_requested: true, by: null, source: 'customer' }, db);
+        if (res.changed) { // tell Mico, never the customer
+          const text = `${r.rental_number}: ${r.customers?.name ?? 'Customer'} changed the pickup location to ${to} (pickup ${fmtDate(r.pickup_date)} ${r.pickup_window ?? r.delivery_window ?? ''}).${res.charge ? ` ${money(res.charge.amount)} fee added.` : ''}`;
+          const owner = process.env.OWNER_PHONE;
+          const sms = owner ? await sendText({ to: owner, content: text, event: 'sms:owner_pickup_address', entityKind: 'rental', entityId: r.id }).catch((e: Error) => ({ ok: false, error: e.message })) : { ok: false, error: 'OWNER_PHONE not set' };
+          await logEvent(r.id, 'owner_notified', { what: 'pickup_address_changed', sms_ok: sms.ok, error: 'error' in sms ? sms.error ?? null : null }, db);
+          await sendNotification({ event: 'rental_change_request', to: process.env.NOTIFY_EMAIL ?? '', subject: `${r.rental_number}: new pickup location`, text: `${text}\n${APP_URL}/rentals/${r.id}` }).catch(() => {});
+        }
+        return NextResponse.json({ ok: true, changed: res.changed, fee: res.charge ? Number(res.charge.amount) : 0 }, { headers: CORS });
       }
       case 'profile': {
         const patch: Record<string, string> = {};

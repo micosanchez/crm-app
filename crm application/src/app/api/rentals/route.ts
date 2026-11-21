@@ -24,10 +24,12 @@ async function isServerKey(key: string): Promise<boolean> {
  * POST { action, ...args }. Every action returns the updated record.
  */
 export async function POST(req: NextRequest) {
+  // by goes into uuid columns (rental_charges.created_by): a staff user's id or null, never a label
   let by: string | null = null;
+  let source = 'staff';
   const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (bearer && ((serviceKey && bearer === serviceKey) || (await isServerKey(bearer)))) by = 'connector';
+  if (bearer && ((serviceKey && bearer === serviceKey) || (await isServerKey(bearer)))) source = 'connector';
   else {
     const role = await getRole();
     if (role !== 'admin' && role !== 'dispatcher') return NextResponse.json({ error: 'Staff only.' }, { status: 403 });
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Bad request.' }, { status: 400 }); }
   if (!body.action) return NextResponse.json({ error: 'action required' }, { status: 400 });
   try {
-    const result = await runAction(body.action, body, { by });
+    const result = await runAction(body.action, body, { by, source });
     return NextResponse.json({ ok: true, result });
   } catch (e) {
     return NextResponse.json({ ok: false, error: (e as Error).message }, { status: 400 });

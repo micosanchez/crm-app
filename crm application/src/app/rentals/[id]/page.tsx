@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function RentalDetailPage({ params }: { params: { id: string } }) {
   await requireStaff();
   const supabase = createClient();
-  const [{ data: rental }, { data: items }, { data: charges }, { data: agreement }, { data: events }, { data: addons }, { data: assets }, { data: settings }, { data: messages }, { data: junk }] = await Promise.all([
+  const [{ data: rental }, { data: items }, { data: charges }, { data: agreement }, { data: events }, { data: addons }, { data: assets }, { data: settings }, { data: messages }, { data: junk }, { data: fee }] = await Promise.all([
     supabase.from('rentals').select('*, customers(id,name,phone,email), rental_packages(name, extra_week_price), rental_partners(name, referral_code)').eq('id', params.id).single(),
     supabase.from('rental_items').select('*, rental_assets(asset_tag, asset_type, status)').eq('rental_id', params.id),
     supabase.from('rental_charges').select('*').eq('rental_id', params.id).order('created_at'),
@@ -21,10 +21,11 @@ export default async function RentalDetailPage({ params }: { params: { id: strin
     supabase.from('rental_settings').select('*').eq('id', true).single(),
     supabase.from('rental_messages').select('template, channel, status, scheduled_at, sent_at, error').eq('rental_id', params.id).order('scheduled_at', { ascending: false }).limit(30),
     supabase.from('estimate_requests').select('id, status, quote_id').eq('rental_id', params.id).limit(1).maybeSingle(),
+    supabase.from('app_settings').select('value').eq('key', 'pickup_location_change_fee').maybeSingle(),
   ]);
   if (!rental) notFound();
   let pdfUrl: string | null = null;
   const admin = createAdminClient();
   if (admin && agreement?.pdf_url) { const { data } = await admin.storage.from('documents').createSignedUrl(agreement.pdf_url, 3600); pdfUrl = data?.signedUrl ?? null; }
-  return <RentalDetail rental={rental} items={items ?? []} charges={charges ?? []} agreement={agreement ? { ...agreement, pdf_signed_url: pdfUrl } : null} events={events ?? []} addons={addons ?? []} freeAssets={assets ?? []} settings={settings} messages={messages ?? []} junk={junk ?? null} testMode={isTestMode()} testCards={TEST_CARDS} />;
+  return <RentalDetail rental={rental} items={items ?? []} charges={charges ?? []} agreement={agreement ? { ...agreement, pdf_signed_url: pdfUrl } : null} events={events ?? []} addons={addons ?? []} freeAssets={assets ?? []} settings={{ ...settings, pickup_location_change_fee: fee?.value ?? 25 }} messages={messages ?? []} junk={junk ?? null} testMode={isTestMode()} testCards={TEST_CARDS} />;
 }

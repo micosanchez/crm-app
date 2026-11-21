@@ -14,6 +14,7 @@ export default function RentalPortal({ token }: { token: string }) {
   const [weeks, setWeeks] = useState(1);
   const [newPickup, setNewPickup] = useState('');
   const [newDelivery, setNewDelivery] = useState('');
+  const [newPickupAddr, setNewPickupAddr] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = () => fetch(`/api/public/rentals/me?token=${token}`).then((x) => x.json()).then((d) => (d.error ? setErr(d.error) : setR(d)));
@@ -61,6 +62,10 @@ export default function RentalPortal({ token }: { token: string }) {
         {['delivered', 'out', 'pickup_scheduled'].includes(r.status) && <div className="card"><h3>Done early?</h3>
           <div className="row"><input type="date" value={newPickup} min={r.delivery_date} max={r.pickup_date} onChange={(e) => setNewPickup(e.target.value)} aria-label="Early pickup date" /><button className="btn sm" disabled={busy || !newPickup} onClick={async () => { const d = await act('request_early_pickup', { pickup_date: newPickup }); if (d?.ok) setMsg('Request sent. We will text you to confirm the pickup time.'); }}>Request early pickup</button></div>
           <p className="muted">If we can fit it into our normal schedule there&apos;s no charge. An expedited pickup that needs a special trip is {money(r.settings?.expedited_pickup_fee ?? 25)}, subject to availability, and we confirm with you first. Returning early does not give a partial refund.</p></div>}
+
+        {r.pickup_change_open && <div className="card"><h3>Change your pickup location</h3>
+          <div className="row"><input value={newPickupAddr} placeholder={r.pickup_address ?? ''} onChange={(e) => setNewPickupAddr(e.target.value)} aria-label="New pickup address" /><button className="btn sm" disabled={busy || newPickupAddr.trim().length < 6} onClick={async () => { if (!confirm(`Changing your pickup location adds a ${money(r.pickup_change_fee ?? 25)} fee. Change it to ${newPickupAddr.trim()}?`)) return; const d = await act('change_pickup_address', { pickup_address: newPickupAddr }); if (d?.ok) { setNewPickupAddr(''); setMsg(d.changed ? `Pickup location changed. ${money(d.fee)} was added to your balance.` : 'That is already your pickup location.'); } }}>Change</button></div>
+          <p className="muted">Changing your pickup location adds a {money(r.pickup_change_fee ?? 25)} fee, collected with your pickup charge. You can change it until your pickup window starts.</p></div>}
 
         {r.status === 'booked' && <div className="card"><h3>Change your delivery date</h3>
           <div className="row"><input type="date" value={newDelivery} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setNewDelivery(e.target.value)} aria-label="New delivery date" /><button className="btn sm" disabled={busy || !newDelivery} onClick={async () => { const d = await act('request_delivery_change', { delivery_date: newDelivery }); if (d?.ok) setMsg(Number(d.fee) > 0 ? `Request sent. Because it is under ${r.settings?.cancel_full_refund_hours ?? 48} hours before your delivery, a ${money(d.fee)} change fee applies once we confirm the new date.` : 'Request sent, no fee. We will text you to confirm the new date and window.'); }}>Request change</button></div>
